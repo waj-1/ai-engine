@@ -1,0 +1,16 @@
+{% extends "_base.html" %}
+{% block title %}Runs · Testing · {{ brand().title }}{% endblock %}
+{% block page_title %}Runs{% endblock %}
+{% block page_subtitle %}Every test run, newest first.{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-text">
+    <p>Open a run to see what failed and why. Tick two runs to compare them.</p>
+  </div>
+  <div class="page-head-actions">
+    <button type="button" class="primary" data-open-run>Run tests</button>
+  </div>
+</div>
+{% include "_tab_eval_runs.html" %}
+{% include "_run_dialog.html" %}
+{% endblock %}

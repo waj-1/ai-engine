@@ -1,0 +1,256 @@
+version: '3.8'
+
+# Local dev stack: the agent service + a self-hosted Laminar (lmnr-ai/lmnr)
+# observability stack — OTLP HTTP on :8001, gRPC on :8002, realtime on :8003,
+# frontend on :5667. ClickHouse + Postgres + Quickwit are internal-only.
+# This file is NOT for production.
+#
+# **The portal does not read through the lmnr frontend.** Traces, transcripts,
+# span detail and the Live Monitor all come from ClickHouse
+# (core/lmnr_clickhouse.py) and render in /admin/observability. The frontend
+# container is kept only as a bootstrap utility — see its service block.
+#
+# Quickstart:
+#   1. cp .env.example .env  (fill in LMNR_* + secrets below)
+#   2. docker compose -f docker-compose.dev.yml up -d
+#   3. Open http://localhost:5667 once, create a project, copy the project API
+#      key into LMNR_PROJECT_API_KEY, then `docker compose restart ai-agent`.
+#   4. Look at the traces in http://localhost:8000/admin/observability.
+
+services:
+  ai-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-engine-dev
+    ports:
+      - "8000:8000"
+    environment:
+      # Supabase (use host.docker.internal for local Supabase)
+      - SUPABASE_URL=${SUPABASE_URL:-http://host.docker.internal:54321}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
+      - AI_SUPABASE_URL=${AI_SUPABASE_URL:-http://host.docker.internal:54421}
+      - AI_SUPABASE_ANON_KEY=${AI_SUPABASE_ANON_KEY}
+      - AI_SUPABASE_SERVICE_KEY=${AI_SUPABASE_SERVICE_KEY}
+
+      # Google AI
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+
+      # Server config
+      - ENVIRONMENT=development
+      - PORT=8000
+      - HOST=0.0.0.0
+      - LOG_LEVEL=DEBUG
+
+      # CORS
+      - ALLOWED_ORIGINS=http://localhost:*,http://127.0.0.1:*
+
+      # Span export (WRITE side) — points at the lmnr-app-server service below
+      # via the docker network: container ports, not the host-mapped ones.
+      - LMNR_PROJECT_API_KEY=${LMNR_PROJECT_API_KEY:-}
+      - LMNR_BASE_URL=http://lmnr-app-server
+      - LMNR_HTTP_PORT=8000
+      - LMNR_GRPC_PORT=8001
+      # Where to mint that key. Reported by /admin/lmnr/diagnose; the engine
+      # makes no API calls to it.
+      - LMNR_DASHBOARD_URL=http://localhost:5667
+
+      # ClickHouse (READ side) — the ONLY source for every /admin/observability
+      # screen: trace explorer, transcripts, span detail, Live Monitor.
+      # Reachable on the shared network; defaults reuse Laminar's RO creds.
+      - LMNR_CLICKHOUSE_URL=http://lmnr-clickhouse:8123
+      - LMNR_CLICKHOUSE_USER=${LMNR_CLICKHOUSE_RO_USER:-clickhouse}
+      - LMNR_CLICKHOUSE_PASSWORD=${LMNR_CLICKHOUSE_RO_PASSWORD:-clickhouse}
+      - LMNR_CLICKHOUSE_DB=default
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    command: uvicorn main:app --reload --host 0.0.0.0 --port 8000
+    networks:
+      - ai-agent-network
+    depends_on:
+      lmnr-app-server:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # --- Laminar (lmnr-ai/lmnr) lightweight self-hosted stack -----------------
+  # Mirrors the upstream docker-compose.yml (LITE variant, no RabbitMQ).
+  # Frontend: http://localhost:5667
+  # OTLP HTTP: http://localhost:8001 (host) → :8000 inside the network
+  # OTLP gRPC: http://localhost:8002 (host) → :8001 inside the network
+
+  lmnr-postgres:
+    image: postgres:16
+    container_name: waj-lmnr-postgres
+    environment:
+      POSTGRES_USER: ${LMNR_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${LMNR_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${LMNR_POSTGRES_DB:-lmnr}
+    volumes:
+      - lmnr_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${LMNR_POSTGRES_USER:-postgres}", "-d", "${LMNR_POSTGRES_DB:-lmnr}"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-agent-network
+    restart: unless-stopped
+
+  lmnr-clickhouse:
+    # Upstream pins to "latest" but warns about a regression in 26.3. The
+    # comment from upstream: pin to earliest stable once
+    # https://github.com/ClickHouse/ClickHouse/pull/101218 lands.
+    image: clickhouse/clickhouse-server:latest
+    container_name: waj-lmnr-clickhouse
+    # Publish the HTTP port on loopback so an agent running on the HOST (not in
+    # this compose network) can reach ClickHouse for the Live Monitor. Without
+    # this, host runs default to the in-network hostname `lmnr-clickhouse:8123`
+    # which doesn't resolve, and the Live Monitor shows "ClickHouse unavailable".
+    # In-network services (the `ai-agent` service below) still use the service
+    # name. Set LMNR_CLICKHOUSE_URL=http://localhost:8123 in the host .env.
+    ports:
+      - "127.0.0.1:8123:8123"
+    volumes:
+      - lmnr_clickhouse_data:/var/lib/clickhouse/
+      - lmnr_clickhouse_logs:/var/log/clickhouse-server/
+      - ./lmnr-clickhouse-config/clickhouse-profiles-config.xml:/etc/clickhouse-server/users.d/lmnr.xml
+      - ./lmnr-clickhouse-config/clickhouse-system-logs.xml:/etc/clickhouse-server/config.d/system-logs.xml
+    environment:
+      CLICKHOUSE_USER: ${LMNR_CLICKHOUSE_USER:-clickhouse}
+      CLICKHOUSE_PASSWORD: ${LMNR_CLICKHOUSE_PASSWORD:-clickhouse}
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - ai-agent-network
+    restart: unless-stopped
+
+  lmnr-quickwit:
+    image: quickwit/quickwit:v0.8.2
+    container_name: waj-lmnr-quickwit
+    environment:
+      QW_DATA_DIR: /quickwit/qwdata
+    command: ["run"]
+    volumes:
+      - lmnr_quickwit_data:/quickwit/qwdata
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7280/health/livez"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - ai-agent-network
+    restart: unless-stopped
+
+  lmnr-query-engine:
+    image: ghcr.io/lmnr-ai/query-engine:v0.1.46
+    container_name: waj-lmnr-query-engine
+    environment:
+      PORT: 8903
+    healthcheck:
+      test: ["CMD", "sleep", "5"]
+      interval: 10s
+      timeout: 6s
+      retries: 3
+    networks:
+      - ai-agent-network
+    restart: unless-stopped
+
+  lmnr-app-server:
+    image: ghcr.io/lmnr-ai/app-server:v0.1.46
+    container_name: waj-lmnr-app-server
+    depends_on:
+      lmnr-postgres:
+        condition: service_healthy
+      lmnr-clickhouse:
+        condition: service_started
+      lmnr-quickwit:
+        condition: service_healthy
+    ports:
+      # Host ports differ from container ports so they don't clash with the
+      # agent service on :8000. The agent SDK inside docker still uses the
+      # container ports via lmnr-app-server:8000 / :8001.
+      - "${LMNR_HTTP_HOST_PORT:-8001}:8000"
+      - "${LMNR_GRPC_HOST_PORT:-8002}:8001"
+      - "${LMNR_RT_HOST_PORT:-8003}:8002"
+    environment:
+      PORT: 8000
+      GRPC_PORT: 8001
+      DATABASE_URL: postgres://${LMNR_POSTGRES_USER:-postgres}:${LMNR_POSTGRES_PASSWORD:-postgres}@lmnr-postgres:5432/${LMNR_POSTGRES_DB:-lmnr}
+      SHARED_SECRET_TOKEN: ${LMNR_SHARED_SECRET_TOKEN:-changeme_shared_secret}
+      CLICKHOUSE_URL: http://lmnr-clickhouse:8123
+      CLICKHOUSE_USER: ${LMNR_CLICKHOUSE_USER:-clickhouse}
+      CLICKHOUSE_PASSWORD: ${LMNR_CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_RO_USER: ${LMNR_CLICKHOUSE_RO_USER:-clickhouse}
+      CLICKHOUSE_RO_PASSWORD: ${LMNR_CLICKHOUSE_RO_PASSWORD:-clickhouse}
+      ENVIRONMENT: LITE
+      AEAD_SECRET_KEY: ${LMNR_AEAD_SECRET_KEY:-changeme_aead_secret_key_32chars}
+      QUERY_ENGINE_URL: http://lmnr-query-engine:8903
+      QUICKWIT_SEARCH_URL: http://lmnr-quickwit:7280
+      QUICKWIT_INGEST_URL: http://lmnr-quickwit:7281
+      QUICKWIT_SPANS_INDEX_ID: spans_v2
+      GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_API_KEY:-}
+    networks:
+      - ai-agent-network
+    restart: unless-stopped
+
+  # NOT a read path. The admin portal renders every trace itself from ClickHouse
+  # (core/lmnr_clickhouse.py); nothing in this repo calls this service's HTTP API.
+  # It stays in the stack for two jobs only:
+  #   1. it OWNS THE CLICKHOUSE SCHEMA — its startup migration runner is what
+  #      creates `spans` / `traces_replacing` / `deduped_content`. Delete this
+  #      service from a fresh stack and there are no tables to read.
+  #   2. it is the only place to mint an ingest LMNR_PROJECT_API_KEY.
+  # Treat it as a bootstrap utility, not part of the request path.
+  lmnr-frontend:
+    image: ghcr.io/lmnr-ai/frontend:v0.1.46
+    container_name: waj-lmnr-frontend
+    depends_on:
+      lmnr-postgres:
+        condition: service_healthy
+      lmnr-quickwit:
+        condition: service_healthy
+    ports:
+      - "${LMNR_FRONTEND_HOST_PORT:-5667}:5667"
+    environment:
+      DATABASE_URL: postgres://${LMNR_POSTGRES_USER:-postgres}:${LMNR_POSTGRES_PASSWORD:-postgres}@lmnr-postgres:5432/${LMNR_POSTGRES_DB:-lmnr}
+      PORT: 5667
+      BACKEND_URL: http://lmnr-app-server:8000
+      BACKEND_RT_URL: http://lmnr-app-server:8002
+      SHARED_SECRET_TOKEN: ${LMNR_SHARED_SECRET_TOKEN:-changeme_shared_secret}
+      NEXTAUTH_URL: http://localhost:5667
+      NEXTAUTH_SECRET: ${LMNR_NEXTAUTH_SECRET:-changeme_nextauth_secret}
+      NEXT_PUBLIC_URL: http://localhost:5667
+      ENVIRONMENT: LITE
+      CLICKHOUSE_URL: http://lmnr-clickhouse:8123
+      CLICKHOUSE_USER: ${LMNR_CLICKHOUSE_USER:-clickhouse}
+      CLICKHOUSE_PASSWORD: ${LMNR_CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_RO_USER: ${LMNR_CLICKHOUSE_RO_USER:-clickhouse}
+      CLICKHOUSE_RO_PASSWORD: ${LMNR_CLICKHOUSE_RO_PASSWORD:-clickhouse}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AEAD_SECRET_KEY: ${LMNR_AEAD_SECRET_KEY:-changeme_aead_secret_key_32chars}
+      QUICKWIT_SEARCH_URL: http://lmnr-quickwit:7280
+      GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_API_KEY:-}
+    networks:
+      - ai-agent-network
+    restart: unless-stopped
+
+networks:
+  ai-agent-network:
+    driver: bridge
+
+volumes:
+  lmnr_postgres_data:
+  lmnr_clickhouse_data:
+  lmnr_clickhouse_logs:
+  lmnr_quickwit_data:

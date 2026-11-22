@@ -1,0 +1,135 @@
+{% extends "_base.html" %}
+{% from "_components/status_chip.html" import run_status %}
+{% from "_components/callout.html" import alert %}
+{% block title %}{{ bakeoff.name or 'Model comparison' }} · Testing · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ bakeoff.name or 'Model comparison' }}{% endblock %}
+{% block page_subtitle %}Model comparison for {{ bakeoff._profile_name }} · {{ bakeoff._n_variants }} option{{ 's' if bakeoff._n_variants != 1 else '' }} · {{ bakeoff._n_suites }} test suite{{ 's' if bakeoff._n_suites != 1 else '' }}{% endblock %}
+{% block content %}
+{# ---- Recommendation first ---- #}
+{% set rec = recommendation %}
+{% if status == 'errored' %}
+{% call alert('error') %}This comparison stopped while starting its runs, so some options were never tested. The runs that did start are listed below; create the comparison again to test every option.{% endcall %}
+{% elif rec %}
+{% set b = rec.best %}{% set s2 = rec.second %}
+<section class="reco-banner" aria-label="Recommendation">
+  <div>
+    <div class="eyebrow">Recommended model</div>
+    <h2>{{ b.variant_label }}{% if b.model_label and b.model_label != b.variant_label %} <span class="caption">· {{ b.model_label }}</span>{% endif %}</h2>
+    <p>
+      {% if rec.tie %}
+        It ties with {{ s2.variant_label }} on quality ({{ b.pass_rate|pct }} of cases passed){% if rec.cheapest %} and is the cheaper of the two{% elif rec.fastest %} and answers faster{% endif %}.
+      {% else %}
+        Passed the most cases: <strong>{{ b.pass_rate|pct }}</strong>{% if rec.cheapest and rec.fastest %}, and it is also the cheapest and fastest{% elif rec.cheapest %}, and it is also the cheapest{% elif rec.fastest %}, and it is also the fastest{% endif %}.
+        {{ s2.variant_label }} is next, {{ rec.gap|pts(signed=False) }} lower{% if rec.cost_ratio is not none and rec.cost_ratio < 0.95 %} at {{ (rec.cost_ratio * 100)|round|int }}% of the cost{% elif rec.cost_ratio is not none and rec.cost_ratio > 1.05 %} and {{ '%.1f'|format(rec.cost_ratio) }}× the cost{% endif %}.
+      {% endif %}
+      {% if b.mean_cost_usd is none %}Cost wasn't recorded for this option.{% endif %}
+    </p>
+  </div>
+</section>
+{% elif status != 'complete' %}
+<section class="reco-banner is-pending" aria-label="Status">
+  <div>
+    <div class="eyebrow">Still running</div>
+    <h2>{% if leader %}{{ leader.best.variant_label }} leads so far{% else %}Waiting for the first results{% endif %}</h2>
+    <p>The page refreshes on its own when every run has finished.</p>
+  </div>
+</section>
+{% endif %}
+
+{# ---- Options at a glance ---- #}
+{% if matrix_table.rows %}
+<section class="section">
+  <div class="row between">
+    <h2 class="section-title mb-0">Results</h2>
+    {% if suite_options|length > 1 %}
+    <label class="caption">Test suite
+      <select id="bo-suite-focus" onchange="var v=this.value; location.href='/admin/evals/bakeoffs/{{ bakeoff.bakeoff_id }}' + (v ? ('?suite_id=' + encodeURIComponent(v)) : '');">
+        <option value="" {% if not suite_focus %}selected{% endif %}>All test suites</option>
+        {% for s in suite_options %}
+        <option value="{{ s.suite_id }}" {% if suite_focus == s.suite_id %}selected{% endif %}>{{ s.name|humanize }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+  </div>
+  <span class="caption">Best value per column in green.</span>
+  {% set PRIMARY = ['mean_score', 'pass_rate', 'passhat_k', 'p50_latency_ms', 'mean_cost_usd'] %}
+  {% for full in [false, true] %}
+  {% if full %}<details class="advanced mt-m"><summary>All measures</summary>{% endif %}
+  <div class="table-wrap mt-s">
+    <table class="table">
+      <thead><tr>
+        <th>Option</th>
+        {% for c in matrix_table.columns if full or c.key in PRIMARY %}<th class="num">{{ c.label }}</th>{% endfor %}
+      </tr></thead>
+      <tbody>
+        {% for row in matrix_table.rows %}
+        <tr>
+          <td>
+            <strong>{{ row.variant_label }}</strong>
+            {% if not full and rec and rec.best.variant_label == row.variant_label %} <span class="chip chip-ok">Recommended</span>{% endif %}
+            {% if row.model_label %}<div class="caption">{{ row.model_label }}</div>{% endif %}
+          </td>
+          {% for cell in row.cells if full or cell.key in PRIMARY %}
+          <td class="num {% if cell.winner %}metric-best{% endif %}">{{ cell.text }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if full %}</details>{% endif %}
+  {% endfor %}
+</section>
+{% else %}
+<section class="section">
+  <div class="empty-state">No results yet — the runs haven't reported any cases.</div>
+</section>
+{% endif %}
+
+{# ---- Charts: evals-bakeoff-chart.js polls data.json while running ---- #}
+<section class="section" id="bakeoff-charts-mount" data-bakeoff-id="{{ bakeoff.bakeoff_id }}" data-suite-focus="{{ suite_focus }}" data-status="{{ status }}">
+  <h2>Quality and cost</h2>
+  <span class="caption">Top-left in the right chart is best: high score, low cost.</span>
+  <div id="bakeoff-charts-grid" class="chart-grid">
+    <div class="chart-card">
+      <figcaption>Score and cases passed, per option</figcaption>
+      <div style="position:relative;height:240px;flex:1;"><canvas id="bakeoff-chart-bars"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <figcaption>Cost vs. quality</figcaption>
+      <div style="position:relative;height:240px;flex:1;"><canvas id="bakeoff-chart-scatter"></canvas></div>
+    </div>
+  </div>
+  <div class="empty-state" id="bakeoff-charts-empty" style="display:none;">No scored results yet — the charts appear once cases report scores.</div>
+</section>
+
+{# ---- Runs behind the comparison ---- #}
+<section class="section">
+  <h2>Runs</h2>
+  <span class="caption">One run per option and test suite — open one to see its failed cases.</span>
+  {% if bakeoff_runs %}
+  <div class="table-wrap mt-s">
+  <table class="table">
+    <thead><tr><th>Option</th><th>Test suite</th><th>Result</th><th class="num">Score</th><th>Finished</th><th></th></tr></thead>
+    <tbody>
+      {% for r in bakeoff_runs %}
+      <tr>
+        <td>{{ r._variant }}{% if r._model and r._model != r._variant %} <span class="caption">· {{ r._model }}</span>{% endif %}</td>
+        <td>{{ r._suite_name|humanize }}</td>
+        <td>{{ run_status(r.status) }}</td>
+        <td class="num">{{ r.score|pct }}</td>
+        <td class="caption nowrap">{{ (r.finished_at or r.created_at)|when }}</td>
+        <td><div class="row end nowrap"><a class="btn small ghost" href="/admin/evals/runs/{{ r.run_id }}">Open</a></div></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="caption mt-s">No runs were started for this comparison.</p>
+  {% endif %}
+  <p class="caption mt-m">Created {{ bakeoff.created_at|when }} · each case run {{ bakeoff.repeats or 1 }} time{{ 's' if (bakeoff.repeats or 1) != 1 else '' }}.</p>
+</section>
+<script src="/admin/static/evals-bakeoff-chart.js?v={{ asset_version }}" defer></script>
+{% endblock %}

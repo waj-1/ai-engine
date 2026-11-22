@@ -1,0 +1,14 @@
+{# One tool row in the Create-bundle picker (mcp_create.html). #}
+{% set label = t.display_name or (t.python_name|replace('_', ' ')|capitalize) %}
+<label class="field-check" data-pick
+       data-search="{{ (label ~ ' ' ~ t.python_name ~ ' ' ~ (t.description or ''))|lower }}"
+       data-agent="{{ t.agent_kind or '' }}"
+       style="padding:var(--space-xs) var(--space-sm);border-bottom:1px solid var(--border);">
+  <input type="checkbox" name="member_tool_ids" value="{{ t.tool_id }}" {% if t.tool_id in checked %}checked{% endif %}>
+  <span style="min-width:0;flex:1;">
+    <strong>{{ label }}</strong>
+    <span class="technical">{{ t.python_name }}{% if (t.kind or 'python') == 'http' %} · HTTP{% endif %}</span>
+    <span class="caption" style="float:right;">{{ agent_label(t.agent_kind) }}</span>
+    <span class="field-help clamp-1" style="max-width:100%;">{{ t.description or '' }}</span>
+  </span>
+</label>

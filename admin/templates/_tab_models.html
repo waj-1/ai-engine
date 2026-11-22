@@ -1,0 +1,110 @@
+{# _tab_models.html — Models tab of /admin/agents (the old models_list.html
+   screen, merged in). Registered models first; "New model" opens the create
+   form in a side drawer (it used to be an always-open 14-field form above
+   the list). Tuning knobs (temperature, top_p/k, pricing) live on each
+   model's page. Form actions stay POSTs to /admin/agent-models — those
+   sub-routes are unchanged and redirect back to this tab. Context:
+   admin/router.build_models_context(). #}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import hint_text %}
+
+<div class="agents-toolbar-row">
+  <input type="search" class="agents-search" placeholder="Search models" aria-label="Search models" data-filter-rows="models-table">
+  <button type="button" class="primary" data-open-dialog="dlg-new-model">New model</button>
+</div>
+
+<div class="table-wrap">
+<table class="table" id="models-table">
+  <thead><tr>
+    <th>Model</th><th>Provider</th><th>Used by</th><th>Environment</th><th>Status</th>
+  </tr></thead>
+  <tbody>
+    {% for r in rows %}
+    {% set xc = r.extra_config or {} %}
+    {% set used = (model_usage or {}).get(r.model_id, []) %}
+    <tr data-filter-row data-search="{{ (r.name ~ ' ' ~ r.model_string ~ ' ' ~ r.provider)|lower }}">
+      <td>
+        <a class="agent-name" href="/admin/agent-models/{{ r.model_id }}">{{ r.name }}</a>
+        <div class="technical">{{ r.model_string }}</div>
+      </td>
+      <td>{{ (provider_labels or {}).get(r.provider, r.provider) }}
+        {% if xc.realtime %}<span class="chip chip-info">Voice</span>{% endif %}</td>
+      <td class="caption">
+        {% if used %}
+          {% for u in used[:2] %}<a href="/admin/agents?env={{ current_env }}&profile_id={{ u.profile_id }}">{{ u.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+          {% if used|length > 2 %} <span title="{{ used[2:]|map(attribute='name')|join(', ') }}">+{{ used|length - 2 }} more</span>{% endif %}
+        {% else %}<span class="muted">Not used</span>{% endif %}
+      </td>
+      <td>{{ chip(('Production' if r.environment == 'prod' else ('Staging' if r.environment == 'staging' else (r.environment or 'dev'))), variant='neutral') }}</td>
+      <td>{% if r.is_active %}{{ chip('Active', variant='ok', dot=True) }}{% else %}{{ chip('Inactive', variant='neutral') }}{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5"><div class="empty-state">No models yet. <button type="button" class="primary" data-open-dialog="dlg-new-model">New model</button></div></td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{{ hint_text('Temperature, top_p/top_k, thinking and pricing are on each model\'s page. Costs feed the Overview spend tile.') }}
+
+<dialog id="dlg-new-model" class="dialog drawer" aria-labelledby="dlg-new-model-title">
+  <div class="drawer-head">
+    <h2 id="dlg-new-model-title">New model</h2>
+    <button type="button" class="ghost" data-close-dialog aria-label="Close">✕</button>
+  </div>
+  <p class="caption">Register a model agents can use. Blank knobs fall through to the provider default.</p>
+  <form method="post" action="/admin/agent-models" class="model-form">
+    <label>Name<br><input name="name" required placeholder="gemini-3-flash-prod"></label>
+    <label>Environment<br>
+      <select name="environment">
+        <option value="staging">staging</option>
+        <option value="prod">prod</option>
+      </select>
+    </label>
+    <label>Provider<br>
+      <select name="provider">
+        {% for p in providers %}<option value="{{ p }}">{{ provider_labels.get(p, p) }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Model string<br><input name="model_string" required placeholder="gemini-3-flash-preview"></label>
+    <label class="span-all">Base URL (optional)<br>
+      <input name="base_url" type="url" placeholder="http://127.0.0.1:11434/v1">
+      <span class="caption">For OpenAI or Ollama: the address of any OpenAI-compatible server (Ollama, vLLM, LM Studio). A server on this machine or network needs no API key. Leave blank for the provider's own service.</span>
+    </label>
+
+    <label>Temperature<br><input name="temperature" type="number" step="0.05" value="0.2"></label>
+
+    <label>Max output tokens<br><input name="max_output_tokens" type="number" placeholder="8192"></label>
+    <label>top_p<br><input name="top_p" type="number" step="0.05" placeholder="0.95"></label>
+    <label>top_k<br><input name="top_k" type="number" step="1" placeholder="40"></label>
+    <label title="Gemini 3+ reasoning depth. Lower = faster/cheaper.">Thinking level (Gemini 3+)<br>
+      <select name="thinking_level">
+        <option value="" selected>— model default —</option>
+        <option value="minimal">minimal</option>
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+      </select></label>
+    <label title="Gemini 2.5 reasoning token budget. 0 disables thinking. Ignored when a thinking level is set.">Thinking budget (Gemini 2.5)<br>
+      <input name="thinking_budget" type="number" step="1" min="0" placeholder="0 = off"></label>
+    <label>Frequency penalty<br><input name="frequency_penalty" type="number" step="0.05" placeholder="0"></label>
+
+    <label>Presence penalty<br><input name="presence_penalty" type="number" step="0.05" placeholder="0"></label>
+    <label>Pricing<br>
+      <select name="pricing_mode">
+        <option value="auto" selected>Auto (tokencost)</option>
+        <option value="manual">Manual rates</option>
+      </select></label>
+    <label>tokencost model key (optional override)<br>
+      <input name="tokencost_model" placeholder="claude-sonnet-4"></label>
+    <label>Cost per 1k in ($) — manual only<br><input name="cost_per_1k_in" type="number" step="0.0001" placeholder="0.00015"></label>
+    <label>Cost per 1k out ($) — manual only<br><input name="cost_per_1k_out" type="number" step="0.0001" placeholder="0.0006"></label>
+    <label class="span-all">Extra config (JSON, merged with knobs above)<br>
+      <textarea name="extra_config_raw" placeholder='{"safety_settings": "BLOCK_NONE"}'></textarea>
+    </label>
+    <div class="model-form-actions">
+      <button type="button" class="ghost" data-close-dialog>Cancel</button>
+      <button class="primary" type="submit">Create model</button>
+    </div>
+  </form>
+</dialog>
+<script src="/admin/static/agents.js?v={{ asset_version }}" defer></script>

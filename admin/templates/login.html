@@ -1,0 +1,76 @@
+{# ai_agent/admin/templates/login.html — standalone (does not extend _base.html) #}
+{% from "_components/callout.html" import alert, hint_text %}
+<!doctype html>
+{% set _brand = brand() %}
+<html lang="en"{% if _brand.key %} data-brand="{{ _brand.key }}"{% endif %}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · {{ _brand.title }}</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="apple-touch-icon" href="/static/favicon.png">
+  {# Pre-paint: apply saved theme before first paint to avoid flash #}
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('waj-admin-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/admin/static/portal.css?v={{ asset_version }}">
+  {% if _brand.css %}<style>{{ _brand.css|safe }}</style>{% endif %}
+</head>
+<body style="display:grid;place-items:center;min-height:100vh;background:var(--surface-sunken);">
+  <div class="card" style="width:100%;max-width:380px;padding:var(--space-l);">
+
+    {# Brand mark #}
+    <div style="display:flex;align-items:center;gap:var(--space-s);margin-bottom:var(--space-m);">
+      <span style="width:28px;height:28px;background:var(--accent);border-radius:6px;flex:0 0 auto;"></span>
+      <span style="font-weight:700;font-size:18px;letter-spacing:-0.3px;">{{ _brand.title }}</span>
+    </div>
+
+    {{ hint_text(_brand.login_copy) }}
+
+    {% if error %}
+    {% call alert('error') %}{{ error }}{% endcall %}
+    {% endif %}
+
+    <form method="post" action="/admin/login" style="margin-top:var(--space-m);">
+      <label style="display:block;margin-bottom:var(--space-m);">
+        <span class="eyebrow" style="display:block;margin-bottom:var(--space-xxs);">Email</span>
+        <input id="email" name="email" type="email" autocomplete="username" required
+               value="{{ email or '' }}"
+               style="width:100%;box-sizing:border-box;">
+      </label>
+
+      <label style="display:block;margin-bottom:var(--space-m);">
+        <span class="eyebrow" style="display:block;margin-bottom:var(--space-xxs);">Password</span>
+        <input id="password" name="password" type="password" autocomplete="current-password" required
+               style="width:100%;box-sizing:border-box;">
+      </label>
+
+      <button type="submit" class="primary" style="width:100%;">Sign in</button>
+    </form>
+
+    {# Advanced fallback: paste a raw JWT (service tokens / debugging).
+       Same cookie, same superuser gate — just a different way to supply
+       the token. Collapsed so the common path stays email + password. #}
+    <details style="margin-top:var(--space-m);">
+      <summary class="caption" style="cursor:pointer;">Sign in with a token instead</summary>
+      <form method="post" action="/admin/login" style="margin-top:var(--space-s);">
+        <label style="display:block;margin-bottom:var(--space-m);">
+          <span class="eyebrow" style="display:block;margin-bottom:var(--space-xxs);">Supabase JWT</span>
+          <input id="token" name="token" type="password"
+                 style="width:100%;box-sizing:border-box;font-family:'SF Mono',monospace;">
+        </label>
+        <button type="submit" class="ghost" style="width:100%;">Use token</button>
+      </form>
+    </details>
+
+  </div>
+</body>
+</html>

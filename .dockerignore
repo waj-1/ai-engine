@@ -1,0 +1,101 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Documentation — host-only, EXCEPT the in-portal /admin/docs pages, which the
+# portal reads from docs/admin-portal/*.md at runtime (admin/router.py:_DOCS_DIR).
+# Use docs/* (not docs/) so the dir stays traversable and we can re-include the
+# one subdir the running image needs.
+*.md
+docs/*
+!docs/admin-portal
+!docs/admin-portal/*.md
+# ...and docs/partner/ — the partner guides rendered at /admin/help
+# (admin/router.py:HELP_DIR), with their screenshots/videos in media/.
+!docs/partner
+!docs/partner/*.md
+!docs/partner/media
+!docs/partner/media/*
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Scripts are host-only, EXCEPT the few the running image needs. Docker
+# requires re-including each parent directory level by level (dir/* exclude +
+# !dir re-include) for a nested negation to take effect.
+scripts/*
+# The drift checker answers "is this stack serving what the repo says", and a
+# stack with no source checkout can only run it from the image.
+!scripts/check_profile_drift.py
+!scripts/kb_content
+scripts/kb_content/*
+# The AI-agents demo portal's KB (hand-written bilingual markdown) and its
+# ingest script ship with the image: the re-ingest is the recovery procedure
+# and the deployed stacks have no source checkout. `*.md` is excluded globally
+# above, so the pages are re-included explicitly, level by level.
+!scripts/ingest_agents_demo_kb.py
+!scripts/kb_content/agents_demo
+!scripts/kb_content/agents_demo/en
+!scripts/kb_content/agents_demo/ar
+!scripts/kb_content/agents_demo/en/*.md
+!scripts/kb_content/agents_demo/ar/*.md
+# NOTE: tests/ is intentionally SHIPPED — the admin portal's in-app test
+# runner (admin/test_runner.py, /admin/tests) shells out to `pytest tests/...`
+# inside the running container. Excluding it made every suite fail with
+# "file or directory not found: tests/...". Keep tests/ in the image.
+manual_tests/
+evals/
+test_*.sh
+
+# node toolchain (CI-only, not needed in the Python runtime image)
+node_modules
+package.json
+package-lock.json
+supabase/schema.prisma
+.claude
+

@@ -1,0 +1,21 @@
+{
+  "name": "waj-ai-engine-db",
+  "private": true,
+  "scripts": {
+    "deploy-ai-functions": "DATABASE_URL=$AI_DATABASE_URL npx tsx supabase/db-functions/runner.ts",
+    "prisma:generate": "prisma generate --schema=supabase/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.0.1",
+    "dotenv-safe": "^9.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "prisma": "^6.0.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.6.3",
+    "@types/node": "^20.16.14",
+    "@types/dotenv-safe": "^8.1.6",
+    "supabase": "^2.72.8"
+  }
+}

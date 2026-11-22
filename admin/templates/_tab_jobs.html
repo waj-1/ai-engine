@@ -1,0 +1,127 @@
+{# _tab_jobs.html — body of the Background jobs screen (/admin/jobs, Settings › Diagnostics;
+   formerly the Jobs tab of /admin/live). Included by jobs.html;
+   the context comes from admin/jobs_handlers.build_jobs_context(). #}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import hint_text %}
+
+{# In-flight jobs are watched by jobs-poll.js (per-job {job_id}.json). It
+   reloads the page ONCE when a watched job settles — replacing the old
+   <meta refresh content="5"> that yanked the operator back to the top of
+   the page every 5s. Polling pauses while the tab is hidden. #}
+
+<form method="get" action="/admin/jobs" class="filter-bar" style="margin-bottom:var(--space-m);">
+  
+  <label>Kind
+    <select name="kind">
+      <option value="">All kinds</option>
+      {% for k in kind_options %}
+      <option value="{{ k }}" {% if kind_filter == k %}selected{% endif %}>{{ k }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Status
+    <select name="status">
+      <option value="">All statuses</option>
+      {% for s in status_options %}
+      <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Limit
+    <input type="number" name="limit" min="1" max="500" value="50" style="width:6em;">
+  </label>
+  <button class="primary" type="submit">Filter</button>
+  {% if kind_filter or status_filter %}
+  <a class="caption" href="/admin/jobs">clear</a>
+  {% endif %}
+  {% if has_in_flight %}
+  <div style="margin-left:auto;">{{ hint_text('Live — refreshes once when an in-flight job finishes.') }}</div>
+  {% endif %}
+</form>
+
+{% if rows %}
+<table data-tabulator data-tabulator-page-size="50">
+  <thead><tr>
+    <th>Started</th>
+    <th>Kind</th>
+    <th>Label</th>
+    <th>Status</th>
+    <th>Duration</th>
+    <th>Actor</th>
+    <th>Error</th>
+    <th>Actions</th>
+  </tr></thead>
+  <tbody>
+    {% for r in rows %}
+    {% set started = r.started_at or r.created_at %}
+    {% set err_full = r.error or '' %}
+    {% set err_short = err_full[:60] + ('…' if err_full|length > 60 else '') %}
+    {% set dur_ms = r.duration_ms %}
+    <tr data-job-id="{{ r.job_id }}" data-job-status="{{ r.status }}" style="cursor:pointer;" onclick="toggleJobDetail('{{ r.job_id }}')">
+      <td class="caption num">{{ (started or '')[:19] }}</td>
+      <td>{{ chip(r.kind, variant=kind_variant(r.kind)) }}</td>
+      <td>
+        <code style="font-size:0.85em;">{{ r.label }}</code>
+        {% if r.related_entity_type and r.related_entity_id %}
+        <div class="caption">{{ r.related_entity_type }} · <code>{{ r.related_entity_id[:8] }}</code></div>
+        {% endif %}
+      </td>
+      <td>{{ chip(r.status, variant=status_variant(r.status), dot=(r.status in ['queued','running'])) }}</td>
+      <td class="caption num">
+        {% if dur_ms is not none %}{{ '%.2f'|format(dur_ms / 1000) }}s{% else %}—{% endif %}
+      </td>
+      <td class="caption num">{{ (r.triggered_by or 'system')[:8] }}</td>
+      <td class="caption" title="{{ err_full }}">{{ err_short or '—' }}</td>
+      <td>
+        {% if r.status in ['queued', 'running'] %}
+        <form method="post" action="/admin/jobs/{{ r.job_id }}/cancel" style="margin:0;display:inline;" onclick="event.stopPropagation();">
+          <button class="danger" type="submit" onclick="return confirm('Cancel this job? Worker will stop at its next checkpoint.');">Cancel</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    <tr id="detail-{{ r.job_id }}" style="display:none;background:var(--surface-sunken);">
+      <td colspan="8">
+        <div style="padding:var(--space-s);">
+          <div class="caption" style="margin-bottom:var(--space-xs);">
+            <strong>Job</strong>
+            <code>{{ r.job_id }}</code>
+            · created <code>{{ (r.created_at or '')[:19] }}</code>
+            {% if r.finished_at %} · finished <code>{{ (r.finished_at or '')[:19] }}</code>{% endif %}
+          </div>
+          {% if err_full %}
+          <div class="caption" style="margin-top:var(--space-s);"><strong>Error</strong></div>
+          <pre style="white-space:pre-wrap;word-break:break-word;font-size:0.85em;background:var(--surface-sunken);border:1px solid var(--border);border-radius:8px;padding:var(--space-s);">{{ err_full }}</pre>
+          {% endif %}
+          {% if r.metadata %}
+          <div class="caption" style="margin-top:var(--space-s);"><strong>Metadata</strong></div>
+          <pre style="white-space:pre-wrap;font-size:0.8em;background:var(--surface-sunken);border:1px solid var(--border);border-radius:8px;padding:var(--space-s);">{{ r.metadata|pretty_json }}</pre>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
+  <p>No jobs match the current filters.</p>
+  {% if kind_filter or status_filter %}<a href="/admin/jobs">Clear filters</a>{% endif %}
+</div>
+{% endif %}
+
+<script>
+  // Inline detail expand/collapse — keeps the row click cheap and avoids
+  // a separate detail page for v1. Stops event propagation so clicks on
+  // the Cancel button inside the row don't toggle the panel.
+  function toggleJobDetail(jobId) {
+    var el = document.getElementById('detail-' + jobId);
+    if (!el) return;
+    el.style.display = (el.style.display === 'none') ? 'table-row' : 'none';
+  }
+</script>
+
+{% if has_in_flight %}
+<script src="/admin/static/jobs-poll.js?v={{ asset_version }}" defer></script>
+{% endif %}

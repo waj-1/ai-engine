@@ -1,0 +1,663 @@
+{
+ "cases": [
+  {
+   "id": "S01",
+   "customer_id": "41203317",
+   "expected_tools": [
+    "support_verify_customer",
+    "support_run_line_diagnostics"
+   ],
+   "brief": "Layla's home Wi-Fi crawls in the living room during a football match. Diagnostics: fiber line is fine, Wi-Fi congestion (23 devices on 2.4 GHz, router not restarted in 64 days). Great agent: verifies her, runs diagnostics, walks her through restart + move devices to 5 GHz in short steps, no technician needed; may mention the mesh add-on only if far rooms stay weak.",
+   "title_en": "Slow Wi-Fi during the match",
+   "title_ar": "الواي فاي بطيء وقت الماتش",
+   "headline_en": "Layla's Wi-Fi gave up mid-match",
+   "headline_ar": "الواي فاي عند ليلى وقف بنص الماتش",
+   "summary_en": "You're Layla in JVC, Dubai. It's derby night, the whole family is online at once, and the TV freezes right before every attack.",
+   "summary_ar": "إنتِ ليلى من قرية جميرا الدائرية بدبي. الليلة في ديربي، والعيلة كلها متصلة بنفس الوقت، والتلفزيون عم يعلّق قبل كل هجمة.",
+   "who_en": "You're Layla Haddad, a football fan in JVC, Dubai.",
+   "who_ar": "إنتِ ليلى حداد، بتحبي كرة القدم وساكنة بقرية جميرا الدائرية بدبي.",
+   "happened_en": "It's derby night, the whole family is on the sofa, and the TV freezes right before every attack. Phones, tablets, the console — everything is online at once.",
+   "happened_ar": "الليلة في ديربي، والعيلة كلها قاعدة على الكنباية، والتلفزيون عم يعلّق قبل كل هجمة. الموبايلات والتابلت والبلايستيشن كلها متصلة بنفس الوقت.",
+   "goal_en": "Get the stream smooth again before the second half — ideally without a technician.",
+   "goal_ar": "بدك ترجّعي البث منيح قبل الشوط التاني — ويا ريت بدون فني.",
+   "say_en": [
+    "Hi, my Wi-Fi is crawling in the living room and the match keeps freezing!",
+    "My account number is 41203317, date of birth 14 March 1991.",
+    "Do I really need a technician, or can we fix it now?"
+   ],
+   "say_ar": [
+    "مرحبا، الواي فاي عندي بطيء كتير بالصالون والماتش عم يعلّق!",
+    "رقم حسابي 41203317، وتاريخ ميلادي 14/03/1991.",
+    "بدي فني فعلاً، ولا فينا نصلّحها هلّق؟"
+   ],
+   "twist_en": "Halfway through the steps shout \"wait, GOAL!\", go quiet, then ask the agent to repeat only the last step.",
+   "twist_ar": "بنص الخطوات صرّخي «لحظة، غووول!» واسكتي شوي، بعدين اطلبي من الوكيل يعيد آخر خطوة بس.",
+   "great_en": "Verifies you, runs diagnostics: fiber is fine (500 Mbps at the router) but 23 devices crowd 2.4 GHz and the router hasn't restarted in 64 days. Walks you through restart + 5 GHz in short steps — no technician.",
+   "great_ar": "بيتحقق منك وبيعمل الفحص: الفايبر سليم (500 ميغابت عند الراوتر) بس في 23 جهاز زاحمين على نطاق 2.4 والراوتر ما انطفى من 64 يوم. بيمشي معك بخطوات قصيرة: إعادة تشغيل ونقل الأجهزة لـ 5 غيغا — بدون فني.",
+   "facts": [
+    {
+     "label_en": "Account number",
+     "label_ar": "رقم الحساب",
+     "value": "41203317"
+    },
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "14/03/1991"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "5521"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "الموبايل",
+     "value": "0501240317"
+    },
+    {
+     "label_en": "Area",
+     "label_ar": "المنطقة",
+     "value": "JVC, Dubai",
+     "value_ar": "قرية جميرا الدائرية، دبي"
+    }
+   ]
+  },
+  {
+   "id": "S02",
+   "customer_id": "41207749",
+   "expected_tools": [
+    "support_check_outage"
+   ],
+   "brief": "Omar's home internet is completely dead since this morning. There is an active fiber outage in Al Barsha (cable cut by roadworks), engineers on site, fix expected today by 6 pm. Great agent: checks the outage for his area (can do it even before full verification since outage info is public), tells him the ETA, no technician, no pointless router reset; offers to note his line on the outage ticket.",
+   "title_en": "Internet dead since this morning",
+   "title_ar": "الإنترنت مقطوع من الصبح",
+   "headline_en": "Omar's home went offline at breakfast",
+   "headline_ar": "النت مقطوع عند عمر من وقت الفطور",
+   "summary_en": "You're Omar, working from home in Al Barsha, Dubai. Your internet died at 8 this morning, two router restarts did nothing, and you have a client call at 4.",
+   "summary_ar": "إنت عمر، بتشتغل من البيت بالبرشاء بدبي. الإنترنت انقطع الساعة 8 الصبح، وعملت ريستارت للراوتر مرتين وما زبط، وعندك اجتماع مع عميل الساعة 4.",
+   "who_en": "You're Omar Al Mansoori, working from home in Al Barsha, Dubai.",
+   "who_ar": "إنت عمر المنصوري، بتشتغل من البيت بالبرشاء بدبي.",
+   "happened_en": "Your home internet died around 8 this morning. You've restarted the router twice — nothing. There's a client call at 4 and you're getting nervous.",
+   "happened_ar": "الإنترنت بالبيت انقطع تقريباً الساعة 8 الصبح. عملت ريستارت للراوتر مرتين — وما في شي. عندك اجتماع مع عميل الساعة 4 وبلّشت تتوتر.",
+   "goal_en": "Find out what's wrong and when it'll be back — fast.",
+   "goal_ar": "بدك تعرف شو المشكلة وإيمتى بيرجع الإنترنت — وبسرعة.",
+   "say_en": [
+    "My home internet has been completely dead since this morning — what's going on?",
+    "I'm in Al Barsha. Account 41207749, born 2 November 1985.",
+    "Should I restart the router again, or is it on your side?"
+   ],
+   "say_ar": [
+    "الإنترنت بالبيت مقطوع كلياً من الصبح، شو القصة؟",
+    "أنا بالبرشاء. رقم الحساب 41207749، ومواليد 02/11/1985.",
+    "بعيد تشغيل الراوتر مرة تانية، ولا المشكلة من عندكم؟"
+   ],
+   "say_more_en": [
+    "Is it just me or the whole area?",
+    "Can you send someone right now?",
+    "I have a client call at 4 — will it be back by then?",
+    "Will I get anything back for today?",
+    "Can you text me when it's fixed?"
+   ],
+   "say_more_ar": [
+    "المشكلة عندي بس ولا بكل المنطقة؟",
+    "فيك تبعتلي حدا هلّق؟",
+    "عندي اجتماع مع عميل الساعة 4 — رح يرجع قبلها؟",
+    "رح يرجعلي شي عن اليوم؟",
+    "فيك تبعتلي رسالة لمّا يرجع؟"
+   ],
+   "twist_en": "Before giving any details, demand: \"Is it just me or the whole area?\" — then ask them to send someone right now.",
+   "twist_ar": "قبل ما تعطي أي معلومات، اسأل على طول: «المشكلة عندي بس ولا بكل المنطقة؟» — وبعدين اطلب يبعتوا حدا هلّق.",
+   "great_en": "Checks the Al Barsha outage right away (public info, even before verifying): fiber cut by roadworks, engineers on site, fix expected today by 6 pm. No pointless reset or technician; offers to note your line on OUT-4471.",
+   "great_ar": "بيتأكد من انقطاع البرشاء فوراً (معلومة عامة حتى قبل التحقق): كبل فايبر انقطع بسبب أشغال طرق، والمهندسين بالموقع، والتصليح متوقع اليوم قبل 6 المسا. بدون ريستارت ولا فني، وبيعرض يسجّل خطك على البلاغ OUT-4471.",
+   "facts": [
+    {
+     "label_en": "Account number",
+     "label_ar": "رقم الحساب",
+     "value": "41207749"
+    },
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "02/11/1985"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "الموبايل",
+     "value": "0502207749"
+    },
+    {
+     "label_en": "Area",
+     "label_ar": "المنطقة",
+     "value": "Al Barsha, Dubai",
+     "value_ar": "البرشاء، دبي"
+    }
+   ]
+  },
+  {
+   "id": "S03",
+   "customer_id": "71304412",
+   "expected_tools": [
+    "support_verify_customer",
+    "support_explain_bill"
+   ],
+   "brief": "Nora (Riyadh) sees her September bill is 583 riyals instead of her usual 508. The extra 75 is 3 Bahrain roaming day passes (25 each) from a weekend trip. Great agent: verifies, explains line by line, no refund because the charge is valid; bill is due 20 October.",
+   "title_en": "Why is my bill 583 riyals?",
+   "title_ar": "ليش فاتورتي طالعة 583 ريال؟",
+   "headline_en": "Nora's bill came back from Bahrain 75 riyals heavier",
+   "headline_ar": "فاتورة نورة رجعت من البحرين أغلى بـ 75 ريال",
+   "summary_en": "You're Nora from Al Malqa, Riyadh. Your bill is usually 508 riyals, but September's says 583, after a weekend in Bahrain you were sure was covered.",
+   "summary_ar": "إنتِ نورة من حي الملقا بالرياض. فاتورتك عادةً 508 ريال، بس فاتورة سبتمبر طالعة 583 — بعد ويكند بالبحرين كنتِ متأكدة إنه مشمول.",
+   "who_en": "You're Nora Al Qahtani from Al Malqa, Riyadh.",
+   "who_ar": "إنتِ نورة القحطاني من حي الملقا بالرياض.",
+   "happened_en": "Your bill is normally 508 riyals. September's says 583. You did pop over to Bahrain for a weekend… but surely that was covered?",
+   "happened_ar": "فاتورتك عادةً 508 ريال، بس فاتورة سبتمبر طالعة 583. صحيح رحتِ عالبحرين ويكند… بس أكيد هاد مشمول، مزبوط؟",
+   "goal_en": "Understand every line of the bill — and try to get the extra back.",
+   "goal_ar": "بدك تفهمي كل بند بالفاتورة — وتحاولي ترجّعي الزيادة.",
+   "say_en": [
+    "Hi, my September bill is 583 riyals — it's normally 508. Why?",
+    "Account 71304412, and the last 4 of my ID are 1187.",
+    "Can you just remove the 75? I barely used my phone there."
+   ],
+   "say_ar": [
+    "مرحبا، فاتورة سبتمبر 583 ريال وأنا دايماً بدفع 508، ليش؟",
+    "رقم الحساب 71304412، وآخر 4 أرقام من هويتي 1187.",
+    "فيكم تشيلوا الـ 75؟ ما استعملت الموبايل هونيك تقريباً."
+   ],
+   "twist_en": "Insist you never turned on roaming — then halfway through remember: \"oh… the hotel Wi-Fi was bad, I used my data.\"",
+   "twist_ar": "أصرّي إنك ما شغّلتي التجوال أبداً — وبعدين بالنص تذكّري: «آه… الواي فاي بالأوتيل كان خربان واستعملت الداتا».",
+   "great_en": "Verifies you and explains line by line: Home Fiber 500 (339) + Mobile Plus (169) + 3 Bahrain roaming day passes at 25 each = 583. Kindly no refund, since the charge is valid; due 20/10/2026.",
+   "great_ar": "بيتحقق منك وبيشرح بند بند: فايبر المنزل 500 (339) + جوال بلس (169) + 3 أيام تجوال بالبحرين بـ 25 لليوم = 583. بيعتذر بلطف عن الاسترجاع لأن الرسوم صحيحة؛ آخر موعد للدفع 20/10/2026.",
+   "facts": [
+    {
+     "label_en": "Account number",
+     "label_ar": "رقم الحساب",
+     "value": "71304412"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "1187"
+    },
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "21/07/1993"
+    },
+    {
+     "label_en": "September bill",
+     "label_ar": "فاتورة سبتمبر",
+     "value": "SAR 583",
+     "value_ar": "583 ريال"
+    },
+    {
+     "label_en": "Due date",
+     "label_ar": "آخر موعد للدفع",
+     "value": "20/10/2026"
+    }
+   ]
+  },
+  {
+   "id": "S04",
+   "customer_id": "41209908",
+   "expected_tools": [
+    "support_verify_customer",
+    "support_explain_bill",
+    "support_request_refund"
+   ],
+   "brief": "Khalid's card was charged twice for the September bill (2 × 349 dirhams on 15 September, refs PAY-55120 and PAY-55121). Great agent: verifies, confirms the duplicate from the record, asks refund to card (5–7 working days) or bill credit, raises the refund once and gives the reference.",
+   "title_en": "Charged twice for one bill",
+   "title_ar": "انخصم مني مرتين عن نفس الفاتورة",
+   "headline_en": "Khalid's card paid the same bill twice",
+   "headline_ar": "بطاقة خالد دفعت نفس الفاتورة مرتين",
+   "summary_en": "You're Khalid from Al Nahda, Sharjah, and you read every bank alert. Your 349-dirham internet bill was charged twice on 15 September.",
+   "summary_ar": "إنت خالد من النهدة بالشارقة، وبتقرا كل إشعار من البنك. فاتورة الإنترنت 349 درهم انخصمت منك مرتين يوم 15 سبتمبر.",
+   "who_en": "You're Khalid Bakr from Al Nahda, Sharjah — you read every bank alert.",
+   "who_ar": "إنت خالد بكر من النهدة بالشارقة — وبتقرا كل إشعار بيوصلك من البنك.",
+   "happened_en": "Your banking app shows two payments of 349 dirhams on 15 September, both for the internet bill. One bill, two charges. You are not amused.",
+   "happened_ar": "تطبيق البنك مبيّن دفعتين بـ 349 درهم يوم 15 سبتمبر، التنتين لفاتورة الإنترنت. فاتورة وحدة وانخصمت مرتين. والموضوع مش عاجبك أبداً.",
+   "goal_en": "Get the extra 349 dirhams back and leave with a reference number.",
+   "goal_ar": "بدك ترجّع الـ 349 درهم الزايدة وتطلع برقم مرجعي.",
+   "say_en": [
+    "I was charged twice for my September bill — 349 dirhams, two times!",
+    "My mobile is 0509909908, date of birth 30 May 1979.",
+    "Refund it to my card please. How long will it take?"
+   ],
+   "say_ar": [
+    "انخصم مني مرتين عن فاتورة سبتمبر — 349 درهم مرتين!",
+    "رقم موبايلي 0509909908، وتاريخ ميلادي 30/05/1979.",
+    "رجّعوها على البطاقة من فضلك. قديش بتاخد وقت؟"
+   ],
+   "say_more_en": [
+    "Why did this happen?",
+    "Can I get it back as a bill credit instead?",
+    "When will I see the money?",
+    "Can you give me a reference number?",
+    "Will it happen again next month?"
+   ],
+   "say_more_ar": [
+    "ليش صار هيك؟",
+    "فيني آخدها رصيد عالفاتورة بدل البطاقة؟",
+    "إيمتى بشوف المصاري؟",
+    "فيك تعطيني رقم مرجعي؟",
+    "رح يرجع يصير هيك الشهر الجاي؟"
+   ],
+   "twist_en": "Give your mobile with one wrong digit first (0509909909) — then correct it when the agent can't find you.",
+   "twist_ar": "أول مرة عطيه رقم الموبايل برقم غلط (0509909909) — وصحّحه لما الوكيل ما يلاقي حسابك.",
+   "great_en": "Verifies you, confirms the duplicate from the record (PAY-55120 and PAY-55121, 349 each on 15/09/2026), asks: refund to card (5–7 working days) or bill credit, raises it once and gives the reference.",
+   "great_ar": "بيتحقق منك وبيأكد التكرار من السجل (PAY-55120 و PAY-55121، كل وحدة 349 بتاريخ 15/09/2026)، وبيسألك: بدك ترجيع عالبطاقة (5–7 أيام عمل) ولا رصيد على الفاتورة، وبيرفع الطلب مرة وحدة وبيعطيك المرجع.",
+   "facts": [
+    {
+     "label_en": "Account number",
+     "label_ar": "رقم الحساب",
+     "value": "41209908"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "الموبايل",
+     "value": "0509909908"
+    },
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "30/05/1979"
+    },
+    {
+     "label_en": "Charged",
+     "label_ar": "المبلغ المخصوم",
+     "value": "2 × AED 349",
+     "value_ar": "2 × 349 درهم"
+    },
+    {
+     "label_en": "Payment date",
+     "label_ar": "تاريخ الدفع",
+     "value": "15/09/2026"
+    }
+   ]
+  },
+  {
+   "id": "S05",
+   "customer_id": "41211560",
+   "expected_tools": [
+    "support_verify_customer",
+    "support_change_service"
+   ],
+   "brief": "Sara is moving from Khalifa City to Al Reem Island (Abu Dhabi) on the 25th of next month. Al Reem has fiber; relocation is free once per contract year and takes 3–5 working days. Great agent: verifies, checks coverage at the new address, confirms the move date and books the relocation only after she says yes.",
+   "title_en": "Moving house to Al Reem Island",
+   "title_ar": "نقل السكن لجزيرة الريم",
+   "headline_en": "Sara's boxes are packed — her Wi-Fi is coming too",
+   "headline_ar": "كراتين سارة جاهزة — والواي فاي رح ينتقل معها",
+   "summary_en": "You're Sara, moving from Khalifa City to Al Reem Island, Abu Dhabi, on the 25th of next month. You want your internet to move with you without a single day offline.",
+   "summary_ar": "إنتِ سارة، رح تنتقلي من مدينة خليفة لجزيرة الريم بأبوظبي يوم 25 الشهر الجاي. وبدك الإنترنت ينتقل معك بدون ولا يوم انقطاع.",
+   "who_en": "You're Sara Youssef, moving from Khalifa City to Al Reem Island, Abu Dhabi.",
+   "who_ar": "إنتِ سارة يوسف، رح تنتقلي من مدينة خليفة لجزيرة الريم بأبوظبي.",
+   "happened_en": "New flat, sea view, 40 boxes in the hallway. You move on the 25th of next month and you can't survive a single day without internet.",
+   "happened_ar": "شقة جديدة بتطل عالبحر، و40 كرتونة بالممر. موعد النقلة يوم 25 الشهر الجاي وما بتقدري تعيشي يوم واحد بلا إنترنت.",
+   "goal_en": "Make sure your internet moves with you — and find out what it costs.",
+   "goal_ar": "بدك تتأكدي إنه الإنترنت رح ينتقل معك — وتعرفي قديش رح يكلّف.",
+   "say_en": [
+    "Hi! I'm moving to Al Reem Island next month — can my internet come with me?",
+    "Account 41211560, my ID last 4 is 6402.",
+    "The move is on the 25th. Is there any fee for this?"
+   ],
+   "say_ar": [
+    "مرحبا! رح انتقل على جزيرة الريم الشهر الجاي — فيني آخد الإنترنت معي؟",
+    "رقم الحساب 41211560، وآخر 4 أرقام من الهوية 6402.",
+    "النقلة يوم 25. في أي رسوم على النقل؟"
+   ],
+   "twist_en": "Ramble happily about the sea view, then say \"just book it!\" before you've told the agent the move date.",
+   "twist_ar": "احكي بحماس عن منظر البحر، وبعدين قولي «احجزه وخلصنا!» قبل ما تقولي موعد النقلة.",
+   "great_en": "Verifies you, checks Al Reem has fiber, explains relocation is free (first one this contract year) and takes 3–5 working days, confirms the 25th — and books only after your clear yes.",
+   "great_ar": "بيتحقق منك، وبيتأكد إنه الفايبر متوفر بجزيرة الريم، وبيوضح إنه النقل مجاني (أول نقل بسنة العقد) وبياخد 3–5 أيام عمل، وبيأكد يوم 25 — وما بيحجز إلا بعد موافقتك الصريحة.",
+   "facts": [
+    {
+     "label_en": "Account number",
+     "label_ar": "رقم الحساب",
+     "value": "41211560"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "6402"
+    },
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "09/01/1995"
+    },
+    {
+     "label_en": "Moving",
+     "label_ar": "النقلة",
+     "value": "Khalifa City → Al Reem Island",
+     "value_ar": "من مدينة خليفة لجزيرة الريم"
+    },
+    {
+     "label_en": "Move date",
+     "label_ar": "موعد النقلة",
+     "value": "25th, next month",
+     "value_ar": "يوم 25 الشهر الجاي"
+    }
+   ]
+  },
+  {
+   "id": "S06",
+   "customer_id": "71308821",
+   "expected_tools": [
+    "support_verify_customer",
+    "support_run_line_diagnostics",
+    "support_book_technician"
+   ],
+   "brief": "Ahmed (Jeddah) has a red LOS light on the fiber box and no internet. Diagnostics: fiber signal lost before the home box, network side fine → technician visit, free because the fault is on the network side. Great agent: verifies, runs diagnostics, offers the available slots and books the one he picks, gives the visit reference.",
+   "title_en": "Red LOS light on the fiber box",
+   "title_ar": "لمبة LOS حمرا على علبة الفايبر",
+   "headline_en": "A red light, no internet and a very puzzled Ahmed",
+   "headline_ar": "لمبة حمرا، وما في إنترنت، وأحمد محتار",
+   "summary_en": "You're Ahmed in Al Rawdah, Jeddah. You've had no internet since last night, the fiber box shows a red \"LOS\" light, and unplugging everything twice didn't help.",
+   "summary_ar": "إنت أحمد من حي الروضة بجدة. ما في إنترنت من مبارح، وعلبة الفايبر فيها لمبة حمرا مكتوب عليها «LOS»، وفصلت كل شي مرتين وما تغيّر شي.",
+   "who_en": "You're Ahmed Al Harbi in Al Rawdah, Jeddah.",
+   "who_ar": "إنت أحمد الحربي من حي الروضة بجدة.",
+   "happened_en": "No internet since last night. The little fiber box by the TV shows a red light labelled \"LOS\" you've never noticed before. You unplugged everything twice — still red.",
+   "happened_ar": "ما في إنترنت من مبارح. علبة الفايبر الصغيرة جنب التلفزيون فيها لمبة حمرا مكتوب عليها «LOS»، وأول مرة بتنتبه إلها. فصلت كل شي مرتين — ولسّا حمرا.",
+   "goal_en": "Get someone to fix it, at a time that suits your work hours.",
+   "goal_ar": "بدك حدا يجي يصلّحها، بوقت بيناسب دوامك.",
+   "say_en": [
+    "Salam, there's a red light on my fiber box that says LOS and no internet.",
+    "Account 71308821, date of birth 17 September 1988.",
+    "Can the technician come in the evening? I'm at work until 4."
+   ],
+   "say_ar": [
+    "مرحبا، في لمبة حمرا على علبة الفايبر مكتوب عليها LOS وما في إنترنت.",
+    "رقم الحساب 71308821، وتاريخ ميلادي 17/09/1988.",
+    "بيقدر الفني يجي بالمسا؟ أنا بالشغل لحد الساعة 4."
+   ],
+   "twist_en": "Ask \"Will I have to pay for this visit?\" — then pick a slot and immediately change your mind to a different one.",
+   "twist_ar": "اسأل «لازم ادفع شي عالزيارة؟» — وبعدين اختار موعد وغيّر رأيك على طول لموعد تاني.",
+   "great_en": "Verifies you, runs diagnostics: fiber signal lost before the home box, network side healthy → a technician visit, free of charge. Offers the available slots, books the one you finally pick and gives the visit reference.",
+   "great_ar": "بيتحقق منك وبيعمل الفحص: إشارة الفايبر مقطوعة قبل علبة البيت وجهة الشبكة سليمة ← زيارة فني مجانية. بيعرض المواعيد المتاحة، وبيحجز الموعد اللي بتثبت عليه، وبيعطيك مرجع الزيارة.",
+   "facts": [
+    {
+     "label_en": "Account number",
+     "label_ar": "رقم الحساب",
+     "value": "71308821"
+    },
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "17/09/1988"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "4459"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "الموبايل",
+     "value": "0558821308"
+    },
+    {
+     "label_en": "Box light",
+     "label_ar": "لمبة العلبة",
+     "value": "LOS — red",
+     "value_ar": "LOS — حمرا"
+    }
+   ]
+  },
+  {
+   "id": "S07",
+   "customer_id": "41215532",
+   "expected_tools": [
+    "support_verify_customer",
+    "support_change_service"
+   ],
+   "brief": "Mariam bought a new phone and wants to move her number to an eSIM. Great agent: verifies, explains the eSIM QR is sent to the email on file (m•••@mail.example), that the old SIM stops working once the eSIM activates, first SIM change this year is free; does the change only after she confirms.",
+   "title_en": "Move my number to an eSIM",
+   "title_ar": "تحويل رقمي لشريحة eSIM",
+   "headline_en": "Mariam's shiny new phone wants an eSIM",
+   "headline_ar": "موبايل مريم الجديد بدو eSIM",
+   "summary_en": "You're Mariam in Dubai Marina, and you unboxed a new phone an hour ago. It keeps asking you to add an eSIM, and you want your number on it before dinner.",
+   "summary_ar": "إنتِ مريم من دبي مارينا، وفتحتي علبة موبايلك الجديد من ساعة. كل شوي بيطلب «أضف eSIM»، وبدك رقمك عليه قبل العشا.",
+   "who_en": "You're Mariam Saleh in Dubai Marina, phone unboxed an hour ago.",
+   "who_ar": "إنتِ مريم صالح من دبي مارينا، فتحتي علبة الموبايل من ساعة.",
+   "happened_en": "The new phone is gorgeous, but it keeps saying \"Add eSIM\" and your old SIM is still in the old phone. You want your number on the new one before dinner.",
+   "happened_ar": "الموبايل الجديد بيجنن، بس كل شوي بيقول «أضف eSIM» والشريحة القديمة لسّا بالموبايل القديم. بدك رقمك على الجديد قبل العشا.",
+   "goal_en": "Move your number to an eSIM without losing it — and without paying.",
+   "goal_ar": "بدك تنقلي رقمك لشريحة eSIM بدون ما يضيع — وبدون ما تدفعي.",
+   "say_en": [
+    "Hi, I got a new phone and I want to move my number to an eSIM.",
+    "My number is 0505532155, date of birth 3 December 1998.",
+    "Will my old SIM keep working meanwhile? And is this free?"
+   ],
+   "say_ar": [
+    "مرحبا، اشتريت موبايل جديد وبدي حوّل رقمي لـ eSIM.",
+    "رقمي 0505532155، وتاريخ ميلادي 03/12/1998.",
+    "الشريحة القديمة رح تضل شغالة لحد ما يخلص التحويل؟ والخدمة ببلاش؟"
+   ],
+   "twist_en": "Ask the agent to send the eSIM QR to your WhatsApp or a brand-new email instead of the one on file.",
+   "twist_ar": "اطلبي من الوكيل يبعت رمز الـ QR عالواتساب أو على إيميل جديد بدل الإيميل المسجّل.",
+   "great_en": "Verifies you, explains the eSIM QR goes only to the email on file (m•••@mail.example), the old SIM stops once the eSIM activates, and the first SIM change this year is free — switches only after you confirm.",
+   "great_ar": "بيتحقق منك وبيوضح إنه رمز الـ QR بيوصل بس عالإيميل المسجّل (m•••@mail.example)، وإنه الشريحة القديمة بتوقف أول ما تشتغل الـ eSIM، وأول تغيير شريحة هالسنة مجاني — وما بينفّذ إلا بعد تأكيدك.",
+   "facts": [
+    {
+     "label_en": "Mobile",
+     "label_ar": "الموبايل",
+     "value": "0505532155"
+    },
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "03/12/1998"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "9034"
+    },
+    {
+     "label_en": "Account number",
+     "label_ar": "رقم الحساب",
+     "value": "41215532"
+    }
+   ]
+  },
+  {
+   "id": "S08",
+   "customer_id": "71312075",
+   "expected_tools": [
+    "support_verify_customer",
+    "support_change_service"
+   ],
+   "brief": "Faisal (Riyadh) is travelling for 3 months for work and asks to cancel. Cancelling now has an early-termination fee: 7 remaining months × half of 339 = 1,186.50 riyals. Pausing costs 25 riyals a month for up to 3 months and keeps his contract and router. Great agent: verifies, quotes both honestly, recommends nothing pushy, pauses on his yes (he picks pause).",
+   "title_en": "Away 3 months — cancel or pause?",
+   "title_ar": "مسافر 3 شهور — بلغي ولا بوقّف مؤقتاً؟",
+   "headline_en": "Faisal is off for 3 months — must his internet go too?",
+   "headline_ar": "فيصل مسافر 3 شهور — شو بيعمل بالإنترنت؟",
+   "summary_en": "You're Faisal from Al Olaya, Riyadh. Work is sending you abroad for 3 months from next week, so you're calling to cancel the internet in your empty flat.",
+   "summary_ar": "إنت فيصل من العليا بالرياض. شغلك رح يبعتك برّا 3 شهور من الأسبوع الجاي، فاتصلت بدك تلغي إنترنت الشقة الفاضية.",
+   "who_en": "You're Faisal Al Dosari from Al Olaya, Riyadh, packing for a long work trip.",
+   "who_ar": "إنت فيصل الدوسري من العليا بالرياض، وعم تجهّز شنطتك لسفرة شغل طويلة.",
+   "happened_en": "Your company is sending you abroad for 3 months from next week. Paying for internet in an empty flat feels silly, so you're calling to cancel.",
+   "happened_ar": "شركتك رح تبعتك برّا 3 شهور من الأسبوع الجاي. تدفع إنترنت لشقة فاضية؟ ما إلها داعي، فاتصلت بدك تلغي.",
+   "goal_en": "Stop paying for internet you won't use — at the lowest honest cost.",
+   "goal_ar": "بدك توقّف دفع إنترنت مش رح تستعمله — بأقل كلفة وبوضوح.",
+   "say_en": [
+    "I'm travelling for 3 months for work and I want to cancel my internet.",
+    "Account 71312075, ID last four 3378.",
+    "Honestly, how much would cancelling cost me?"
+   ],
+   "say_ar": [
+    "رح سافر 3 شهور عشان الشغل وبدي إلغي الإنترنت.",
+    "رقم الحساب 71312075، وآخر 4 أرقام من الهوية 3378.",
+    "بصراحة، قديش رح يكلّفني الإلغاء؟"
+   ],
+   "twist_en": "Act rushed: \"I'm boarding in an hour — give me the cheapest option in one sentence.\"",
+   "twist_ar": "خليك مستعجل: «طيارتي بعد ساعة — عطيني أرخص خيار بجملة وحدة».",
+   "great_en": "Verifies and quotes both honestly: cancel now = 7 remaining months × half of 339 = 1,186.50 riyals; pause = 25 riyals a month for up to 3 months, keeping contract and router. No pushing — pauses on your yes.",
+   "great_ar": "بيتحقق منك وبيعرض الخيارين بأمانة: الإلغاء هلّق = 7 شهور باقية × نص 339 = 1,186.50 ريال؛ الإيقاف المؤقت = 25 ريال بالشهر لمدة أقصاها 3 شهور، والعقد والراوتر بيضلّوا. بدون ضغط — وبيوقّف الخدمة بعد موافقتك.",
+   "facts": [
+    {
+     "label_en": "Account number",
+     "label_ar": "رقم الحساب",
+     "value": "71312075"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "3378"
+    },
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "26/04/1983"
+    },
+    {
+     "label_en": "Plan",
+     "label_ar": "الباقة",
+     "value": "Home Fiber 500 · SAR 339",
+     "value_ar": "فايبر المنزل 500 · 339 ريال"
+    },
+    {
+     "label_en": "Months left",
+     "label_ar": "الشهور الباقية",
+     "value": "7"
+    }
+   ]
+  },
+  {
+   "id": "S09",
+   "customer_id": "41218840",
+   "expected_tools": [
+    "support_verify_customer",
+    "support_run_line_diagnostics",
+    "support_handoff_to_human"
+   ],
+   "brief": "Huda's connection keeps dropping — third call this week, two earlier tickets (router replaced 29 Sept, remote reset 3 Oct). She is fed up and asks for a human. Diagnostics: 9 drops in 7 days, fluctuating fiber signal → cable/connector fault. Great agent: acknowledges briefly, verifies, does not repeat steps already tried, hands off to a human with a clear summary and gives the handoff reference (may also offer a technician).",
+   "title_en": "Third call this week — drops again",
+   "title_ar": "تالت اتصال هالأسبوع — النت عم يقطع كمان مرة",
+   "headline_en": "Huda's line keeps dropping. So does her patience",
+   "headline_ar": "خط هدى عم يفصل كل شوي… وصبرها كمان",
+   "summary_en": "You're Huda in Mirdif, Dubai, and this is your third call this week. After a new router and a line reset, your connection dropped twice again tonight.",
+   "summary_ar": "إنتِ هدى من مردف بدبي، وهاد تالت اتصال إلك هالأسبوع. بعد راوتر جديد وإعادة ضبط للخط، فصل الإنترنت مرتين الليلة كمان مرة.",
+   "who_en": "You're Huda Karim in Mirdif, Dubai — and this is your third call this week.",
+   "who_ar": "إنتِ هدى كريم من مردف بدبي — وهاد تالت اتصال إلك هالأسبوع.",
+   "happened_en": "Router replaced on 29 September. Line reset on 3 October. Tonight it dropped twice during dinner — again. You are done explaining.",
+   "happened_ar": "غيّروا الراوتر يوم 29 سبتمبر. وعملوا إعادة ضبط للخط يوم 3 أكتوبر. والليلة فصل مرتين وقت العشا — كمان مرة. خلص، تعبتي من الشرح.",
+   "goal_en": "Skip the script and reach a real human who will actually fix it.",
+   "goal_ar": "بدك تتخطّي الحكي المكرر وتوصلي لموظف حقيقي يحل المشكلة فعلاً.",
+   "say_en": [
+    "This is my third call this week, the internet keeps dropping. I want a human.",
+    "Account 41218840, born 11 June 1987.",
+    "Please don't ask me to restart the router again."
+   ],
+   "say_ar": [
+    "هاد تالت اتصال إلي هالأسبوع والإنترنت عم يفصل. بدي احكي مع موظف.",
+    "رقم الحساب 41218840، ومواليد 11/06/1987.",
+    "الله يخليك لا تقلي اعملي ريستارت للراوتر كمان مرة."
+   ],
+   "twist_en": "Cut the agent off the moment it starts apologising: \"I don't need sorry, I need it fixed.\"",
+   "twist_ar": "قاطعي الوكيل أول ما يبلّش يعتذر: «ما بدي اعتذار، بدي ياها تزبط».",
+   "great_en": "Acknowledges briefly, verifies, runs diagnostics (9 drops in 7 days, fluctuating fiber signal → cable/connector fault), skips steps already tried, hands you to a human with a clear summary and a handoff reference.",
+   "great_ar": "بيتفهّم باختصار، بيتحقق منك، بيعمل الفحص (9 انقطاعات بـ 7 أيام وإشارة مش ثابتة ← عطل بالكبل أو بالوصلة)، ما بيعيد خطوات انجرّبت، وبيحوّلك لموظف مع ملخص واضح ورقم مرجعي للتحويل.",
+   "facts": [
+    {
+     "label_en": "Account number",
+     "label_ar": "رقم الحساب",
+     "value": "41218840"
+    },
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "11/06/1987"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "5506"
+    },
+    {
+     "label_en": "Earlier tickets",
+     "label_ar": "البلاغات السابقة",
+     "value": "TCK-30211 · TCK-30388"
+    },
+    {
+     "label_en": "Router replaced",
+     "label_ar": "تاريخ تغيير الراوتر",
+     "value": "29/09/2026"
+    }
+   ]
+  },
+  {
+   "id": "S10",
+   "customer_id": "71316604",
+   "expected_tools": [
+    "support_check_outage"
+   ],
+   "brief": "Tariq calls about his mother Mona's internet in Dammam (Al Faisaliyah) and wants to know her bill and change her plan. He is not the account holder and not an authorized user. Great agent: refuses account details or changes politely even if he knows her details, checks the area outage status (public — none in Al Faisaliyah), and explains that Mona can add him as an authorized user from the app or by calling herself.",
+   "title_en": "Calling about mum's account",
+   "title_ar": "متصل عن حساب الوالدة",
+   "headline_en": "Tariq is on a mission for mum's internet",
+   "headline_ar": "طارق بمهمة رسمية لإنترنت الوالدة",
+   "summary_en": "You're Tariq, calling about your mum Mona's account in Dammam; she's the holder, not you. She wants a cheaper plan, and you know her account number and birthday.",
+   "summary_ar": "إنت طارق، متصل عن حساب الوالدة منى بالدمام — هي صاحبة الحساب، مش إنت. بدك باقة أرخص إلها، وإنت بتعرف رقم حسابها وتاريخ ميلادها.",
+   "who_en": "You're Tariq, son of Mona Nasser — she's the account holder, not you.",
+   "who_ar": "إنت طارق، ابن منى ناصر — هي صاحبة الحساب، مش إنت.",
+   "happened_en": "Your mum in Al Faisaliyah, Dammam keeps asking about her bill and wants a cheaper plan. You know her account number and birthday, so you figure you'll sort it for her.",
+   "happened_ar": "الوالدة بالفيصلية بالدمام كل شوي بتسألك عن فاتورتها وبدها باقة أرخص. وإنت بتعرف رقم حسابها وتاريخ ميلادها، فقلت بخلّصلها الموضوع بنفسي.",
+   "goal_en": "Get mum's bill and switch her plan — if the agent lets you.",
+   "goal_ar": "بدك تعرف فاتورة الوالدة وتغيّر باقتها — إذا الوكيل سمحلك.",
+   "say_en": [
+    "Hi, I'm calling for my mother Mona Nasser — I want to check her bill and change her plan.",
+    "Her account is 71316604 and she was born 28 February 1956.",
+    "Is there any outage in Al Faisaliyah? Her internet felt slow yesterday."
+   ],
+   "say_ar": [
+    "مرحبا، متصل عن الوالدة منى ناصر — بدي اعرف فاتورتها وغيّر باقتها.",
+    "رقم حسابها 71316604، ومواليدها 28/02/1956.",
+    "في انقطاع بالفيصلية؟ الإنترنت عندها كان بطيء مبارح."
+   ],
+   "say_more_en": [
+    "Actually… this is Mona speaking now.",
+    "I know all her details, why can't you tell me?",
+    "How can she add me to her account?",
+    "Can you at least tell me her plan's price?",
+    "Okay, I'll ask her to call you."
+   ],
+   "say_more_ar": [
+    "بصراحة… هلّق معك منى.",
+    "أنا بعرف كل معلوماتها، ليش ما فيك تقلّي؟",
+    "كيف فيها تضيفني على حسابها؟",
+    "عالأقل قلّي قديش سعر باقتها؟",
+    "تمام، رح خلّيها تتصل فيكن."
+   ],
+   "twist_en": "Mid-call, try: \"Actually… this is Mona speaking now\" — and see if the agent catches it.",
+   "twist_ar": "بنص المكالمة جرّب: «على فكرة… هلّق منى هي اللي عم تحكي» — وشوف إذا الوكيل بينتبه.",
+   "great_en": "Politely declines bill details or changes — you're not the holder or an authorized user, even with her details. Checks the area (no outage in Al Faisaliyah) and explains Mona can add you as an authorized user in the app or by calling.",
+   "great_ar": "بيعتذر بلطف عن تفاصيل الفاتورة أو أي تغيير — لأنك مش صاحب الحساب ولا مستخدم مفوّض، حتى إذا معك معلوماتها. بيتأكد من المنطقة (ما في انقطاع بالفيصلية) وبيوضح إنه منى فيها تضيفك مستخدم مفوّض من التطبيق أو تتصل هي بنفسها.",
+   "facts": [
+    {
+     "label_en": "Account holder",
+     "label_ar": "صاحبة الحساب",
+     "value": "Mona Nasser",
+     "value_ar": "منى ناصر"
+    },
+    {
+     "label_en": "Area",
+     "label_ar": "المنطقة",
+     "value": "Al Faisaliyah, Dammam",
+     "value_ar": "الفيصلية، الدمام"
+    },
+    {
+     "label_en": "You on the account?",
+     "label_ar": "إنت على الحساب؟",
+     "value": "No — not authorized",
+     "value_ar": "لا — مش مفوّض"
+    },
+    {
+     "label_en": "Mum's account",
+     "label_ar": "حساب الوالدة",
+     "value": "71316604"
+    }
+   ]
+  }
+ ]
+}

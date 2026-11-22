@@ -1,0 +1,10 @@
+{# ai_agent/admin/templates/_components/slider.html #}
+{% macro slider(name, label, value, max=1.0, step=0.01, hint=None) -%}
+<label class="slider-wrap">
+  <span class="eyebrow">{{ label }}</span>
+  <input type="range" name="{{ name }}" min="0" max="{{ max }}" step="{{ step }}" value="{{ value }}"
+         oninput="this.nextElementSibling.textContent = this.value">
+  <span class="slider-value num">{{ value }}</span>
+  {% if hint %}<span class="hint">{{ hint }}</span>{% endif %}
+</label>
+{%- endmacro %}

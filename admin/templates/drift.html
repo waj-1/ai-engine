@@ -1,0 +1,125 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import alert, hint %}
+{% block title %}Drift Check · {{ brand().title }}{% endblock %}
+{% block page_title %}Diagnostics{% endblock %}
+{% block page_subtitle %}Drift Check — what each agent actually serves, compared with the code.{% endblock %}
+{% macro sev_chip(sev) -%}
+{%- if sev == 'ok' -%}{{ chip('ok', variant='ok', dot=True) }}
+{%- elif sev == 'critical' -%}{{ chip('critical', variant='err', dot=True) }}
+{%- elif sev == 'warning' -%}{{ chip('warning', variant='warn', dot=True) }}
+{%- else -%}{# 'info' — visibility, not drift; must never read as something to fix. #}{{ chip('info', variant='ghost', dot=True) }}
+{%- endif -%}
+{%- endmacro %}
+{% macro finding_row(f) %}
+<li class="finding">
+  <div class="row">
+    {{ sev_chip(f.severity) }}
+    <span class="technical">{{ f.kind }}</span>
+    <strong class="finding-target">{{ f.target }}</strong>
+  </div>
+  <p class="caption mt-xs mb-0">{{ f.summary }}</p>
+  {# `why` mirrors the CLI printer's own gate (critical/warning only); the
+     diff, if present, shows regardless of severity like the CLI's diff loop. #}
+  {% if f.severity in ('critical', 'warning') and f.detail %}
+  <p class="caption mt-xs mb-0"><strong>Why it matters:</strong> {{ f.detail }}</p>
+  {% endif %}
+  {% if f.diff %}
+  <details class="mt-xs" {% if f.severity in ('critical', 'warning') %}open{% endif %}>
+    <summary class="caption">Diff ({{ f.diff|length }} lines)</summary>
+    <div class="diff-block mt-xs">{% for line in f.diff %}<div class="diff-line {% if line.startswith('+') %}diff-line-add{% elif line.startswith('-') %}diff-line-del{% elif line.startswith('@@') %}diff-line-hunk{% else %}diff-line-ctx{% endif %}">{{ line }}</div>{% endfor %}</div>
+  </details>
+  {% endif %}
+</li>
+{% endmacro %}
+{% block content %}
+{% set diag_tab = 'drift' %}{% include "_diagnostics_tabs.html" %}
+
+{% if collect_error %}
+{% call alert('error') %}Drift check could not run: <code>{{ collect_error }}</code>{% endcall %}
+{% endif %}
+
+<div class="page-head">
+  <div class="page-head-text">
+    <div class="row">
+      {% if drift_count %}{{ chip(drift_count ~ ' drifted', variant='err', dot=True) }}{% else %}{{ chip('0 drifted', variant='ok', dot=True) }}{% endif %}
+      {% if severity_counts.info %}{{ chip(severity_counts.info ~ ' info', variant='ghost') }}{% endif %}
+      {{ chip(ok_count ~ ' ok', variant='neutral') }}
+      {# The AI project is ONE database holding every environment's rows and
+         every fetch is scoped to one `environment` value: name it. #}
+      {% if audited_environment %}<span class="caption">· {{ audited_environment }} — says nothing about other environments</span>{% endif %}
+    </div>
+  </div>
+  <div class="page-head-actions"><a class="btn" href="/admin/drift">Re-run</a></div>
+</div>
+
+{% call hint() %}
+  Merging a prompt or config fix does not make it live on a stack that already has the row (every seeder is
+  insert-if-missing). This screen is read-only: publish a fix with a new prompt version or a profile edit.
+  Prompts that differ from the code but pass validation are <em>info</em>, not drift.
+{% endcall %}
+
+<section class="section mt-m">
+  <h2>Findings by agent</h2>
+  {% if groups %}
+  <div class="drift-groups">
+    {% for g in groups %}
+    {% set c = g.counts %}
+    {% set urgent = g['items']|selectattr('severity', 'in', ['critical', 'warning'])|list %}
+    {% set quiet = g['items']|rejectattr('severity', 'in', ['critical', 'warning'])|list %}
+    <details class="drift-group" {% if urgent %}open{% endif %}>
+      <summary>
+        <strong>{{ g.agent }}</strong>
+        <span class="row">
+          {% if c.critical %}{{ chip(c.critical ~ ' critical', variant='err') }}{% endif %}
+          {% if c.warning %}{{ chip(c.warning ~ ' warning', variant='warn') }}{% endif %}
+          {% if c.info %}{{ chip(c.info ~ ' info', variant='ghost') }}{% endif %}
+          {% if c.ok %}{{ chip(c.ok ~ ' ok', variant='neutral') }}{% endif %}
+        </span>
+      </summary>
+      <ul class="finding-list">
+        {% for f in urgent %}{{ finding_row(f) }}{% endfor %}
+      </ul>
+      {% if quiet %}
+      {% if urgent %}
+      <details class="drift-quiet">
+        <summary class="caption">{{ quiet|length }} more ({% if c.info %}{{ c.info }} info{% endif %}{% if c.info and c.ok %}, {% endif %}{% if c.ok %}{{ c.ok }} ok{% endif %})</summary>
+        <ul class="finding-list">{% for f in quiet %}{{ finding_row(f) }}{% endfor %}</ul>
+      </details>
+      {% else %}
+      <ul class="finding-list">{% for f in quiet %}{{ finding_row(f) }}{% endfor %}</ul>
+      {% endif %}
+      {% endif %}
+    </details>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>No checks ran — see the error above, or <code>PROMPT_CHECKS</code>/<code>CONFIG_CHECKS</code> in
+      <code>scripts/check_profile_drift.py</code> is empty.</p>
+  </div>
+  {% endif %}
+</section>
+
+<section class="section">
+  <details>
+    <summary><strong>Runtime flags</strong> <span class="caption">— container settings read straight from this process</span></summary>
+    <p class="caption mt-s">Read with a bare <code>os.getenv</code>, so they are invisible to Environment variables and the
+      <code>env_vars</code> MCP tool. Also on <a href="/admin/diagnostics/runtime">Runtime environment</a>.</p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Flag</th><th>Value</th><th>Source</th></tr></thead>
+        <tbody>
+          {% for f in runtime_flags %}
+          <tr>
+            <td><code>{{ f.name }}</code></td>
+            <td>{% if f.value is none %}{{ chip('unset', variant='ghost') }}{% else %}<code>{{ f.value }}</code>{% endif %}</td>
+            <td class="caption">{{ f.source }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+</section>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% block title %}Knowledge bases · {{ brand().title }}{% endblock %}
+{% block page_title %}Knowledge bases{% endblock %}
+{% block page_subtitle %}Documents and sources your agents can look things up in.{% endblock %}
+{% block content %}
+
+<details class="card collapse-card mb-m" {% if not rows %}open{% endif %}>
+  <summary>New knowledge base</summary>
+  <form method="post" action="/admin/kb" class="form-stack">
+    <div class="form-grid">
+      <label class="field">
+        <span class="field-label">Name</span>
+        <input name="name" required placeholder="product_docs">
+      </label>
+      <label class="field">
+        <span class="field-label">Source type</span>
+        <select name="kind" required>
+          {% for k in (kb_kinds or ['pgvector', 'gitbook', 'supabase_table', 'ms_drive', 'http']) %}
+          <option value="{{ k }}">{{ kb_kind_label(k) }}</option>
+          {% endfor %}
+        </select>
+        <span class="field-help">Pick &ldquo;Uploaded files&rdquo; to upload documents yourself.</span>
+      </label>
+      <label class="field">
+        <span class="field-label">Agent</span>
+        <select name="agent_kind">
+          <option value="">Not attached yet</option>
+          {% for k in filter_kinds %}
+          <option value="{{ k }}">{{ agent_label(k) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <details class="advanced">
+      <summary>Advanced</summary>
+      <div class="form-stack">
+        <label class="field">
+          <span class="field-label">Sync schedule <span class="opt">(synced sources only)</span></span>
+          <input name="refresh_cadence" placeholder="daily">
+        </label>
+        <label class="field">
+          <span class="field-label">Configuration (JSON)</span>
+          <textarea name="config" class="code-block" style="min-height:90px;">{}</textarea>
+          <span class="field-help">Leave as <code>{}</code> for uploaded files &mdash; they use the shared document store.</span>
+        </label>
+      </div>
+    </details>
+    <div class="form-actions"><button class="primary" type="submit">Create knowledge base</button></div>
+  </form>
+</details>
+
+<section class="section">
+  <form method="get" action="/admin/kb" class="filter-row">
+    <label class="row" style="gap:var(--space-xs);">
+      <span class="caption">Agent</span>
+      <select name="kind" onchange="this.form.submit()">
+        <option value="">All agents</option>
+        {% for k in filter_kinds %}
+        <option value="{{ k }}" {% if kind_filter == k %}selected{% endif %}>{{ agent_label(k) }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <noscript><button type="submit">Filter</button></noscript>
+    {% if kind_filter %}<a class="btn ghost small" href="/admin/kb">Clear</a>{% endif %}
+  </form>
+
+  {% if rows %}
+  <table data-tabulator>
+    <thead><tr><th>Name</th><th>Agent</th><th>Source type</th><th>Documents</th><th>Last updated</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><a href="/admin/kb/{{ r.source_id }}">{{ r.name }}</a></td>
+        <td>{% if r.agent_kind %}{{ agent_label(r.agent_kind) }}{% else %}{{ chip('Not attached to any agent', variant='warn') }}{% endif %}</td>
+        <td>{{ kb_kind_label(r.kind) }}</td>
+        <td class="num">{% if r.kind == 'pgvector' and r.doc_count is not none %}{{ r.doc_count }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="caption num">
+          {% if r.kind in ['gitbook', 'ms_drive', 'http'] %}{{ (r.last_refreshed_at or '—')[:10] }}
+          {% else %}{{ (r.last_upload_at or r.updated_at or '—')[:10] }}{% endif %}
+        </td>
+        <td>{{ chip(r.status[1], variant=r.status[0], dot=True) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">No knowledge bases{% if kind_filter %} for this agent{% endif %} yet &mdash; create one above.</div>
+  {% endif %}
+</section>
+
+{% endblock %}

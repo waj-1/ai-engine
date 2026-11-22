@@ -1,0 +1,184 @@
+{% extends "_base.html" %}
+{# /admin/templates — the Templates tab of Agents, and the "New agent" flow.
+   "New agent" (?new=1) opens a two-step dialog: 1) pick a template,
+   2) name it + optionally attach it under a parent agent (a picker — this
+   used to be a pasted profile_id) + Advanced: slug. It posts to the
+   unchanged POST /admin/agents/from-template (template_id, display_name,
+   slug, as_subagent_of). Cards use align-items:start so opening one never
+   stretches its row. #}
+{% from "_components/chip.html" import chip %}
+{% from "_components/tabs.html" import tabs %}
+{% from "_components/callout.html" import alert, hint, hint_text %}
+{% block title %}Templates · {{ brand().title }}{% endblock %}
+{% block page_title %}Templates{% endblock %}
+{% block page_subtitle %}Ready-made starting points. Creating from one makes a new draft agent; the template itself never changes.{% endblock %}
+{% block content %}
+{{ tabs([('agents', 'Agents', '/admin/agents?env=' ~ current_env),
+         ('models', 'Models', '/admin/agents?tab=models&env=' ~ current_env),
+         ('templates', 'Templates', '/admin/templates?env=' ~ current_env)], 'templates') }}
+
+{% if error %}
+<div style="margin-bottom:var(--space-m);">
+  {% call alert('error') %}<strong>Could not create the agent:</strong> {{ error }}{% endcall %}
+</div>
+{% endif %}
+
+{% if not singles and not composites and single_env_deployment() %}
+<div class="mb-m">{% call alert('info') %}This build has no templates for the agents it runs.
+  Templates are for the full WAJ engine; here, start from an existing agent with
+  <strong>Make a draft copy</strong> on its page.{% endcall %}</div>
+{% endif %}
+<div class="agents-toolbar-row">
+  <span class="caption">{{ (singles|length) + (composites|length) }} templates</span>
+  {% if singles or composites %}<button type="button" class="primary" data-new-agent>New agent</button>{% endif %}
+</div>
+
+{% macro template_card(t) %}
+<div class="card template-card">
+  <div class="row">
+    <h3 class="h3">{{ t.display_name or t.slug or 'Untitled template' }}</h3>
+    {% if t.is_composite %}{{ chip('Team of agents', variant='info') }}{% endif %}
+  </div>
+  <p class="caption m-0">{{ t.description or 'No description.' }}</p>
+  {% set parts = [] %}
+  {% if t.sub_agent_count %}{% set _ = parts.append(t.sub_agent_count ~ ' sub-agent' ~ ('' if t.sub_agent_count == 1 else 's')) %}{% endif %}
+  {% if t.knowledge_count %}{% set _ = parts.append(t.knowledge_count ~ ' knowledge source' ~ ('' if t.knowledge_count == 1 else 's')) %}{% endif %}
+  <p class="caption m-0">{% if parts %}Includes {{ parts|join(' · ') }}{% endif %} <span class="technical">{{ t.agent_kind }}</span></p>
+  <div class="row mt-xs">
+    <button type="button" class="btn small primary" data-use-template="{{ t.template_id }}">Use template</button>
+  </div>
+</div>
+{% endmacro %}
+
+<section class="section">
+  <h2>Single agents</h2>
+  {% if singles %}
+  <div class="template-grid">{% for t in singles %}{{ template_card(t) }}{% endfor %}</div>
+  {% else %}
+  <div class="empty-state">No single-agent templates yet.</div>
+  {% endif %}
+</section>
+
+<section class="section">
+  <h2>Teams</h2>
+  <span class="caption">A main agent that comes with its sub-agents already connected.</span>
+  {% if composites %}
+  <div class="template-grid mt-m">{% for t in composites %}{{ template_card(t) }}{% endfor %}</div>
+  {% else %}
+  <div class="empty-state">No team templates yet.</div>
+  {% endif %}
+</section>
+
+<dialog id="dlg-new-agent" class="dialog dialog-wide" aria-labelledby="dlg-new-agent-title">
+  <form method="post" action="/admin/agents/from-template" class="stack-m" data-new-agent-form>
+    <div class="row between">
+      <h2 id="dlg-new-agent-title">New agent</h2>
+      <span class="caption" data-step-label>Step 1 of 2 — pick a template</span>
+    </div>
+
+    <div data-step="1">
+      {% set all_templates = singles + composites %}
+      {% if all_templates %}
+      <div class="template-pick-grid" role="radiogroup" aria-label="Template">
+        {% for t in all_templates %}
+        <label class="template-pick">
+          <input type="radio" name="template_id" value="{{ t.template_id }}" required data-template-name="{{ t.display_name or t.slug }}">
+          <span class="template-pick-body">
+            <strong>{{ t.display_name or t.slug }}</strong>
+            {% if t.is_composite %}<span class="chip chip-info">Team</span>{% endif %}
+            <span class="caption">{{ t.description or '' }}</span>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="caption">No templates are available.</p>
+      {% endif %}
+    </div>
+
+    <div data-step="2" hidden>
+      <p class="caption">Template: <strong data-chosen-template></strong> · <button type="button" class="btn ghost small" data-step-back>Change</button></p>
+      <div class="stack-m mt-s">
+        <label class="field">Name
+          <input name="display_name" required placeholder="e.g. Reports assistant">
+        </label>
+        {% if model_options %}
+        <label class="field"><span class="field-label">Model</span>
+          <select name="model_id">
+            <option value="">— The template's default —</option>
+            {% for m in model_options %}<option value="{{ m.model_id }}">{{ m.name }} — {{ m.model_string }}</option>{% endfor %}
+          </select>
+        </label>
+        {{ hint_text('The language model that writes the answers. Add your own under Agents › Models; you can change it later in the agent\'s Settings.') }}
+        {% endif %}
+        <label class="field"><span class="field-label">Make it a sub-agent of <span class="muted">(optional)</span></span>
+          <select name="as_subagent_of">
+            <option value="">— No, a standalone agent —</option>
+            {% for o in parent_options %}<option value="{{ o.profile_id }}">{{ o.name }}</option>{% endfor %}
+          </select>
+        </label>
+        {{ hint_text('A sub-agent only runs when its parent hands it work. Parents are Staging agents.') }}
+        <details class="advanced">
+          <summary><span class="h3">Advanced</span></summary>
+          <label class="field mt-s"><span class="field-label">Technical name (slug) <span class="muted">(optional)</span></span>
+            <input name="slug" placeholder="e.g. business_reporting" pattern="[a-z][a-z0-9_-]*">
+          </label>
+          {% call hint() %}Leave blank for a name made from the agent's name (“Support desk” becomes <code>support-desk</code>). Set one when a parent must reach this agent by a fixed hand-off name — its tool will be <code>ask_&lt;slug&gt;</code>. A clash fails loudly.{% endcall %}
+        </details>
+      </div>
+    </div>
+
+    <div class="row end">
+      <button type="button" class="ghost" data-close-dialog>Cancel</button>
+      <button type="button" class="primary" data-step-next>Next</button>
+      <button type="submit" class="primary" data-step-submit hidden>Create draft agent</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  var dlg = document.getElementById("dlg-new-agent");
+  if (!dlg) return;
+  var form = dlg.querySelector("[data-new-agent-form]");
+  var step1 = form.querySelector('[data-step="1"]'), step2 = form.querySelector('[data-step="2"]');
+  var next = form.querySelector("[data-step-next]"), submit = form.querySelector("[data-step-submit]");
+  var label = form.querySelector("[data-step-label]");
+  function go(step) {
+    var two = step === 2;
+    step1.hidden = two; step2.hidden = !two; next.hidden = two; submit.hidden = !two;
+    label.textContent = two ? "Step 2 of 2 — name it" : "Step 1 of 2 — pick a template";
+    if (two) {
+      var r = form.querySelector('input[name="template_id"]:checked');
+      form.querySelector("[data-chosen-template]").textContent = r ? r.getAttribute("data-template-name") : "";
+      setTimeout(function () { form.querySelector('input[name="display_name"]').focus(); }, 30);
+    }
+  }
+  function open(templateId) {
+    form.reset();
+    if (templateId) {
+      var r = form.querySelector('input[name="template_id"][value="' + templateId + '"]');
+      if (r) { r.checked = true; go(2); } else go(1);
+    } else go(1);
+    dlg.showModal();
+  }
+  next.addEventListener("click", function () {
+    if (!form.querySelector('input[name="template_id"]:checked')) {
+      label.textContent = "Pick a template to continue";
+      return;
+    }
+    go(2);
+  });
+  form.querySelector("[data-step-back]").addEventListener("click", function () { go(1); });
+  form.addEventListener("change", function (e) { if (e.target.name === "template_id") go(2); });
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-use-template]");
+    if (b) open(b.getAttribute("data-use-template"));
+    if (e.target.closest("[data-new-agent]")) open(null);
+    if (e.target.closest("[data-close-dialog]")) dlg.close();
+  });
+  var q = new URLSearchParams(window.location.search);
+  if (q.get("new") === "1" || q.get("template")) open(q.get("template"));
+})();
+</script>
+{% endblock %}

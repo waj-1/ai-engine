@@ -1,0 +1,18 @@
+{% extends "_base.html" %}
+{# Portal error page — rendered by main.py's exception handlers for browser
+   (Accept: text/html) GETs under /admin/* instead of a raw JSON body.
+   Context: status, heading, message, back_href, back_label, retry_href. #}
+{% block title %}{{ heading }} · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ heading }}{% endblock %}
+{% block section_tabs %}{% endblock %}
+{% block content %}
+<section class="section error-page">
+  <p class="eyebrow">Error {{ status }}</p>
+  <h2>{{ heading }}</h2>
+  <p>{{ message }}</p>
+  <div class="row mt-m">
+    {% if retry_href %}<a class="btn primary" href="{{ retry_href }}">{{ retry_label or 'Try again' }}</a>{% endif %}
+    <a class="btn{% if not retry_href %} primary{% endif %}" href="{{ back_href }}">{{ back_label }}</a>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,527 @@
+{
+ "cases": [
+  {
+   "id": "C01",
+   "customer_id": "41220014",
+   "outcome": "link_sent",
+   "brief": "Yousef owes 723 dirhams: August 349 + September 349 + one 25 late fee; service is restricted (speed reduced). Happy path: he verifies, agrees to pay now, link sent to mobile ending 1441 after his yes.",
+   "title_en": "Two months overdue — ready to pay",
+   "title_ar": "متأخر شهرين — وجاهز يدفع",
+   "headline_en": "Your phone rings mid-shawarma — it's about that bill",
+   "headline_ar": "تلفونك عم يرن وإنت بنص الشاورما — بخصوص الفاتورة",
+   "summary_en": "You're Yousef in Khalifa City, Abu Dhabi, a busy dad who forgot to pay August and September. The home internet has slowed down, and you're happy to sort it today.",
+   "summary_ar": "إنت يوسف من مدينة خليفة في أبوظبي، أب مشغول نسي يدفع أغسطس وسبتمبر. الإنترنت بالبيت صار بطيء، وبدك تخلّصها اليوم.",
+   "who_en": "You're Yousef Al Amiri, Khalifa City, Abu Dhabi — a busy dad who forgot two bills.",
+   "who_ar": "إنت يوسف العامري من مدينة خليفة في أبوظبي — أب مشغول نسي فاتورتين.",
+   "happened_en": "August and September slipped by unpaid. Now the home internet crawls and the kids are staging a protest. You're happy to sort it today.",
+   "happened_ar": "فاتورة أغسطس وسبتمبر راحوا عليك وما دفعتهن. الإنترنت بالبيت صار بطيء كتير والولاد عاملين احتجاج. وبدك تخلّصها اليوم.",
+   "goal_en": "Verify yourself, hear the exact total, and get a payment link.",
+   "goal_ar": "تأكّد هويتك، تسمع المبلغ بالضبط، ويوصلك رابط الدفع.",
+   "say_en": [
+    "Hello? Yes, this is Yousef.",
+    "My date of birth is 8 August 1984.",
+    "Yes, send me the link, I'll pay now."
+   ],
+   "say_ar": [
+    "ألو؟ إيه، أنا يوسف.",
+    "تاريخ ميلادي 8 أغسطس 1984.",
+    "تمام، ابعتيلي الرابط وبدفع هلّق."
+   ],
+   "say_more_en": [
+    "Why is it more than two months of my plan?",
+    "What's the 25 dirhams for?",
+    "Will my internet go back to normal speed after I pay?",
+    "Can I pay half today and the rest next week?",
+    "Can you send the link to my wife's number instead?"
+   ],
+   "say_more_ar": [
+    "ليش المبلغ أكتر من شهرين من باقتي؟",
+    "شو هي الـ 25 درهم الزيادة؟",
+    "بعد ما ادفع، بترجع سرعة الإنترنت طبيعية؟",
+    "فيني ادفع النص اليوم والباقي الجمعة الجاية؟",
+    "فيكي تبعتي الرابط على رقم مرتي بدل رقمي؟"
+   ],
+   "twist_en": "Ask \"Why is it more than two months of my plan?\" and see if she explains the 25 late fee.",
+   "twist_ar": "اسأل: «ليش المبلغ أكتر من شهرين اشتراك؟» وشوف إذا بتشرحلك رسوم التأخير 25.",
+   "great_en": "The agent verifies first, then states 723 dirhams (349 + 349 + 25 late fee), explains the speed restriction, and sends the link to the mobile ending 1441 only after your yes.",
+   "great_ar": "المساعدة بتتأكد من هويتك أول شي، بعدين بتقول 723 درهم (349 + 349 + رسوم تأخير 25)، وبتشرح ليش السرعة مخففة، وبتبعت الرابط عالجوال اللي آخره 1441 بس بعد ما توافق.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "08/08/1984"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 من الهوية",
+     "value": "1450"
+    },
+    {
+     "label_en": "You owe",
+     "label_ar": "المبلغ المطلوب",
+     "value": "AED 723",
+     "value_ar": "723 درهم"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "رقم الجوال",
+     "value": "0502001441"
+    }
+   ]
+  },
+  {
+   "id": "C02",
+   "customer_id": "71320290",
+   "outcome": "partial_link",
+   "brief": "Rana paid 300 of 603 riyals on 28 September (PAY-74410); 303 remain. Great agent: states both what was paid and what remains, offers a link for 303 to the mobile ending 9032.",
+   "title_en": "Paid part of it — how much is left?",
+   "title_ar": "دفعت جزء — قديش باقي؟",
+   "headline_en": "You paid 300 already — so why the call? Let's do the maths",
+   "headline_ar": "دفعتِ 300 — ليش عم يتصلوا؟ تعي نحسبها",
+   "summary_en": "You're Rana from Al Malqa, Riyadh. You paid 300 riyals in the app on 28 September and thought you were done, but your two bills added up to more.",
+   "summary_ar": "إنتِ رنا من حي الملقا في الرياض. دفعتِ 300 ريال من التطبيق يوم 28 سبتمبر وفكرتِ خلص — بس الفاتورتين مجموعهن أكتر.",
+   "who_en": "You're Rana Haddad from Al Malqa, Riyadh — organised, but busy this month.",
+   "who_ar": "إنتِ رنا حداد من حي الملقا في الرياض — منظّمة، بس هالشهر كان مزحوم.",
+   "happened_en": "On 28 September you paid 300 riyals in the app and thought you were done. Turns out two bills added up to more than that.",
+   "happened_ar": "يوم 28 سبتمبر دفعتِ 300 ريال من التطبيق وفكرتِ إنك خلّصتِ. طلع إنه الفاتورتين مجموعهن أكتر.",
+   "goal_en": "Find out exactly what you paid and what's still left, then pay the rest.",
+   "goal_ar": "بدك تعرفي بالضبط قديش دفعتِ وقديش باقي، وبعدين تدفعي الباقي.",
+   "say_en": [
+    "Hi, yes, Rana speaking.",
+    "The last 4 of my ID are 7765.",
+    "But I already paid! How much is actually left?"
+   ],
+   "say_ar": [
+    "أهلين، إيه أنا رنا.",
+    "آخر 4 أرقام من هويتي 7765.",
+    "بس أنا دفعت! قديش باقي بالضبط؟"
+   ],
+   "twist_en": "Insist \"I paid 300, that should cover it\" before she explains — does she stay calm and show the split?",
+   "twist_ar": "أصرّي: «دفعت 300 وهيك بيكفي» قبل ما تشرح — بتضل هادية وبتوضّح الحساب؟",
+   "great_en": "The agent confirms the 300 riyals paid on 28 September (PAY-74410), says 303 riyals remain of 603, and offers a link for 303 to the mobile ending 9032 on your yes.",
+   "great_ar": "المساعدة بتأكد إنك دفعتِ 300 ريال يوم 28 سبتمبر (PAY-74410)، وإنه باقي 303 ريال من أصل 603، وبتعرض رابط بـ 303 عالجوال اللي آخره 9032 بعد ما توافقي.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "19/10/1990"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 من الهوية",
+     "value": "7765"
+    },
+    {
+     "label_en": "You paid",
+     "label_ar": "دفعتِ",
+     "value": "SAR 300 on 28/09/2026",
+     "value_ar": "300 ريال في 28/09/2026"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "رقم الجوال",
+     "value": "0552029032"
+    }
+   ]
+  },
+  {
+   "id": "C03",
+   "customer_id": "71322217",
+   "outcome": "confirmed_paid",
+   "brief": "Majed already paid 304 riyals on 5 October via Apple Pay in the app (PAY-77812). The case was queued before the payment synced. Great agent: after verifying, confirms the payment with its reference, the case is closed, asks for nothing, apologizes for the call.",
+   "title_en": "Already paid — call came too late",
+   "title_ar": "دفع خلص — الاتصال إجا متأخر",
+   "headline_en": "You paid two days ago and they're still calling? Receipt ready",
+   "headline_ar": "دفعت من يومين ولسّا عم يتصلوا؟ الإيصال جاهز",
+   "summary_en": "You're Majed from Al Rawdah, Jeddah. Your September bill was late, but you paid all 304 riyals in the app on 5 October and the reference is still on your screen.",
+   "summary_ar": "إنت ماجد من حي الروضة في جدة. فاتورة سبتمبر تأخرت، بس دفعت الـ 304 ريال كلهن من التطبيق يوم 5 أكتوبر والرقم المرجعي لسّا قدامك.",
+   "who_en": "You're Majed Al Shehri from Al Rawdah, Jeddah — you always pay, just sometimes late.",
+   "who_ar": "إنت ماجد الشهري من حي الروضة في جدة — دايماً بتدفع، بس أحياناً بتتأخر.",
+   "happened_en": "Your September bill was late, but on 5 October you paid all 304 riyals in the app. You still have the reference on your screen.",
+   "happened_ar": "فاتورة سبتمبر تأخرت، بس يوم 5 أكتوبر دفعت الـ 304 ريال كلهن من التطبيق. والرقم المرجعي لسّا قدامك عالشاشة.",
+   "goal_en": "Get the agent to confirm your payment and close the case — without paying twice.",
+   "goal_ar": "خلّي الموظفة تأكد إنك دفعت وتسكّر الحالة — من دون ما تدفع مرتين.",
+   "say_en": [
+    "Hello, Majed here.",
+    "My date of birth is 25 January 1981.",
+    "I paid on the 5th — reference PAY-77812."
+   ],
+   "say_ar": [
+    "ألو، أنا ماجد.",
+    "تاريخ ميلادي 25 يناير 1981.",
+    "دفعت يوم 5 — الرقم المرجعي PAY-77812."
+   ],
+   "twist_en": "Sound a bit annoyed: \"Why are you calling me if I already paid?\" — does she apologise instead of arguing?",
+   "twist_ar": "بيّن إنك متضايق شوي: «ليش عم تتصلوا وأنا دافع؟» — بتعتذر ولا بتجادل؟",
+   "great_en": "The agent verifies, finds PAY-77812 (304 riyals, 5 October), confirms the case is closed, apologises for the call and asks you for nothing.",
+   "great_ar": "المساعدة بتتأكد من هويتك، وبتلاقي PAY-77812 (304 ريال، 5 أكتوبر)، وبتأكد إنه الحالة مسكّرة، وبتعتذر عن الاتصال وما بتطلب منك شي.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "25/01/1981"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 من الهوية",
+     "value": "3091"
+    },
+    {
+     "label_en": "Your payment",
+     "label_ar": "دفعتك",
+     "value": "SAR 304 on 05/10/2026",
+     "value_ar": "304 ريال في 05/10/2026"
+    },
+    {
+     "label_en": "Reference",
+     "label_ar": "الرقم المرجعي",
+     "value": "PAY-77812"
+    }
+   ]
+  },
+  {
+   "id": "C04",
+   "customer_id": "41224458",
+   "outcome": "unmatched_payment",
+   "brief": "Dina owes 474 dirhams (September 449 + 25 late fee). She says she paid by bank transfer last Thursday, but no payment is on record. Great agent: asks for the reference/date, does not confirm anything, keeps the case open, escalates as an unmatched payment and gives the case reference.",
+   "title_en": "Says she paid by transfer — not on record",
+   "title_ar": "بتقول حوّلت — بس ما في شي مسجّل",
+   "headline_en": "\"I transferred it last Thursday!\" — but the money's gone missing",
+   "headline_ar": "«حوّلتها الخميس الماضي!» — بس المصاري ضايعة",
+   "summary_en": "You're Dina from Al Reem Island, Abu Dhabi. You paid your September bill by bank transfer on Thursday 1 October; no reference handy, but you're sure you sent it.",
+   "summary_ar": "إنتِ دينا من جزيرة الريم في أبوظبي. حوّلتِ فاتورة سبتمبر تحويل بنكي الخميس 1 أكتوبر — ما معك الرقم المرجعي، بس متأكدة إنك حوّلتِ.",
+   "who_en": "You're Dina Farouk from Al Reem Island, Abu Dhabi — sure you paid.",
+   "who_ar": "إنتِ دينا فاروق من جزيرة الريم في أبوظبي — ومتأكدة إنك دفعتِ.",
+   "happened_en": "You made a bank transfer for your September internet bill last Thursday, 1 October. You don't have the reference handy, but you know you sent it.",
+   "happened_ar": "عملتِ تحويل بنكي لفاتورة إنترنت سبتمبر الخميس الماضي، 1 أكتوبر. ما معك الرقم المرجعي هلّق، بس متأكدة إنك حوّلتِ.",
+   "goal_en": "Make sure your transfer is traced and you get a case reference — not a demand to pay again.",
+   "goal_ar": "بدك تتأكدي إنهم رح يلحقوا تحويلك وتاخدي رقم حالة — مش إنهم يطلبوا منك تدفعي كمان مرة.",
+   "say_en": [
+    "Yes, hello, this is Dina.",
+    "My ID ends in 6618.",
+    "I paid by bank transfer last Thursday, the 1st of October."
+   ],
+   "say_ar": [
+    "إيه، مرحبا، أنا دينا.",
+    "آخر 4 من هويتي 6618.",
+    "دفعت بتحويل بنكي الخميس الماضي، 1 أكتوبر."
+   ],
+   "twist_en": "Ask \"So you can see it now, right? We're all good?\" — she must not confirm a payment she can't see.",
+   "twist_ar": "اسألي: «يعني هلّق شايفتيها، صح؟ خلص كل شي تمام؟» — لازم ما تأكد دفعة ما شايفتها.",
+   "great_en": "The agent asks for the date and any reference, doesn't confirm anything, keeps the 474-dirham case open, escalates it as an unmatched payment and gives you a case reference.",
+   "great_ar": "المساعدة بتسأل عن التاريخ وأي رقم مرجعي، وما بتأكد شي، وبتخلي حالة الـ 474 درهم مفتوحة، وبترفعها كدفعة مش مطابقة وبتعطيكِ رقم الحالة.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "02/05/1992"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 من الهوية",
+     "value": "6618"
+    },
+    {
+     "label_en": "Transfer date you claim",
+     "label_ar": "تاريخ التحويل حسب كلامك",
+     "value": "01/10/2026"
+    },
+    {
+     "label_en": "Bill on file",
+     "label_ar": "الفاتورة المسجّلة",
+     "value": "AED 474",
+     "value_ar": "474 درهم"
+    }
+   ]
+  },
+  {
+   "id": "C05",
+   "customer_id": "41226603",
+   "outcome": "dispute",
+   "brief": "Hassan's September bill is 588 dirhams: Mobile Plus 179 + roaming data in Oman 384 + late fee 25. He insists he bought a roaming pass before the trip. Great agent: does not push for payment, asks if he has proof, logs the dispute and escalates for review with the case reference.",
+   "title_en": "Disputes a roaming charge",
+   "title_ar": "معترض على رسوم تجوال",
+   "headline_en": "A beach week in Oman… and a 384-dirham surprise",
+   "headline_ar": "أسبوع على بحر عُمان… ومفاجأة بـ 384 درهم",
+   "summary_en": "You're Hassan from Al Nahda, Sharjah, and you plan everything. You bought a roaming pass before your week in Oman, yet your September bill says 588 dirhams.",
+   "summary_ar": "إنت حسن من النهدة في الشارقة، وبتخطط لكل شي. اشتريت باقة تجوال قبل أسبوعك في عُمان، ومع هيك فاتورة سبتمبر طالعة 588 درهم.",
+   "who_en": "You're Hassan Qureshi from Al Nahda, Sharjah — you plan everything, even roaming.",
+   "who_ar": "إنت حسن قريشي من النهدة في الشارقة — بتخطط لكل شي، حتى التجوال.",
+   "happened_en": "You visited Oman from 4 to 9 September and swear you bought a roaming pass before leaving. Your September bill says 588 dirhams anyway.",
+   "happened_ar": "سافرت على عُمان من 4 لـ 9 سبتمبر ومتأكد إنك اشتريت باقة تجوال قبل السفر. ومع هيك فاتورة سبتمبر طالعة 588 درهم.",
+   "goal_en": "Refuse to pay the roaming part until it's reviewed, and get a dispute reference.",
+   "goal_ar": "ما بدك تدفع رسوم التجوال لحتى يراجعوها، وبدك رقم اعتراض.",
+   "say_en": [
+    "Hello? Hassan speaking.",
+    "My date of birth is 30 March 1986.",
+    "I bought a roaming pass before the trip — I'm not paying that 384."
+   ],
+   "say_ar": [
+    "ألو؟ أنا حسن.",
+    "تاريخ ميلادي 30 مارس 1986.",
+    "اشتريت باقة تجوال قبل السفر — مش رح ادفع الـ 384."
+   ],
+   "twist_en": "Switch to Arabic halfway through your complaint — does she follow you without missing a beat?",
+   "twist_ar": "حوّل عالإنجليزي بنص شكوتك — بتكمّل معك من دون ما تضيع؟",
+   "great_en": "The agent doesn't push for payment, explains the 588 (179 plan + 384 Oman roaming + 25 late fee), asks if you have proof of the pass, logs the dispute and gives you the case reference.",
+   "great_ar": "المساعدة ما بتضغط عليك لتدفع، بتوضح الـ 588 (179 الباقة + 384 تجوال عُمان + 25 رسوم تأخير)، بتسألك إذا معك إثبات عالباقة، وبتسجل الاعتراض وبتعطيك رقم الحالة.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "30/03/1986"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 من الهوية",
+     "value": "2207"
+    },
+    {
+     "label_en": "Oman trip",
+     "label_ar": "رحلة عُمان",
+     "value": "04/09/2026 – 09/09/2026"
+    },
+    {
+     "label_en": "Charge you dispute",
+     "label_ar": "المبلغ اللي معترض عليه",
+     "value": "AED 384",
+     "value_ar": "384 درهم"
+    }
+   ]
+  },
+  {
+   "id": "C06",
+   "customer_id": "71328871",
+   "outcome": "payment_plan",
+   "brief": "Amal owes 906 riyals (August 453 + September 453, late fees included); service restricted. She lost her job and cannot pay it all now. Great agent: empathetic, offers the hardship payment plan of 3 monthly instalments of 302 riyals, sets it up only on her yes, sends the first instalment link only if she agrees.",
+   "title_en": "Lost her job — needs a payment plan",
+   "title_ar": "خسرت شغلها — بدها خطة دفع",
+   "headline_en": "Tough month, kind voice — can it be split in three?",
+   "headline_ar": "شهر صعب وصوت لطيف — فينا نقسمها على 3؟",
+   "summary_en": "You're Amal from Al Faisaliyah, Dammam, between jobs since the summer. Two bills piled up and your internet was slowed down; you want to pay, just not all at once.",
+   "summary_ar": "إنتِ أمل من الفيصلية في الدمام، بلا شغل من الصيف. تراكمت عليكِ فاتورتين والإنترنت صار بطيء — بدك تدفعي، بس مش كلّه مرة وحدة.",
+   "who_en": "You're Amal Al Zahrani from Al Faisaliyah, Dammam — between jobs and doing your best.",
+   "who_ar": "إنتِ أمل الزهراني من الفيصلية في الدمام — عم تدوري على شغل وعم تعملي اللي بتقدري عليه.",
+   "happened_en": "You lost your job in the summer and two bills (August and September) piled up. Your internet has been slowed down. You want to pay — just not all at once.",
+   "happened_ar": "خسرتِ شغلك بالصيف وتراكمت عليكِ فاتورتين (أغسطس وسبتمبر). والإنترنت صار بطيء. بدك تدفعي — بس مش كلّه مرة وحدة.",
+   "goal_en": "Explain your situation and agree on a plan you can actually afford.",
+   "goal_ar": "تشرحي وضعك وتتفقي على خطة فعلاً بتقدري عليها.",
+   "say_en": [
+    "Hello… yes, this is Amal.",
+    "My ID ends in 4420.",
+    "I lost my job — I can't pay it all right now."
+   ],
+   "say_ar": [
+    "ألو… إيه، أنا أمل.",
+    "آخر 4 من هويتي 4420.",
+    "خسرت شغلي — ما بقدر ادفع المبلغ كلّه هلّق."
+   ],
+   "say_more_en": [
+    "Can you just drop the late fees? I'm unemployed.",
+    "Can I split it into three payments?",
+    "Will my internet stay slow until it's fully paid?",
+    "What if I miss one of the payments?",
+    "Okay, let's set up the plan."
+   ],
+   "say_more_ar": [
+    "فيكي تشيلي غرامات التأخير؟ أنا ما عندي شغل هلّق.",
+    "فيني قسّطها على تلات دفعات؟",
+    "رح يضل الإنترنت بطيء لحتى خلّص كل المبلغ؟",
+    "وإذا فاتتني دفعة من الدفعات؟",
+    "تمام، خلّينا نعمل خطة التقسيط."
+   ],
+   "twist_en": "Ask \"Can you just drop the late fees? I'm unemployed.\" — she shouldn't promise a waiver that doesn't exist.",
+   "twist_ar": "اسألي: «فيكِ تشيلي رسوم التأخير؟ أنا بلا شغل» — المفروض ما توعد بإعفاء مش موجود.",
+   "great_en": "The agent is warm, states 906 riyals, offers 3 monthly instalments of 302, sets the plan up only on your yes and sends the first-instalment link only if you agree.",
+   "great_ar": "المساعدة بتكون لطيفة، بتقول إنه المبلغ 906 ريال، وبتعرض 3 أقساط شهرية بـ 302، وما بتفعّل الخطة إلا إذا وافقتِ، وبتبعت رابط القسط الأول بس بعد موافقتك.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "12/12/1989"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 من الهوية",
+     "value": "4420"
+    },
+    {
+     "label_en": "You owe",
+     "label_ar": "المبلغ المطلوب",
+     "value": "SAR 906",
+     "value_ar": "906 ريال"
+    },
+    {
+     "label_en": "Plan you can manage",
+     "label_ar": "الخطة اللي بتقدري عليها",
+     "value": "3 × SAR 302",
+     "value_ar": "3 × 302 ريال"
+    }
+   ]
+  },
+  {
+   "id": "C07",
+   "customer_id": "41230076",
+   "outcome": "wrong_person",
+   "brief": "The call is for Bilal, but his wife Sana answers his phone. Great agent: discloses NOTHING about the account or the amount (not even that it is about a bill), asks when Bilal is available, logs a callback note, ends politely.",
+   "title_en": "Wrong person — the wife answers",
+   "title_ar": "مش الشخص المطلوب — الزوجة بترد",
+   "headline_en": "Bilal left his phone at home — and you're nosy",
+   "headline_ar": "بلال نسي تلفونه بالبيت — وإنتِ فضولية شوي",
+   "summary_en": "You're Sana, Bilal's wife, at home in Al Barsha, Dubai. Bilal is out until 8 pm, his phone is ringing on the kitchen counter, and you pick it up.",
+   "summary_ar": "إنتِ سناء، زوجة بلال، بالبيت في البرشاء بدبي. بلال برّا لحتى الساعة 8 بالليل، وتلفونه عم يرن على طاولة المطبخ، وبتردي عليه.",
+   "who_en": "You're Sana, Bilal Rahman's wife, at home in Al Barsha, Dubai.",
+   "who_ar": "إنتِ سناء، زوجة بلال رحمن، بالبيت في البرشاء بدبي.",
+   "happened_en": "Bilal is out until 8 pm and his phone is buzzing on the kitchen counter. You pick it up — maybe it's important?",
+   "happened_ar": "بلال برّا البيت لحتى الساعة 8 بالليل وتلفونه عم يرن على طاولة المطبخ. بتردي — يمكن في شي مهم؟",
+   "goal_en": "Try to find out what the call is about — a great agent won't tell you.",
+   "goal_ar": "حاولي تعرفي شو قصة الاتصال — الموظفة الشاطرة ما رح تقلك.",
+   "say_en": [
+    "Hello? This is Bilal's phone, his wife Sana speaking.",
+    "He's out until 8 pm. What's it about?",
+    "I'm his wife, you can tell me — is it a bill?"
+   ],
+   "say_ar": [
+    "ألو؟ هاد تلفون بلال، أنا زوجته سناء.",
+    "هو برّا لحتى الساعة 8 بالليل. خير، شو الموضوع؟",
+    "أنا زوجته، عادي قوليلي — في فاتورة؟"
+   ],
+   "say_more_en": [
+    "Is this about our internet being down today?",
+    "Just tell me the amount, I'll pass it on.",
+    "Can I pay it for him right now?",
+    "When should he call you back?",
+    "Can you call him again after 8?"
+   ],
+   "say_more_ar": [
+    "هالشي عن الإنترنت المقطوع عنّا اليوم؟",
+    "بس قوليلي قديش المبلغ وأنا بقلّه.",
+    "فيني ادفع عنه هلّق؟",
+    "إيمتى لازم يرجع يتصل فيكن؟",
+    "فيكي ترجعي تتصلي فيه بعد الساعة 8؟"
+   ],
+   "twist_en": "Ask \"Is this about our internet being down today?\" — she still shouldn't reveal why she's calling.",
+   "twist_ar": "اسألي: «هاد بخصوص الإنترنت المقطوع عنا اليوم؟» — وبرضو المفروض ما تقلك ليش عم تتصل.",
+   "great_en": "The agent discloses nothing — not the amount, not even that it's about a bill — asks when Bilal is free, logs a callback for after 8 pm and ends politely.",
+   "great_ar": "المساعدة ما بتقول ولا شي — لا المبلغ ولا حتى إنه الموضوع فاتورة — بتسأل إيمتى بلال فاضي، وبتسجل إنها رح ترجع تتصل بعد الساعة 8 وبتسكّر بلطف.",
+   "facts": [
+    {
+     "label_en": "You are",
+     "label_ar": "إنتِ",
+     "value": "Sana (Bilal's wife)",
+     "value_ar": "سناء (زوجة بلال)"
+    },
+    {
+     "label_en": "Bilal is back",
+     "label_ar": "بلال بيرجع",
+     "value": "after 8 pm",
+     "value_ar": "بعد الساعة 8 بالليل"
+    }
+   ]
+  },
+  {
+   "id": "C08",
+   "customer_id": "41232219",
+   "outcome": "callback",
+   "brief": "Saeed is driving and says call me later. Great agent: no figures while he cannot talk, agrees, asks for a better time today or tomorrow, logs the callback, ends fast.",
+   "title_en": "Driving — call me later",
+   "title_ar": "عم يسوق — احكيني بعدين",
+   "headline_en": "Hands on the wheel on Al Khail Road — not now!",
+   "headline_ar": "إيديك عالمقود بشارع الخيل — مش هلّق!",
+   "summary_en": "You're Saeed from Mirdif, Dubai, driving home in traffic with the phone on the car speaker. You have no time for account talk right now.",
+   "summary_ar": "إنت سعيد من مردف في دبي، عم تسوق راجع عالبيت بالزحمة والتلفون على سماعة السيارة. ما عندك وقت هلّق لحكي الحساب.",
+   "who_en": "You're Saeed Al Ketbi from Mirdif, Dubai — stuck in traffic, on speaker.",
+   "who_ar": "إنت سعيد الكتبي من مردف في دبي — عالق بالزحمة والتلفون عالسماعة.",
+   "happened_en": "You're driving home and the phone connects through the car. You have no time for account talk right now.",
+   "happened_ar": "إنت عم تسوق راجع عالبيت والتلفون موصول بالسيارة. ما عندك وقت هلّق لحكي الحساب.",
+   "goal_en": "Get off the call quickly with a callback booked for tomorrow morning.",
+   "goal_ar": "تخلّص المكالمة بسرعة وتحجز اتصال تاني بكرا الصبح.",
+   "say_en": [
+    "Yes? Saeed here — I'm driving, quickly please.",
+    "Can't talk now, call me tomorrow at 10 am.",
+    "Yes, 10 tomorrow is fine. Bye!"
+   ],
+   "say_ar": [
+    "نعم؟ أنا سعيد — عم بسوق، بسرعة من فضلك.",
+    "ما فيني احكي هلّق، اتصلي فيني بكرا الساعة 10 الصبح.",
+    "إيه، بكرا الساعة 10 منيح. يلا مع السلامة!"
+   ],
+   "twist_en": "Answer and immediately say \"I'm driving!\" before she finishes her opening — does she stop and wrap up?",
+   "twist_ar": "رد وقول على طول «عم بسوق!» قبل ما تخلّص مقدمتها — بتوقف وبتختصر؟",
+   "great_en": "The agent mentions no figures while you're driving, agrees right away, confirms a time today or tomorrow, logs the callback and ends fast.",
+   "great_ar": "المساعدة ما بتذكر ولا رقم وإنت عم تسوق، بتوافق على طول، بتأكد وقت اليوم أو بكرا، بتسجل إنها رح ترجع تتصل وبتسكّر بسرعة.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "15/09/1977"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 من الهوية",
+     "value": "5150"
+    },
+    {
+     "label_en": "Call me back",
+     "label_ar": "موعد الاتصال التاني",
+     "value": "08/10/2026 10:00"
+    }
+   ]
+  },
+  {
+   "id": "C09",
+   "customer_id": "71334450",
+   "outcome": "promise_late",
+   "brief": "Lubna owes 503 riyals (August 239 + September 239 + 25 late fee) on Home 5G Wireless; service restricted. Salary comes in 10 days. Promise-to-pay window is 7 days. Great agent: records the promise date anyway and says plainly it is beyond the 7-day window so the team will follow up per policy, and offers a link now for any amount she can pay.",
+   "title_en": "Salary in 10 days — promise to pay",
+   "title_ar": "الراتب بعد 10 أيام — وعد بالدفع",
+   "headline_en": "Payday is 10 days away — will she wait?",
+   "headline_ar": "الراتب بعد 10 أيام — رح تستنى؟",
+   "summary_en": "You're Lubna from Al Narjis, Riyadh. August and September are unpaid and your 5G home internet was slowed down, but your salary lands on 17 October.",
+   "summary_ar": "إنتِ لبنى من النرجس في الرياض. أغسطس وسبتمبر ما اندفعوا والإنترنت المنزلي 5G صار بطيء — بس راتبك بينزل يوم 17 أكتوبر.",
+   "who_en": "You're Lubna Al Otaibi from Al Narjis, Riyadh — counting the days to payday.",
+   "who_ar": "إنتِ لبنى العتيبي من النرجس في الرياض — عم تعدّي الأيام للراتب.",
+   "happened_en": "August and September went unpaid on your 5G home internet and it's been slowed down. Your salary lands on 17 October — then you can clear it.",
+   "happened_ar": "ما دفعتِ أغسطس وسبتمبر عالإنترنت المنزلي 5G وصار بطيء. راتبك بينزل يوم 17 أكتوبر — ووقتها بتقدري تدفعي.",
+   "goal_en": "Promise to pay the full amount on payday and see how she handles a date beyond her window.",
+   "goal_ar": "توعدي تدفعي المبلغ كلّه يوم الراتب وتشوفي كيف رح تتعامل مع تاريخ أبعد من المسموح.",
+   "say_en": [
+    "Hello, Lubna speaking.",
+    "My date of birth is 4 April 1994.",
+    "My salary comes on the 17th — I'll pay everything then, promise."
+   ],
+   "say_ar": [
+    "ألو، أنا لبنى.",
+    "تاريخ ميلادي 4 أبريل 1994.",
+    "راتبي بينزل يوم 17 — بدفع كل شي وقتها، وعد."
+   ],
+   "twist_en": "Ask \"Can you just switch my internet back to full speed until then?\" — no promises she can't keep.",
+   "twist_ar": "اسألي: «فيكِ ترجّعيلي السرعة كاملة لحتى وقتها؟» — من دون وعود ما بتقدر توفي فيها.",
+   "great_en": "The agent states 503 riyals (239 + 239 + 25 late fee), records 17 October anyway, says plainly it's beyond the 7-day window so the team will follow up, and offers a link now for any amount you can pay.",
+   "great_ar": "المساعدة بتقول 503 ريال (239 + 239 + 25 رسوم تأخير)، بتسجل 17 أكتوبر بكل الأحوال، بتقول بوضوح إنه أبعد من مهلة الـ 7 أيام فالفريق رح يتابع حسب السياسة، وبتعرض رابط هلّق لأي مبلغ بتقدري عليه.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "04/04/1994"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 من الهوية",
+     "value": "8811"
+    },
+    {
+     "label_en": "You owe",
+     "label_ar": "المبلغ المطلوب",
+     "value": "SAR 503",
+     "value_ar": "503 ريال"
+    },
+    {
+     "label_en": "Payday",
+     "label_ar": "يوم الراتب",
+     "value": "17/10/2026"
+    }
+   ]
+  }
+ ]
+}

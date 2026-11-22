@@ -1,0 +1,533 @@
+{# The voice COCKPIT — /admin/agents/{profile_id}/voice.
+
+   Spec: docs/superpowers/specs/2026-08-17-voice-config-unification-design.md
+   (D2 + D10), extended 2026-08-26 into the one screen for the whole duplex
+   call. The Agents mapping form's 26-key fieldset is DELETED — this page is
+   the single portal writer of `voice_config`. What it does that a plain form
+   cannot:
+
+   1. EVERY key in voice/live/config.py::_VOICE_FIELDS has a control here
+      (the count is derived — `voice_key_count` — because a hardcoded "38"
+      sat in this comment while the registry held 40). The field list is NOT
+      written in this template: it comes from
+      admin/screens/agent_voice.py::VOICE_FIELDS, so a key can never be added
+      to the runtime without a test failing here.
+
+   2. Every control can carry an EFFECTIVE-VALUE note — "off on this
+      provider", "inert while the topic terms are empty" — computed in Python
+      by describe_effective_overrides(). A checkbox that reads "on" while the
+      provider refuses the feature is the defect this page exists to remove,
+      so the note renders ABOVE the control, not as a footnote under it.
+
+   3. The parent/specialist relationship is the page's STRUCTURE (the two
+      panels below), not a conditional notice: the pair is resolved from the
+      database by slug, and EACH form posts to the row the runtime actually
+      reads — the voice form to the OWNER's id (`voice_config`, persona pin,
+      frozen realtime model), the brain form to the SPECIALIST's id
+      (`model_main_id`, `memory_config`), and the persona editor pins on the
+      OWNER even when the page was opened from the specialist. There is no
+      filter state in which the relationship, or the correct save target,
+      can vanish. #}
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import alert, hint, hint_text %}
+{% block title %}Voice · {{ profile.display_name or profile.agent_kind }} · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ profile.display_name or profile.agent_kind }}{% endblock %}
+{% block page_subtitle %}Voice calls — all {{ voice_key_count }} settings the call edge honours, and the brain that answers.{% endblock %}
+{% block content %}
+
+{# The Voice tab of the agent: same header + tab strip as the other tabs
+   (agents/_header.html). `agent` is absent only if the header lookup failed —
+   then a plain back link keeps the page usable. #}
+{% if agent is defined and agent %}
+{% set detail_tab = 'voice' %}
+{% set active_profile = header_profile %}
+{% include "agents/_header.html" %}
+{% else %}
+<p style="margin-bottom:var(--space-s);">
+  <a class="ghost" href="/admin/agents?env={{ current_env }}&profile_id={{ profile.profile_id }}">&larr; Back to {{ profile.display_name or profile.agent_kind }}</a>
+</p>
+{% endif %}
+
+{# --- Summary: what a caller gets, in plain words. Details below, folded. --- #}
+<section class="section">
+  <h2>Voice at a glance</h2>
+  <dl class="kv mt-s">
+    <dt>Voice calls</dt>
+    <dd>{% if values.get('enabled') %}<span class="chip chip-ok"><span class="chip-dot"></span>On</span>{% else %}<span class="chip chip-neutral">Off</span>{% endif %}</dd>
+    <dt>Settings saved on</dt>
+    <dd>{{ owner.display_name or owner.agent_kind }}{% if owner.profile_id != profile.profile_id %} <span class="caption">(not this agent — <a href="/admin/agents/{{ owner.profile_id }}/voice?env={{ current_env }}">open it</a>)</span>{% endif %}</dd>
+    <dt>Answers with</dt>
+    <dd>{{ (specialist.display_name or specialist.agent_kind) if specialist else (owner.display_name or owner.agent_kind) }}</dd>
+    <dt>Speech model</dt>
+    <dd>{% if model_row %}{{ model_row.name }} <span class="technical">{{ model_row.provider }}</span>{% else %}<span class="muted">None assigned</span>{% endif %}</dd>
+    <dt>Voice</dt>
+    <dd>{{ values.get('voice_id') or 'Provider default' }}{% if values.get('language') %} · {{ values.get('language') }}{% endif %}</dd>
+    <dt>Greeting</dt>
+    <dd>{{ (voice_block.get('greeting_trigger') or 'Default greeting')|truncate(140) }}</dd>
+    <dt>Persona</dt>
+    <dd>{% if persona_versions and persona_versions.served_known %}Callers hear v{{ persona_versions.served.version_number }}{% if persona_versions.diverged %} <span class="chip chip-warn">v{{ persona_versions.latest.version_number }} saved, not live yet</span>{% endif %}{% elif voice_block.get('persona_prompt_slug') %}{{ voice_block.get('persona_prompt_slug') }}{% else %}<span class="muted">None</span>{% endif %}</dd>
+  </dl>
+  <p class="caption mt-s">Voice settings are saved on <strong>{{ owner.display_name or owner.agent_kind }}</strong>{% if specialist %}; the answers come from <strong>{{ specialist.display_name or specialist.agent_kind }}</strong>{% endif %}. Every Save below goes to the right one automatically.</p>
+</section>
+
+<div data-tab-root>
+<div class="accordion voice-accordion">
+
+{# --- D10: the relationship, as structure ------------------------------------
+     Rendered unconditionally. When one profile both stores the config and
+     answers the calls, the right-hand panel says so explicitly rather than
+     disappearing — "no specialist" is a fact an operator needs, and a panel
+     that vanishes teaches nothing. #}
+<details class="accordion-item" {% if viewing == 'specialist' %}open{% endif %}>
+  <summary><span class="accordion-title">Which row stores what</span><span class="caption">— the agent that stores the settings vs the one that answers</span></summary>
+  <div class="accordion-body">
+  {{ hint_text('The profile that STORES voice_config is not necessarily the profile that ANSWERS the call. Editing the wrong one looks applied and does nothing, which is why both are named here rather than inferred.') }}
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-m);margin-top:var(--space-s);">
+    <div style="border:1px solid var(--border);border-radius:8px;padding:var(--space-s);">
+      <div class="eyebrow">Edge config — every field on this page</div>
+      <div style="font-weight:600;margin-top:var(--space-xxs);">
+        {{ owner.display_name or owner.agent_kind }}
+        {% if owner.profile_id == profile.profile_id %}{{ chip('you are here', variant='brand') }}{% endif %}
+      </div>
+      <div class="caption"><code>{{ owner.slug }}</code> · status {{ owner.status or 'active' }}</div>
+      <div class="caption" style="margin-top:var(--space-xxs);">
+        Stores <code>agent_profiles.voice_config</code>, the persona version pin,
+        and the realtime model id. One promote of THIS row freezes all three.
+      </div>
+      {% if owner.profile_id != profile.profile_id %}
+      <a class="ghost" href="/admin/agents?env={{ current_env }}&profile_id={{ owner.profile_id }}">Open profile &rarr;</a>
+      {% endif %}
+    </div>
+    <div style="border:1px solid var(--border);border-radius:8px;padding:var(--space-s);">
+      <div class="eyebrow">Brain — answers the delegated turn</div>
+      {% if specialist %}
+      <div style="font-weight:600;margin-top:var(--space-xxs);">
+        {{ specialist.display_name or specialist.agent_kind }}
+        {% if specialist.profile_id == profile.profile_id %}{{ chip('you are here', variant='brand') }}{% endif %}
+      </div>
+      <div class="caption"><code>{{ specialist.slug }}</code> · status {{ specialist.status or 'active' }}</div>
+      <div class="caption" style="margin-top:var(--space-xxs);">
+        Named by <code>agent_profile_slug</code> below. Its model, tools and
+        <code>memory_config</code> answer the call — its own
+        <code>voice_config</code> is never read.
+      </div>
+      <a class="ghost" href="/admin/agents?env={{ current_env }}&profile_id={{ specialist.profile_id }}">Open profile &rarr;</a>
+      {% else %}
+      <div style="font-weight:600;margin-top:var(--space-xxs);">{{ owner.display_name or owner.agent_kind }}</div>
+      <div class="caption" style="margin-top:var(--space-xxs);">
+        No separate voice specialist: <code>agent_profile_slug</code> is unset
+        (or names no row in this environment), so calls fall back to the active
+        profile of this <code>agent_kind</code>.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% if viewing == 'specialist' %}
+  {% call alert('info') %}
+    <strong>You opened the voice specialist.</strong> It stores no voice config
+    of its own — the fields below belong to
+    <a href="/admin/agents/{{ owner.profile_id }}/voice?env={{ current_env }}">{{ owner.display_name or owner.agent_kind }}</a>
+    and this form saves there. That is deliberate: a specialist's blank
+    <code>voice_config</code> is accurate and reads exactly like "this voice
+    agent is broken".
+  {% endcall %}
+  {% endif %}
+  </div>
+</details>
+
+{# --- Persona: served vs latest ----------------------------------------------
+     Spec Decision 2 calls this mandatory, not decoration: since the persona is
+     pinned on the owner and frozen into its promote snapshot, a version saved
+     in the portal does not reach callers until that row is promoted, while
+     every editor still shows the new text. Same macro shape as agents.html's;
+     both read one context value built by admin/_persona_versions.py, which
+     mirrors resolve_persona_prompt branch for branch. #}
+<details class="accordion-item" id="voice-persona-group" {% if persona_versions and (persona_versions.diverged or not persona_versions.served_known) %}open{% endif %}>
+  <summary><span class="accordion-title">Persona</span><span class="caption">— how the voice introduces itself and behaves</span>
+    {% if persona_versions and persona_versions.served_known %}{{ chip('callers hear v' ~ persona_versions.served.version_number, variant=('warn' if persona_versions.diverged else 'ok'), dot=True) }}{% endif %}</summary>
+  <div class="accordion-body">
+{% if persona_versions %}
+{% set pv = persona_versions %}
+<div class="alert alert-{{ 'warning' if (pv.diverged or pv.warns_at_connect or not pv.served_known) else 'info' }}" style="display:block;">
+  <div style="display:flex;gap:var(--space-xs);align-items:center;flex-wrap:wrap;">
+    <strong>Voice persona <code>{{ pv.slug }}</code></strong>
+    {% if pv.served_known %}
+      {{ chip('callers hear v' ~ pv.served.version_number, variant=('warn' if pv.diverged else 'ok'), dot=True) }}
+    {% else %}
+      {{ chip('served version unnamed', variant='warn', dot=True) }}
+    {% endif %}
+    {% if pv.latest %}{{ chip('latest saved: v' ~ pv.latest.version_number, variant='ghost') }}{% endif %}
+    {{ chip('resolved from: ' ~ pv.tier, variant='ghost') }}
+  </div>
+  <div class="caption" style="margin-top:var(--space-xxs);">
+    {% if pv.diverged %}
+      A newer version exists than the one callers hear. On a snapshot-served
+      profile, publishing it means promoting <code>{{ owner.slug }}</code>.
+    {% elif not pv.served_known %}
+      The served version could not be named — a snapshot froze the content
+      without an id, or the pinned version row is gone.
+    {% else %}
+      The version callers hear is the latest saved one.
+    {% endif %}
+    Edit the persona text in the
+    <a href="#voice-persona">persona editor below</a> — a save there always
+    pins on {{ owner.display_name or owner.agent_kind }}, the only pin the
+    runtime reads.
+  </div>
+</div>
+{% endif %}
+
+{# --- Persona editor ----------------------------------------------------------
+     The persona TEXT, editable on the cockpit itself. Posts through the same
+     version-create route as the Agents screen's prompt card
+     (POST /admin/prompts/{id}/versions, prompt_validator-gated), but the
+     hidden profile_id is ALWAYS the OWNER's: the runtime reads the persona
+     pin off the PARENT (endpoints/voice_live.py::resolve_persona_prompt),
+     and a specialist-side pin is inert and warns on every connect. The
+     Agents screen needs a read-only guard for exactly that trap — here the
+     cockpit always knows the owner, so the save target cannot be wrong. #}
+<div class="mt-m" id="voice-persona">
+  {% if persona_prompt %}
+  {{ hint_text('Saving creates a new version of `' ~ persona_prompt.slug ~ '` and pins it on ' ~ (owner.display_name or owner.agent_kind) ~ ' (the OWNER row) — even when you opened this cockpit from the specialist. On a snapshot-served environment the new version reaches callers when that profile is next promoted; see the banner above for what callers hear right now.') }}
+  <form method="post" action="/admin/prompts/{{ persona_prompt.prompt_id }}/versions" style="margin-top:var(--space-xs);" data-tab-form data-form-label="Persona">
+    <input type="hidden" name="profile_id" value="{{ owner.profile_id }}">
+    <input type="hidden" name="prompt_key" value="{{ persona_prompt.slug }}">
+    <input type="hidden" name="voice_return_profile_id" value="{{ profile.profile_id }}">
+    <textarea name="content" class="code-block"
+              style="width:100%;min-height:220px;">{{ persona_prompt.content or '' }}</textarea>
+    <label class="field mt-s"><span class="field-label">What changed? <span class="muted">(optional)</span></span>
+      <input name="notes" placeholder="Change note">
+    </label>
+    {# core.prompt_validator gates this save exactly as it gates the Agents
+       screen's editor and the MCP prompts() tool — a failed save is refused
+       with 400 and nothing is written. #}
+    <label class="override-box caption" data-override hidden>
+      <input type="checkbox" name="override_validation" value="true">
+      Save anyway — this text failed the safety check (recorded in the activity log)
+    </label>
+  </form>
+  {% elif voice_block.get('persona_prompt_slug') %}
+  {% call alert('warning') %}
+    <code>persona_prompt_slug</code> names
+    <code>{{ voice_block.get('persona_prompt_slug') }}</code>, but no
+    <code>agent_prompts</code> row with that slug exists for
+    <code>{{ owner.agent_kind }}</code> — with duplex voice enabled every
+    connect closes rather than speaking without a persona.
+  {% endcall %}
+  {% else %}
+  {{ hint_text('No persona prompt slug is set — fill "Persona prompt slug" in the Session section below and save, then the editor appears here.') }}
+  {% endif %}
+</div>
+  </div>
+</details>
+
+{# --- The brain (specialist row) ----------------------------------------------
+     The other half of the pair, edited where the operator already is. Every
+     field in THIS card reads from and writes to the BRAIN row — the
+     specialist named by `agent_profile_slug`, or this profile itself when no
+     separate specialist resolves — because that is the row the delegated
+     `ask_agent` turn actually runs on. Editing these on the owner looks
+     applied and does nothing, which is the exact trap the cockpit exists to
+     remove. The bound-tool list is resolved the way the RUNTIME resolves it
+     (agent_profile_mcp_servers attachments narrowed by tool_subset — see
+     runtime/tools/_mcp_resolver.py), NOT from `tool_ids`, which the tool
+     resolution path reads nowhere. #}
+<details class="accordion-item" id="voice-brain">
+  <summary><span class="accordion-title">The brain (specialist row)</span><span class="caption">— the model and tools that answer each question</span></summary>
+  <div class="accordion-body">
+  {{ hint_text('Everything on this card belongs to ' + (brain.row.display_name or brain.row.agent_kind or '') + ' — the row that answers the delegated turn — and saves there, not to the voice-config owner.') }}
+  <div style="display:flex;gap:var(--space-xs);align-items:center;flex-wrap:wrap;margin-top:var(--space-xxs);">
+    <strong>{{ brain.row.display_name or brain.row.agent_kind }}</strong>
+    <code>{{ brain.row.slug }}</code>
+    {% if brain.is_specialist %}
+      {{ chip('specialist', variant='mauve') }}
+    {% else %}
+      {{ chip('no separate specialist — this profile answers its own calls', variant='ghost') }}
+    {% endif %}
+    <a class="ghost" href="/admin/agents?env={{ current_env }}&profile_id={{ brain.row.profile_id }}">Open profile &rarr;</a>
+  </div>
+
+  <form method="post" action="/admin/agents/{{ brain.row.profile_id }}/voice/brain?env={{ current_env }}"
+        style="margin-top:var(--space-s);max-width:640px;" data-tab-form data-form-label="Brain settings">
+    {# The brain form's own marker — a POST that cannot prove this panel was
+       rendered owns nothing here (the memory checkbox reads absent as OFF). #}
+    <input type="hidden" name="{{ brain_form_marker }}" value="1">
+    <input type="hidden" name="return_profile_id" value="{{ profile.profile_id }}">
+    <label style="display:block;font-weight:600;">
+      Brain model <code class="caption">model_main_id</code><br>
+      <select name="brain_model_main_id" style="width:100%;font-weight:400;">
+        {% if not brain.row.model_main_id %}
+        <option value="" selected disabled>— no model assigned —</option>
+        {% endif %}
+        {% for m in brain.chat_models %}
+        <option value="{{ m.model_id }}" {% if m.model_id == brain.row.model_main_id %}selected{% endif %}>
+          {{- m.name }} — {{ m.model_string }}
+          {%- if m.environment != current_env %} [{{ m.environment }}]{% endif %}
+          {%- if not m.is_active %} (inactive){% endif -%}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <p class="hint" style="margin-top:var(--space-xxs);">
+      The CHAT model the delegated <code>ask_agent</code> turn runs on — never
+      a realtime row (those are the ears and mouth, picked in the Session
+      section below). The delegate's latency is ~85% this model's TTFT, and
+      past ~8s the realtime service has already discarded the tool call.
+    </p>
+
+    <label style="display:flex;align-items:center;gap:var(--space-xs);font-weight:600;margin-top:var(--space-s);">
+      <input type="checkbox" name="brain_memory_enabled" {% if brain.memory_enabled %}checked{% endif %}>
+      <span>User memory enabled</span>
+      <code class="caption">memory_config.enabled</code>
+    </label>
+    {% if brain.memory_enabled %}
+    <div class="alert alert-warning" style="display:block;margin:var(--space-xxs) 0;">
+      <strong>Check this.</strong> ON for a voice brain puts an awaited
+      embedding between the caller's last word and the model call — a
+      cross-cloud one unless <code>EMBED_PROVIDER</code> is the in-region
+      Azure deployment. It is OFF on the client demos' voice profiles for exactly
+      this reason (and the drift check watches it).
+    </div>
+    {% endif %}
+    <p class="hint" style="margin-top:var(--space-xxs);">
+      Long-term cross-session facts recalled per caller. Toggling this only
+      touches <code>enabled</code> — the rest of <code>memory_config</code>
+      (retrieval thresholds, window) is preserved.
+    </p>
+  </form>
+
+  <div style="margin-top:var(--space-m);border-top:1px solid var(--border);padding-top:var(--space-s);">
+    <div class="eyebrow">System prompt (read-only here)</div>
+    <div class="caption" style="margin-top:var(--space-xxs);">
+      {% if brain.system_prompt and not brain.system_prompt.get('dangling') %}
+        Serving pinned <strong>v{{ brain.system_prompt.version_number }}</strong>
+        {%- if brain.system_prompt.created_at %} · saved {{ brain.system_prompt.created_at[:10] }}{% endif %} ·
+      {% elif brain.system_prompt %}
+        {{ chip('pinned version row is gone', variant='warn', dot=True) }} —
+        the pin dangles and resolution falls back ·
+      {% else %}
+        {{ chip('no version pin', variant='warn', dot=True) }} — resolves the
+        latest saved version, ungoverned by promote/rollback ·
+      {% endif %}
+      <a href="/admin/agents?env={{ current_env }}&profile_id={{ brain.row.profile_id }}&tab=instructions">edit it on the profile's prompt editor &rarr;</a>
+    </div>
+  </div>
+
+  <div style="margin-top:var(--space-s);border-top:1px solid var(--border);padding-top:var(--space-s);">
+    <div class="eyebrow">Bound tools — what the runtime actually binds</div>
+    {{ hint_text('Resolved from the profile\'s MCP attachments narrowed by each attachment\'s tool_subset — the same path the request takes (runtime/tools/_mcp_resolver.py). The legacy tool_ids checkbox list on the Agents screen is NOT read by tool resolution.') }}
+    <div style="display:flex;gap:var(--space-xxs);flex-wrap:wrap;margin-top:var(--space-xs);">
+      {% for name in brain.bound_tools %}{{ chip(name, variant='brand') }}{% else %}
+      <span class="caption">No tools bind from bundle attachments{% if not brain.external_servers %} — the brain would answer with no tools at all{% endif %}.</span>
+      {% endfor %}
+    </div>
+    {% for ext in brain.external_servers %}
+    <div class="caption" style="margin-top:var(--space-xxs);">
+      {% if ext.endpoint_only %}
+      External MCP <code>{{ ext.name }}</code> — endpoint-only: supplies the
+      endpoint URL, contributes no tools here.
+      {% elif ext.tool_subset %}
+      External MCP <code>{{ ext.name }}</code> — resolved at request time,
+      narrowed to: {% for t in ext.tool_subset %}<code>{{ t }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+      {% else %}
+      External MCP <code>{{ ext.name }}</code> — all of its tools, resolved at
+      request time.
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if brain.listed_not_bound %}
+    <p class="caption" style="margin-top:var(--space-xs);opacity:.75;">
+      Listed in <code>tool_ids</code> but not bound ({{ brain.listed_not_bound | length }}):
+      {% for name in brain.listed_not_bound %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+      — the checkbox list is not what tool resolution reads; attach the tool
+      through an MCP bundle for it to bind.
+    </p>
+    {% endif %}
+  </div>
+  </div>
+</details>
+
+{# --- Resolved provider ------------------------------------------------------
+     The capability flags below are what several effective-value notes are
+     derived from, so they are shown rather than only implied. They are read
+     off the RealtimeSession subclass (voice/live/base.py), which is where each
+     provider declares its own position — not a second opinion maintained here. #}
+<details class="accordion-item" id="voice-provider">
+  <summary><span class="accordion-title">Resolved provider</span><span class="caption">— {{ model_row.name if model_row else 'no speech model assigned' }}</span></summary>
+  <div class="accordion-body">
+  {% if model_row %}
+  <div style="display:flex;gap:var(--space-s);flex-wrap:wrap;align-items:center;margin-top:var(--space-xs);">
+    <strong>{{ model_row.name }}</strong>
+    <code>{{ model_row.model_string }}</code>
+    {{ chip(model_row.provider or 'provider unset', variant='mauve') }}
+    {% set _extra = model_row.extra_config or {} %}
+    {{ chip('voice_type: ' ~ (_extra.get('voice_type') or 'azure-standard'), variant='ghost') }}
+    {{ chip('transcription: ' ~ (_extra.get('transcription_model') or 'azure-speech'), variant='ghost') }}
+    {# The window paid before EVERY caller turn, and the one model-row key an
+       operator is most likely to want to see from here. Rendered only when
+       the row states it: the per-provider baked-in default is not knowable
+       from this template, and a chip guessing it would be worse than none. #}
+    {% if (_extra.get('turn_detection') or {}).get('silence_duration_ms') is not none %}
+    {{ chip('end-of-speech: ' ~ _extra.get('turn_detection').get('silence_duration_ms') ~ 'ms', variant='ghost') }}
+    {% endif %}
+    {% if not model_row.is_active %}{{ chip('inactive row', variant='warn') }}{% endif %}
+  </div>
+  {% if capabilities %}
+  <div class="caption" style="margin-top:var(--space-xs);">
+    Declared capabilities:
+    streamed tool results <strong>{{ 'yes' if capabilities.supports_streamed_tool_results else 'NO' }}</strong> ·
+    out-of-band speech <strong>{{ 'yes' if capabilities.supports_out_of_band_speech else 'no' }}</strong> ·
+    barge-in confirmation <strong>{{ 'yes' if capabilities.supports_barge_in_confirmation else 'no' }}</strong> ·
+    final user transcripts <strong>{{ 'yes' if capabilities.finalizes_user_transcripts else 'no' }}</strong> ·
+    reprompt <strong>{{ 'yes' if capabilities.supports_reprompt else 'no' }}</strong>
+  </div>
+  {% else %}
+  {{ hint_text('No capability flags for this provider slug — the effective-value notes below cannot account for provider gating.') }}
+  {% endif %}
+  {% call hint() %}
+    <code>endpoint</code>, <code>voice_type</code>, <code>turn_detection</code>,
+    <code>api_version</code> and <code>auth_env_var</code> live on the
+    <a href="/admin/agent-models/{{ model_row.model_id }}">model row</a>, and are
+    frozen into this profile's promote snapshot — so on a snapshot-served
+    environment a live model-row edit changes nothing until
+    <code>{{ owner.slug }}</code> is promoted again.
+    <code>turn_detection</code> is honoured by BOTH realtime providers under
+    that one name, but they take different fields: on
+    <code>azure_voice_live</code> it merges over the
+    <code>azure_semantic_vad</code> block, on <code>google_genai</code> only
+    <code>silence_duration_ms</code>, <code>prefix_padding_ms</code> and the
+    two sensitivity keys are forwarded and the rest are dropped with a log
+    line. Unset, each provider applies its own measured default (650ms Azure
+    native, 600ms Gemini) — see
+    <a href="/admin/docs/data-model">Data Model</a>.
+  {% endcall %}
+  {% else %}
+  {% call alert('warning') %}
+    <strong>No realtime model assigned.</strong> With duplex voice enabled every
+    connect raises <code>LookupError</code> at handshake and the socket closes —
+    a misconfiguration the runtime surfaces loudly rather than defaulting.
+  {% endcall %}
+  {% endif %}
+  </div>
+</details>
+</div>{# /accordion #}
+
+<form method="post" action="/admin/agents/{{ owner.profile_id }}/voice?env={{ current_env }}"
+      class="mt-l" data-tab-form data-form-label="Voice settings">
+<h2 class="section-title">Call settings</h2>
+<p class="caption mb-m">Grouped by what they decide. Open a group to change it — each setting says what it does and its default.</p>
+{# The marker this screen's writer gates on. Without it a scripted POST that
+   carries no vc_* fields would flip every default-True checkbox off — the same
+   class of bug Part B input #6 records against the mapping form. #}
+<input type="hidden" name="{{ form_marker }}" value="1">
+<input type="hidden" name="return_profile_id" value="{{ profile.profile_id }}">
+
+{% macro field_notes(key) -%}
+  {% for note in (notes.get(key) or []) %}
+  <div class="alert alert-{{ 'error' if note.level == 'warn' else ('warning' if note.level == 'off' else 'info') }}"
+       style="display:block;margin:var(--space-xxs) 0;">
+    {% if note.level == 'off' %}<strong>Not in effect.</strong>
+    {% elif note.level == 'warn' %}<strong>Check this.</strong>{% endif %}
+    {{ note.text }}
+  </div>
+  {% endfor %}
+{%- endmacro %}
+
+{% macro voice_control(f) -%}
+  {% set value = values.get(f.key) %}
+  <div style="grid-column:1/-1;padding:var(--space-s) 0;border-top:1px solid var(--border);">
+    {{ field_notes(f.key) }}
+    {% if f.kind == 'bool' %}
+    <label style="display:flex;align-items:center;gap:var(--space-xs);font-weight:600;">
+      <input type="checkbox" name="{{ field_prefix }}{{ f.key }}" {% if value %}checked{% endif %}>
+      <span>{{ f.label }}</span>
+      <code class="caption">{{ f.key }}</code>
+    </label>
+    {% else %}
+    <label style="display:block;font-weight:600;">
+      {{ f.label }} <code class="caption">{{ f.key }}</code><br>
+      {% if f.kind == 'model' %}
+      <select name="{{ field_prefix }}{{ f.key }}" style="width:100%;max-width:640px;font-weight:400;">
+        <option value="" {% if not value %}selected{% endif %}>— unset (no realtime model assigned) —</option>
+        {% for m in realtime_models %}
+        <option value="{{ m.model_id }}" {% if m.model_id == value %}selected{% endif %}>
+          {{- m.name }} — {{ m.model_string }}
+          {%- if m.environment != current_env %} [{{ m.environment }}]{% endif %}
+          {%- if not m.is_active %} (inactive){% endif -%}
+        </option>
+        {% endfor %}
+      </select>
+      {% elif f.kind in ('lines', 'variants', 'json') %}
+      <textarea name="{{ field_prefix }}{{ f.key }}" class="code-block" rows="{{ 4 if f.kind == 'json' else 3 }}"
+                style="width:100%;max-width:640px;font-weight:400;"
+                placeholder="{{ f.placeholder }}">{{ value }}</textarea>
+      {% elif f.kind in ('number', 'int') %}
+      <input type="number" step="{{ '1' if f.kind == 'int' else '0.5' }}"
+             name="{{ field_prefix }}{{ f.key }}" value="{{ value }}"
+             placeholder="{{ f.placeholder }}"
+             style="width:100%;max-width:240px;font-weight:400;">
+      {% else %}
+      <input type="text" name="{{ field_prefix }}{{ f.key }}" value="{{ value }}"
+             placeholder="{{ f.placeholder }}"
+             style="width:100%;max-width:640px;font-weight:400;">
+      {% endif %}
+    </label>
+    {% endif %}
+    <p class="hint" style="margin-top:var(--space-xxs);">
+      {{ f.help }}
+      {% if f.kind != 'model' %}
+      <br><em>Unset resolves to <code>{{ defaults.get(f.key) if defaults.get(f.key) not in (None, '') else '(empty)' }}</code>.</em>
+      {% endif %}
+    </p>
+  </div>
+{%- endmacro %}
+
+<div class="accordion">
+{% for section_id, section_title, section_blurb in sections %}
+{% set _fields = fields_by_section[section_id] %}
+{% set _changed = [] %}
+{% set _flagged = [] %}
+{% for f in _fields %}
+  {% if values.get(f.key) not in (None, '') and (values.get(f.key)|string) != (defaults.get(f.key)|string) %}{% set _ = _changed.append(f.key) %}{% endif %}
+  {% if notes.get(f.key) %}{% set _ = _flagged.append(f.key) %}{% endif %}
+{% endfor %}
+<details class="accordion-item" id="voice-{{ section_id }}" {% if section_id == 'session' %}open{% endif %}>
+  <summary>
+    <span class="accordion-title">{{ section_title }}</span>
+    <span class="caption">{{ _fields|length }} setting{{ '' if _fields|length == 1 else 's' }}{% if _changed %} · {{ _changed|length }} changed from default{% endif %}</span>
+    {% if _flagged %}<span class="chip chip-warn">{{ _flagged|length }} to check</span>{% endif %}
+  </summary>
+  <div class="accordion-body">
+  {{ hint_text(section_blurb) }}
+  {% if section_id == 'limits' %}
+  {# The blurb names the daily audio budget as the hard control — link the
+     control itself, not just its name. Budgets live on the realtime model
+     row's detail page (the Duplex-voice budgets card). #}
+  <p class="caption">
+    {% if model_row %}
+    Set that budget on the
+    <a href="/admin/agent-models/{{ model_row.model_id }}">Duplex-voice budgets card of {{ model_row.name }}</a>
+    (this profile's realtime model row).
+    {% else %}
+    Set that budget on any realtime model row's detail page (Agents &rarr;
+    Models &rarr; a row flagged <code>realtime</code>) — assign a realtime
+    model below to get a direct link here.
+    {% endif %}
+  </p>
+  {% endif %}
+  <div style="display:grid;grid-template-columns:1fr;">
+    {% for f in _fields %}{{ voice_control(f) }}{% endfor %}
+  </div>
+  </div>
+</details>
+{% endfor %}
+</div>
+{{ hint_text('Saving writes the whole voice_config on the owner row. Blank clears a field back to its built-in default; keys with no control here (a restored _retired_turn_based archive) are carried through untouched. Applies on the next connect — the profile cache invalidates immediately.') }}
+</form>
+{% from "agents/_savebar.html" import savebar %}
+{{ savebar('Save voice settings') }}
+</div>{# /data-tab-root #}
+<script src="/admin/static/agents.js?v={{ asset_version }}" defer></script>
+
+{% endblock %}

@@ -1,0 +1,172 @@
+{# _tab_eval_runs.html — the Runs list of the Testing area (/admin/evals/runs).
+
+   Results first: the runs table (with compare), then the score trend. The
+   "Run tests" form lives in the _run_dialog.html drawer, opened from the page
+   head. Context: admin/eval_runs_handlers.build_evals_page_context(). In-flight
+   rows update in place via eval-runs-poll.js (status.json). #}
+{% from "_components/status_chip.html" import run_status, score_chip, delta %}
+{% from "_components/callout.html" import info %}
+
+<section class="section">
+  {# Server-side filters — reload the list with query params. #}
+  <form method="get" action="/admin/evals/runs" class="filter-bar runs-filters">
+    <label>Type
+      <select name="kind">
+        <option value="">Text and voice</option>
+        <option value="text" {% if filters.kind == 'text' %}selected{% endif %}>Text tests</option>
+        <option value="voice" {% if filters.kind == 'voice' %}selected{% endif %}>Voice checks</option>
+      </select>
+    </label>
+    <label>Test suite
+      <select name="suite_id">
+        <option value="">All</option>
+        {% if voice_checks %}<optgroup label="Text test suites">{% endif %}
+        {% for s in suites %}
+        <option value="{{ s.suite_id }}" {% if filters.suite_id == s.suite_id %}selected{% endif %}>{{ s.name|humanize }}</option>
+        {% endfor %}
+        {% if voice_checks %}</optgroup>
+        <optgroup label="Voice checks">
+          {% for v in voice_checks %}
+          <option value="{{ v.suite_id }}" {% if filters.suite_id == v.suite_id %}selected{% endif %}>{{ v.name }}</option>
+          {% endfor %}
+        </optgroup>{% endif %}
+      </select>
+    </label>
+    <label>Agent
+      <select name="profile_id">
+        <option value="">All</option>
+        {% for p in profiles %}
+        <option value="{{ p.profile_id }}" {% if filters.profile_id == p.profile_id %}selected{% endif %}>{{ p.display_name }}{% if p.environment %} · {{ p.environment }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Result
+      <select name="status">
+        <option value="">All</option>
+        {% for s in statuses %}<option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s|status_label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Since
+      <select name="days">
+        <option value="">Any time</option>
+        {% for d, lbl in [('1','Last 24 hours'),('7','Last 7 days'),('30','Last 30 days'),('90','Last 90 days')] %}
+        <option value="{{ d }}" {% if filters.days|string == d %}selected{% endif %}>{{ lbl }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <details class="advanced inline">
+      <summary>More filters</summary>
+      <div class="row mt-s">
+        <label>Source
+          <select name="source">
+            <option value="">All</option>
+            {% for s in sources %}<option value="{{ s }}" {% if filters.source == s %}selected{% endif %}>{{ 'Test suite' if s == 'suite' else 'Real conversations' }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Agent type
+          <select name="agent_kind">
+            <option value="">All</option>
+            {% for k in agent_kinds %}<option value="{{ k }}" {% if filters.agent_kind == k %}selected{% endif %}>{{ k|humanize }}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+    </details>
+    <button type="submit">Apply</button>
+    {% if filters.suite_id or filters.source or filters.agent_kind or filters.status or filters.days or filters.profile_id or filters.kind %}
+    <a class="btn ghost" href="/admin/evals/runs">Clear</a>
+    {% endif %}
+  </form>
+
+  {% if recent_runs %}
+  <div class="row mb-s mt-m">
+    <button type="button" id="cmp-go" class="btn" disabled aria-disabled="true">Compare selected</button>
+    <span class="caption" id="cmp-count" aria-live="polite">Tick two or more runs to compare them</span>
+  </div>
+  <div class="table-wrap">
+  <table class="table runs-table">
+    <thead><tr>
+      <th class="col-pick"><span class="sr-only">Select</span></th>
+      <th>Test suite</th><th>Agent</th><th>Result</th><th class="num">Score</th>
+      <th>Change</th><th class="num">Cases passed</th><th>Finished</th>
+    </tr></thead>
+    <tbody data-eval-runs-body>
+      {% for r in recent_runs %}
+      {% set is_voice = r.kind == 'voice' %}
+      {# Voice runs have no status.json poller — they refresh on reload. #}
+      {% set inflight = r.status in ['queued','running'] and not is_voice %}
+      <tr data-run-id="{{ r.run_id }}" data-inflight="{{ '1' if inflight else '0' }}" data-kind="{{ 'voice' if is_voice else 'text' }}">
+        <td class="col-pick"><input type="checkbox" class="cmp-pick" value="{{ r.run_id }}" data-kind="{{ 'voice' if is_voice else 'text' }}" aria-label="Select run of {{ r._suite_name|humanize }}"></td>
+        <td>
+          {% if is_voice %}<span class="chip chip-info" title="Voice check — a scripted live call">Voice</span> {% elif r._voice_suite %}<span class="chip chip-info" title="Voice test suite">Voice</span> {% endif %}<a href="/admin/evals/runs/{{ r.run_id }}">{{ r._suite_name|humanize }}</a>
+          {% if is_voice and r.error and r.status not in ('passed','failed') %}<div class="caption">{{ r.error|truncate(90) }}</div>{% endif %}
+          {% if r._variant and r._variant != '—' %}<div class="caption">{{ r._variant }}</div>
+          {% elif r._model and r._model != '—' %}<div class="caption">{{ r._model }}</div>{% endif %}
+        </td>
+        <td>
+          {{ r._agent }}
+          {% if r._agent_missing %}<span class="chip chip-warn" title="This agent isn't in this environment">Missing here</span>{% endif %}
+        </td>
+        <td data-cell-status>{{ run_status(r.status) }}</td>
+        <td class="num" data-cell-score>
+          {{ score_chip(r.score, r._target) }}
+          {% if r._target is not none and r.score is not none %}<div class="caption nowrap">target {{ r._target|pct }}</div>{% endif %}
+        </td>
+        <td>{% if r._delta is not none %}{{ delta(r._delta) }}{% else %}<span class="caption">—</span>{% endif %}</td>
+        <td class="num" data-cell-passrate>{% if r._cases_total %}{{ r._cases_passed }} / {{ r._cases_total }}{% else %}—{% endif %}</td>
+        <td class="caption nowrap" title="{{ (r.finished_at or r.started_at or r.created_at)|stamp }}">{{ (r.finished_at or r.started_at or r.created_at)|when }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>{% if filters.suite_id or filters.source or filters.agent_kind or filters.status or filters.days or filters.profile_id or filters.kind %}No runs match these filters.{% else %}No test runs yet.{% endif %}</p>
+    <button type="button" class="primary" data-open-run>Run tests</button>
+  </div>
+  {% endif %}
+</section>
+
+{# ====================================================================== #}
+{# Score over time                                                        #}
+{# ====================================================================== #}
+<section class="section" data-eval-trend>
+  <div class="row between">
+    <div>
+      <h2 class="section-title">Score over time</h2>
+      <span class="caption">One line per prompt version, so you can see whether a prompt change helped.</span>
+    </div>
+    <div class="row">
+      <label class="caption">Test suite
+        <select id="eval-trend-suite">
+          <option value="">All</option>
+          {% for s in suites %}<option value="{{ s.suite_id }}">{{ s.name|humanize }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="caption">Show
+        <select id="eval-trend-metric">
+          <option value="score">Score</option>
+          <option value="pass_rate">Cases passed</option>
+        </select>
+      </label>
+      <label class="caption">Window
+        <select id="eval-trend-days">
+          <option value="7">7 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="90">90 days</option>
+          <option value="365">1 year</option>
+        </select>
+      </label>
+    </div>
+  </div>
+  <div class="chart-card mt-s">
+    <div style="position:relative;height:240px;flex:1;">
+      <canvas id="eval-trend-chart"></canvas>
+    </div>
+  </div>
+  <p class="caption" id="eval-trend-empty" style="display:none;">No scored runs in this window.</p>
+</section>
+
+<script src="/admin/static/eval-runs-poll.js?v={{ asset_version }}" defer></script>
+<script src="/admin/static/eval-runs-chart.js?v={{ asset_version }}" defer></script>
+<script src="/admin/static/comparison-picker.js?v={{ asset_version }}" defer></script>

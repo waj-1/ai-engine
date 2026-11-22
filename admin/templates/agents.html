@@ -1,0 +1,14 @@
+{% extends "_base.html" %}
+{# /admin/agents?tab=models — the Models tab of the Agents area. The agent
+   list is agents_list.html and one agent is agent_detail.html (B1 redesign);
+   this template only frames the Models tab now. #}
+{% from "_components/tabs.html" import tabs %}
+{% block title %}Models · {{ brand().title }}{% endblock %}
+{% block page_title %}Models{% endblock %}
+{% block page_subtitle %}The language models your agents can use.{% endblock %}
+{% block content %}
+{{ tabs([('agents', 'Agents', '/admin/agents?env=' ~ current_env),
+         ('models', 'Models', '/admin/agents?tab=models&env=' ~ current_env),
+         ('templates', 'Templates', '/admin/templates?env=' ~ current_env)], 'models') }}
+{% include "_tab_models.html" %}
+{% endblock %}

@@ -1,0 +1,145 @@
+{% extends "_base.html" %}
+{% from "_components/callout.html" import alert, hint_text %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/status_chip.html" import run_status %}
+{% block title %}Voice checks · Testing · {{ brand().title }}{% endblock %}
+{% block page_title %}Voice checks{% endblock %}
+{% block page_subtitle %}Scripted phone calls that check what a voice agent says and does.{% endblock %}
+{% block content %}
+
+{% if error %}
+<div class="mb-m">{% call alert('warning') %}{{ error }}{% endcall %}</div>
+{% endif %}
+
+<div class="page-head">
+  <div class="page-head-text"><p>Each check plays a scripted caller into a live voice call and verifies the replies and anything the agent did (for example a booking). For scored voice tests with judge feedback, use a voice-call <a href="/admin/evals/suites">test suite</a>.</p></div>
+  <div class="page-head-actions"><button type="button" class="primary" data-open-voice-form>New voice check</button></div>
+</div>
+
+<section class="section">
+  <h2>Recent runs</h2>
+  {% if runs %}
+  <div class="table-wrap mt-s">
+  <table class="table">
+    <thead><tr><th>Check</th><th>Result</th><th>Steps passed</th><th>When</th></tr></thead>
+    <tbody>
+      {% for r in runs %}
+      {% set checks = (r.detail or {}).get('checks') or [] %}
+      <tr>
+        <td>{{ r.slug|humanize }} <div class="technical">{{ r.slug }}</div></td>
+        <td>{{ run_status(r.status) }}</td>
+        <td>
+          {% if checks %}
+            <span class="num">{{ checks | selectattr('ok') | list | length }} / {{ checks | length }}</span>
+            {% for c in checks if not c.ok %}<div class="caption">Step {{ c.step }}: {{ c.type|check_label }}</div>{% endfor %}
+          {% elif (r.detail or {}).get('reason') %}
+            <span class="caption">{{ r.detail.reason }}</span>
+          {% else %}<span class="caption">—</span>{% endif %}
+        </td>
+        <td class="caption nowrap" title="{{ r.started_at|stamp }}">{{ r.started_at|when }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state compact"><p>No voice checks have run yet. Press <strong>Run</strong> on a check below.</p></div>
+  {% endif %}
+</section>
+
+<section class="section">
+  <h2>Checks</h2>
+  {% if scenarios %}
+  <div class="table-wrap mt-s">
+  <table class="table">
+    <thead><tr><th>Check</th><th>Agent type</th><th>Language</th><th class="num">Steps</th><th><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+      {% for s in scenarios %}
+      <tr>
+        <td>
+          {{ s.title or (s.slug|humanize) }}{% if not s.enabled %} {{ chip('Off', 'neutral') }}{% endif %}
+          <div class="technical">{{ s.slug }}</div>
+        </td>
+        <td>{{ s.agent_kind|humanize }}</td>
+        <td>{{ {'en': 'English', 'ar': 'Arabic'}.get(s.locale or '', s.locale or '—') }}</td>
+        <td class="num">{{ s.steps | length }}</td>
+        <td>
+          <div class="row end nowrap">
+            <form method="post" action="/admin/voice-scenarios/{{ s.slug }}/run" class="inline-form" id="run-{{ loop.index }}">
+              <button type="submit" class="small" {% if not s.enabled %}disabled{% endif %}>Run</button>
+            </form>
+            <form method="post" action="/admin/voice-scenarios/{{ s.slug }}/delete" class="inline-form"
+                  onsubmit="return confirm('Delete this voice check? A starter check comes back only when the service restarts; checks you wrote are gone for good.');">
+              <button type="submit" class="small ghost danger-text">Delete</button>
+            </form>
+          </div>
+          <details class="advanced mt-xs">
+            <summary>Run against another server</summary>
+            <div class="stack-s mt-s">
+              <label class="field">Address
+                <input type="text" name="target" form="run-{{ loop.index }}" placeholder="wss://demo-vm/voice/live (blank = this engine)">
+              </label>
+              <label class="field">Headers (JSON)
+                <textarea name="headers_json" form="run-{{ loop.index }}" rows="2" class="code-block" placeholder='{"Cookie": "..."}'></textarea>
+                <span class="hint">Sent with the call and with every follow-up check — for a login cookie or another secret you don't want stored on the check.</span>
+              </label>
+              <button type="submit" form="run-{{ loop.index }}" class="small" {% if not s.enabled %}disabled{% endif %}>Run there</button>
+            </div>
+          </details>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><p>No voice checks. The starter set is added when the service starts — restart it to add them back, or create one.</p></div>
+  {% endif %}
+  <details class="advanced mt-m">
+    <summary>Technical notes</summary>
+    <p class="caption mt-s">Calls go to <code>WS /voice/live</code>; the simulated caller's speech is synthesised with Azure Speech, so this service needs <code>AZURE_SPEECH_KEY</code>. Starter checks are seeded by <code>admin.seed_voice_scenarios</code>.</p>
+  </details>
+</section>
+
+<dialog id="voice-form-dialog" class="drawer wide" aria-labelledby="voice-form-title">
+  <form method="post" action="/admin/voice-scenarios" class="drawer-body stack-m">
+    <div class="row between">
+      <h2 id="voice-form-title" class="mb-0">New voice check</h2>
+      <button type="button" class="ghost icon-btn" data-close-voice-form aria-label="Close">&times;</button>
+    </div>
+    <p class="caption">Saving with the name of an existing check replaces it.</p>
+    <div class="settings-grid">
+      <label class="field">Title<input type="text" name="title" placeholder="e.g. Caller books a haircut"></label>
+      <label class="field">Name (technical)<input type="text" name="slug" required placeholder="e.g. book_haircut_en"></label>
+      <label class="field">Agent type<input type="text" name="agent_kind" required placeholder="e.g. agents_support"></label>
+      <label class="field">Language<input type="text" name="locale" placeholder="en or ar"></label>
+    </div>
+    <label class="field">Steps (JSON)
+      <textarea name="steps" class="code-block" rows="8"
+                placeholder='[{"type": "say", "text": "..."}, {"type": "expect_transcript", "role": "assistant", "pattern": "..."}]'>[]</textarea>
+      <span class="hint">Step types: say, expect_transcript, expect_frame, http_check, wait — see <a href="/admin/docs/test">the testing guide</a>.</span>
+    </label>
+    <details class="advanced">
+      <summary>Advanced</summary>
+      <div class="stack-m mt-s">
+        <label class="field">Call path<input type="text" name="ws_path" value="/voice/live"></label>
+        <label class="field">Notes<input type="text" name="notes"></label>
+      </div>
+    </details>
+    <label class="checkbox"><input type="checkbox" name="enabled" value="1" checked> On</label>
+    <div class="row">
+      <button type="submit" class="primary">Save voice check</button>
+      <button type="button" class="ghost" data-close-voice-form>Cancel</button>
+    </div>
+  </form>
+</dialog>
+<script>
+(function () {
+  var dlg = document.getElementById('voice-form-dialog');
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-open-voice-form]')) { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); }
+    if (e.target.closest('[data-close-voice-form]')) dlg.close();
+  });
+})();
+</script>
+{% endblock %}

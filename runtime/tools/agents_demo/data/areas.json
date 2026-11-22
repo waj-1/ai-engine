@@ -1,0 +1,47 @@
+{
+  "areas": {
+    "dxb-barsha":   {"country": "AE", "city_en": "Dubai", "city_ar": "دبي", "name_en": "Al Barsha", "name_ar": "البرشاء", "aliases": ["barsha", "al barsha", "البرشا", "البرشاء"], "fiber": true, "wireless_5g": true},
+    "dxb-jvc":      {"country": "AE", "city_en": "Dubai", "city_ar": "دبي", "name_en": "Jumeirah Village Circle", "name_ar": "قرية جميرا الدائرية", "aliases": ["jvc", "jumeirah village", "jumeirah village circle", "قرية جميرا", "جي في سي"], "fiber": true, "wireless_5g": true},
+    "dxb-marina":   {"country": "AE", "city_en": "Dubai", "city_ar": "دبي", "name_en": "Dubai Marina", "name_ar": "دبي مارينا", "aliases": ["marina", "dubai marina", "مارينا", "دبي مارينا"], "fiber": true, "wireless_5g": true},
+    "dxb-mirdif":   {"country": "AE", "city_en": "Dubai", "city_ar": "دبي", "name_en": "Mirdif", "name_ar": "مردف", "aliases": ["mirdif", "mirdiff", "مردف"], "fiber": true, "wireless_5g": true},
+    "dxb-south":    {"country": "AE", "city_en": "Dubai", "city_ar": "دبي", "name_en": "Dubai South", "name_ar": "دبي الجنوب", "aliases": ["dubai south", "دبي الجنوب", "دبي ساوث"], "fiber": false, "wireless_5g": true, "fiber_planned_en": "first quarter of 2027", "fiber_planned_ar": "الربع الأول من 2027"},
+    "auh-khalifa":  {"country": "AE", "city_en": "Abu Dhabi", "city_ar": "أبوظبي", "name_en": "Khalifa City", "name_ar": "مدينة خليفة", "aliases": ["khalifa city", "khalifa", "مدينة خليفة"], "fiber": true, "wireless_5g": true},
+    "auh-reem":     {"country": "AE", "city_en": "Abu Dhabi", "city_ar": "أبوظبي", "name_en": "Al Reem Island", "name_ar": "جزيرة الريم", "aliases": ["reem island", "al reem", "reem", "جزيرة الريم", "الريم"], "fiber": true, "wireless_5g": true},
+    "shj-nahda":    {"country": "AE", "city_en": "Sharjah", "city_ar": "الشارقة", "name_en": "Al Nahda", "name_ar": "النهدة", "aliases": ["nahda", "al nahda", "النهدة"], "fiber": true, "wireless_5g": true},
+    "shj-majaz":    {"country": "AE", "city_en": "Sharjah", "city_ar": "الشارقة", "name_en": "Al Majaz", "name_ar": "المجاز", "aliases": ["majaz", "al majaz", "المجاز"], "fiber": false, "wireless_5g": true, "fiber_planned_en": "no date announced yet", "fiber_planned_ar": "لا يوجد موعد معلن حتى الآن"},
+    "ruh-malqa":    {"country": "SA", "city_en": "Riyadh", "city_ar": "الرياض", "name_en": "Al Malqa", "name_ar": "الملقا", "aliases": ["malqa", "al malqa", "الملقا"], "fiber": true, "wireless_5g": true},
+    "ruh-narjis":   {"country": "SA", "city_en": "Riyadh", "city_ar": "الرياض", "name_en": "Al Narjis", "name_ar": "النرجس", "aliases": ["narjis", "al narjis", "النرجس"], "fiber": false, "wireless_5g": true, "fiber_planned_en": "second quarter of 2027", "fiber_planned_ar": "الربع الثاني من 2027"},
+    "ruh-olaya":    {"country": "SA", "city_en": "Riyadh", "city_ar": "الرياض", "name_en": "Al Olaya", "name_ar": "العليا", "aliases": ["olaya", "al olaya", "العليا"], "fiber": true, "wireless_5g": true},
+    "jed-rawdah":   {"country": "SA", "city_en": "Jeddah", "city_ar": "جدة", "name_en": "Al Rawdah", "name_ar": "الروضة", "aliases": ["rawdah", "al rawdah", "rawda", "الروضة"], "fiber": true, "wireless_5g": true},
+    "jed-obhur":    {"country": "SA", "city_en": "Jeddah", "city_ar": "جدة", "name_en": "Obhur", "name_ar": "أبحر", "aliases": ["obhur", "abhur", "أبحر", "ابحر"], "fiber": false, "wireless_5g": true, "fiber_planned_en": "no date announced yet", "fiber_planned_ar": "لا يوجد موعد معلن حتى الآن"},
+    "dmm-faisaliyah": {"country": "SA", "city_en": "Dammam", "city_ar": "الدمام", "name_en": "Al Faisaliyah", "name_ar": "الفيصلية", "aliases": ["faisaliyah", "al faisaliyah", "الفيصلية"], "fiber": true, "wireless_5g": true},
+    "khb-ulaya":    {"country": "SA", "city_en": "Al Khobar", "city_ar": "الخبر", "name_en": "Al Ulaya", "name_ar": "العليا (الخبر)", "aliases": ["ulaya", "al ulaya", "khobar", "al khobar", "الخبر"], "fiber": true, "wireless_5g": true}
+  },
+  "outages": [
+    {
+      "id": "OUT-4471",
+      "area_id": "dxb-barsha",
+      "service": "home_fiber",
+      "summary_en": "Fiber cable cut during roadworks — home internet down for part of Al Barsha.",
+      "summary_ar": "انقطاع كيبل فايبر بسبب أعمال طرق — الإنترنت المنزلي مقطوع في جزء من البرشاء.",
+      "started_en": "this morning at 8:10", "started_ar": "اليوم الصبح الساعة 8:10",
+      "eta_en": "today by 6 pm", "eta_ar": "اليوم قبل الساعة 6 المغرب",
+      "status": "engineers on site"
+    },
+    {
+      "id": "OUT-4479",
+      "area_id": "jed-rawdah",
+      "service": "mobile_data",
+      "summary_en": "Planned mobile-data maintenance in Al Rawdah — slower mobile data overnight.",
+      "summary_ar": "صيانة مجدولة لبيانات الجوال في الروضة — بيانات الجوال أبطأ خلال الليل.",
+      "started_en": "tonight at 1 am", "started_ar": "الليلة الساعة 1 بعد منتصف الليل",
+      "eta_en": "tonight by 4 am", "eta_ar": "الليلة قبل الساعة 4 الفجر",
+      "status": "planned"
+    }
+  ],
+  "technician_windows": [
+    {"code": "AM", "en": "9 am to 12 noon", "ar": "من 9 الصبح إلى 12 الظهر"},
+    {"code": "PM", "en": "1 pm to 4 pm", "ar": "من 1 الظهر إلى 4 العصر"},
+    {"code": "EV", "en": "4 pm to 7 pm", "ar": "من 4 العصر إلى 7 المغرب"}
+  ]
+}

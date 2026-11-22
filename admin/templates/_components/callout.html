@@ -1,0 +1,66 @@
+{# admin/templates/_components/callout.html — sanctioned help/warning surfaces.
+   alert(kind)    block callout; kinds: info|success|warning|error
+                  Always block-call: {% call alert('warning') %}…{% endcall %}
+
+   hint()         block form — {% call hint() %}…<code>x</code>…{% endcall %}
+   hint_text(t)   plain-text convenience — {{ hint_text('Applies only to…') }}
+                  (auto-escaped; no markup injection)
+
+   info()         block form — {% call info() %}…<strong>x</strong>…{% endcall %}
+                  Renders an ⓘ expandable popover.
+   info_text(t)   plain-text convenience — {{ info_text('Long explanation…') }}
+
+   Note: multiple popovers can be open simultaneously — this is a deliberate
+   trade-off of using native <details> with no auto-close JS.
+
+   Usage:
+       {% from "_components/callout.html" import alert, hint, hint_text, info, info_text %}
+       {% call alert('warning') %}<strong>Heads up:</strong> this cannot be undone.{% endcall %}
+       {% call hint() %}Applies only to the <code>current</code> environment.{% endcall %}
+       {{ hint_text('Applies only to the current environment.') }}
+       {% call info() %}Long explanation of what this field does and <strong>why</strong> it exists.{% endcall %}
+       {{ info_text('Long explanation of what this field does and why it exists.') }}
+#}
+
+{% macro alert(kind='info') -%}
+<div class="alert alert-{{ kind }}"{% if kind in ('warning','error') %} role="alert"{% endif %}>
+  <span class="alert-icon">
+    {%- if kind == 'success' -%}
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+    {%- elif kind == 'warning' -%}
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4m0 4h.01"/></svg>
+    {%- elif kind == 'error' -%}
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6m0-6 6 6"/></svg>
+    {%- else -%}
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+    {%- endif -%}
+  </span>
+  <div class="alert-body">{{ caller() }}</div>
+</div>
+{%- endmacro %}
+
+{# hint: block form for markup — {% call hint() %}…<code>x</code>…{% endcall %} #}
+{% macro hint() -%}
+<p class="hint">{{ caller() }}</p>
+{%- endmacro %}
+
+{# hint_text: plain-text convenience form (auto-escaped) #}
+{% macro hint_text(text) -%}
+<p class="hint">{{ text }}</p>
+{%- endmacro %}
+
+{# info: block form for markup — {% call info() %}…<strong>x</strong>…{% endcall %} #}
+{% macro info() -%}
+<details class="info-pop">
+  <summary aria-label="More info">ⓘ</summary>
+  <div class="info-pop-body">{{ caller() }}</div>
+</details>
+{%- endmacro %}
+
+{# info_text: plain-text convenience form (auto-escaped) #}
+{% macro info_text(text) -%}
+<details class="info-pop">
+  <summary aria-label="More info">ⓘ</summary>
+  <div class="info-pop-body">{{ text }}</div>
+</details>
+{%- endmacro %}

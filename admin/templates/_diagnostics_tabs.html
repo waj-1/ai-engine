@@ -1,0 +1,9 @@
+{# admin/templates/_diagnostics_tabs.html — in-page strip for Settings › Diagnostics.
+   Context key: `diag_tab` ('drift' | 'runtime' | 'telemetry' | 'jobs').
+   Engineering tests are listed on the Settings hub; they keep living on their
+   own screen. #}
+{% from "_components/tabs.html" import tabs %}
+{{ tabs([('drift', 'Config drift', '/admin/drift'),
+         ('runtime', 'Runtime environment', '/admin/diagnostics/runtime'),
+         ('telemetry', 'Telemetry check', '/admin/lmnr/diagnose'),
+         ('jobs', 'Background jobs', '/admin/jobs')], diag_tab) }}

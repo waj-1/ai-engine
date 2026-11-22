@@ -1,0 +1,71 @@
+{# Searchable, selected-first tool picker shared by Create bundle and the
+   bundle detail page. Needs `tools` (picker rows) and `checked` (set of
+   tool ids). Checkboxes are named member_tool_ids; their DOM order (Selected
+   first, in tick order) is the bundle's saved order. #}
+  <fieldset class="field-set">
+    <legend>Tools in this bundle</legend>
+    <div class="caption mb-s">Selected tools <span id="picked-count" class="num">(0)</span> &mdash; listed in the order the agent sees them.</div>
+    <div id="picked" class="group-list" style="border:1px solid var(--border);border-radius:var(--radius-card);min-height:44px;">
+      <p class="caption" id="picked-empty" style="margin:0;padding:var(--space-s) var(--space-sm);">Nothing selected yet &mdash; tick tools below.</p>
+      {% for t in (picked_tools if picked_tools is defined and picked_tools else (tools|selectattr('tool_id', 'in', checked)|list)) %}{% include "_mcp_pick_row.html" %}{% endfor %}
+    </div>
+
+    <div class="filter-row mt-m">
+      <input type="search" id="pick-search" placeholder="Search tools…" aria-label="Search tools">
+      <select id="pick-agent" aria-label="Agent">
+        <option value="">All agents</option>
+        {% for k in tools|map(attribute='agent_kind')|select|unique|sort %}<option value="{{ k }}">{{ agent_label(k) }}</option>{% endfor %}
+      </select>
+      <span class="caption num" id="pick-count" style="margin-left:auto;"></span>
+    </div>
+    <div id="pool" style="max-height:440px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-card);">
+      {% for t in tools if t.tool_id not in checked %}{% include "_mcp_pick_row.html" %}{% else %}
+      {% if not tools %}<div class="empty-state">No tools registered yet.</div>{% endif %}
+      {% endfor %}
+    </div>
+  </fieldset>
+<script>
+(function () {
+  const picked = document.getElementById('picked');
+  const pool = document.getElementById('pool');
+  const empty = document.getElementById('picked-empty');
+  const pc = document.getElementById('picked-count');
+  const q = document.getElementById('pick-search');
+  const agent = document.getElementById('pick-agent');
+  const cnt = document.getElementById('pick-count');
+  if (!picked || !pool) return;
+  const order = Array.from(document.querySelectorAll('[data-pick]'));  // original pool order
+  function refresh() {
+    const n = picked.querySelectorAll('[data-pick]').length;
+    pc.textContent = '(' + n + ')';
+    empty.hidden = n > 0;
+    const term = (q.value || '').trim().toLowerCase();
+    let shown = 0;
+    pool.querySelectorAll('[data-pick]').forEach(function (row) {
+      const ok = (!term || row.dataset.search.indexOf(term) !== -1)
+        && (!agent.value || row.dataset.agent === agent.value);
+      row.hidden = !ok;
+      if (ok) shown += 1;
+    });
+    cnt.textContent = shown + ' shown';
+  }
+  document.addEventListener('change', function (e) {
+    const box = e.target;
+    if (!box.matches || !box.matches('[data-pick] input[type=checkbox]')) return;
+    const row = box.closest('[data-pick]');
+    if (box.checked) {
+      picked.appendChild(row);
+    } else {
+      // back into the pool at its original position
+      const idx = order.indexOf(row);
+      const next = order.slice(idx + 1).find(function (r) { return r.parentElement === pool; });
+      pool.insertBefore(row, next || null);
+    }
+    row.hidden = false;
+    refresh();
+  });
+  q.addEventListener('input', refresh);
+  agent.addEventListener('change', refresh);
+  refresh();
+})();
+</script>

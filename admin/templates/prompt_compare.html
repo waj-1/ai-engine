@@ -1,0 +1,135 @@
+{% extends "_base.html" %}
+{% from "_components/business_picker.html" import business_picker %}
+{% from "_components/callout.html" import hint_text %}
+{% block title %}Prompt A/B compare · {{ brand().title }}{% endblock %}
+{% block page_title %}Prompt A/B compare{% endblock %}
+{% block page_subtitle %}
+  {{ prompt.agent_kind }} · {{ prompt.slug }} — launch two parallel runs of one suite, each pinned to a different prompt version.
+{% endblock %}
+{% block content %}
+{# Back to the agent this was opened from (its Instructions tab) when the
+   link carried profile_id; the kind-level list otherwise. #}
+{% set back_pid = request.query_params.get('profile_id') %}
+{% if back_pid %}
+<a href="/admin/agents?env={{ current_env }}&profile_id={{ back_pid|urlencode }}&tab=instructions" class="caption">&larr; back to the agent's instructions</a>
+{% else %}
+<a href="/admin/agents?env={{ current_env }}&kind={{ prompt.agent_kind }}" class="caption">&larr; back to agents</a>
+{% endif %}
+
+<div class="card" style="margin-top:var(--space-m);">
+  <h2>Launch A/B run</h2>
+  {{ hint_text('Launches two parallel runs — one per prompt version — and opens the compare page automatically.') }}
+
+  <form method="post"
+        action="/admin/prompts/{{ prompt.prompt_id }}/compare?env={{ current_env }}"
+        style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-m);">
+
+    <label style="grid-column:1/-1;">
+      <span class="eyebrow">Suite</span>
+      <select name="suite_id" required style="width:100%;">
+        <option value="">— pick an eval suite —</option>
+        {% for s in suites %}
+        <option value="{{ s.suite_id }}">
+          {{ s.name }} · pass {{ s.pass_threshold or 0.7 }}{% if not s.is_active %} · inactive{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label style="grid-column:1/-1;">
+      <span class="eyebrow">Profile</span>
+      <select name="profile_id" required style="width:100%;">
+        <option value="">— pick a profile (determines endpoint) —</option>
+        {% for p in profiles %}
+        <option value="{{ p.profile_id }}">
+          {{ p.slug }} · {{ p.environment }}{% if p.endpoint_path %} · {{ p.endpoint_path }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span class="eyebrow">Version A</span>
+      <select name="version_a" required style="width:100%;">
+        <option value="">— pick a version —</option>
+        {% for v in versions %}
+        <option value="{{ v.version_number }}">
+          v{{ v.version_number }}{% if v.is_active %} (active){% endif %} · {{ (v.created_at or '')[:10] }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span class="eyebrow">Version B</span>
+      <select name="version_b" required style="width:100%;">
+        <option value="">— pick a version —</option>
+        {% for v in versions %}
+        <option value="{{ v.version_number }}"
+                {% if active_version_number is not none and v.version_number == active_version_number %}selected{% endif %}>
+          v{{ v.version_number }}{% if v.is_active %} (active){% endif %} · {{ (v.created_at or '')[:10] }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label style="grid-column:1/-1;">
+      <span class="eyebrow">Business</span>
+      {{ business_picker(
+        name="ctx_business_id",
+        businesses=businesses,
+        selected_id="",
+        required=False,
+        placeholder="— optional · falls back to suite default_context —",
+        style="width:100%;",
+      ) }}
+    </label>
+
+    <label>
+      <span class="eyebrow">Branch id (optional)</span>
+      <input type="text" name="ctx_branch_id" style="width:100%;" placeholder="uuid"/>
+    </label>
+    <label>
+      <span class="eyebrow">Customer id (optional)</span>
+      <input type="text" name="ctx_customer_id" style="width:100%;" placeholder="uuid"/>
+    </label>
+    {% for key, label, placeholder in eval_context_fields() %}
+    <label>
+      <span class="eyebrow">{{ label }} (optional)</span>
+      <input type="text" name="ctx_{{ key }}" style="width:100%;" placeholder="{{ placeholder }}"/>
+    </label>
+    {% endfor %}
+
+    <label style="grid-column:1/-1;">
+      <span class="eyebrow">Extra context JSON (optional)</span>
+      <textarea name="ctx_json" rows="3" style="width:100%;font-family:var(--font-mono);"
+                placeholder='{"screen_context": {...}, "locale": "en"}'></textarea>
+    </label>
+
+    <div style="grid-column:1/-1;">
+      <button type="submit" class="primary">Launch A/B &rarr;</button>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:var(--space-m);">
+  <h2>Prompt versions in scope</h2>
+  {% if versions %}
+  <table class="form-table">
+    <thead><tr><th>Version</th><th>Created</th><th>Active</th><th>Notes</th></tr></thead>
+    <tbody>
+      {% for v in versions %}
+      <tr>
+        <td class="num">v{{ v.version_number }}</td>
+        <td class="caption">{{ (v.created_at or '')[:19] }}</td>
+        <td class="caption">{% if v.is_active %}yes{% else %}—{% endif %}</td>
+        <td class="caption">{{ (v.notes or '')|truncate(120) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="caption">No versions for this prompt yet — save at least two versions before launching an A/B.</p>
+  {% endif %}
+</div>
+{% endblock %}

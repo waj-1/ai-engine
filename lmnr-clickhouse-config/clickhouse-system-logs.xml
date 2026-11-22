@@ -1,0 +1,47 @@
+<!--
+  Bound ClickHouse's OWN logging. Mounted into config.d/ by every bundled stack.
+
+  Out of the box ClickHouse writes several internal system log tables with no
+  TTL. On a client demo VM (2026-10-01) each Laminar ClickHouse held ~16 GiB
+  of them (trace_log 8 GiB, text_log 4.8 GiB, metric_log, part_log,
+  asynchronous_metric_log) against ~50 MiB of actual Laminar data. Nothing
+  in this repo or in Laminar reads these tables.
+
+  - The profiling/metrics tables are removed outright.
+  - query_log and error_log are kept for debugging, with a 7-day TTL.
+  - The server's text log files (the *-ch-logs volume) are capped at 3 x 100M.
+
+  Tables already on disk are not dropped by this file: after a config change
+  ClickHouse stops writing to them, but reclaiming the space needs a one-off
+  `DROP TABLE IF EXISTS system.<name>` (see DEPLOY.md).
+-->
+<clickhouse>
+    <logger>
+        <level>warning</level>
+        <size>100M</size>
+        <count>3</count>
+    </logger>
+
+    <trace_log remove="1"/>
+    <text_log remove="1"/>
+    <metric_log remove="1"/>
+    <asynchronous_metric_log remove="1"/>
+    <part_log remove="1"/>
+    <processors_profile_log remove="1"/>
+    <latency_log remove="1"/>
+    <query_metric_log remove="1"/>
+
+    <query_log replace="1">
+        <database>system</database>
+        <table>query_log</table>
+        <engine>ENGINE = MergeTree PARTITION BY event_date ORDER BY event_time TTL event_date + INTERVAL 7 DAY DELETE</engine>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+
+    <error_log replace="1">
+        <database>system</database>
+        <table>error_log</table>
+        <engine>ENGINE = MergeTree PARTITION BY event_date ORDER BY event_time TTL event_date + INTERVAL 7 DAY DELETE</engine>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </error_log>
+</clickhouse>

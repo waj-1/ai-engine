@@ -1,0 +1,4 @@
+{# ai_agent/admin/templates/_components/dot.html #}
+{% macro dot(variant='teal', glow=False) -%}
+<span class="dot dot-{{ variant }}{% if glow %} dot-glow{% endif %}"></span>
+{%- endmacro %}

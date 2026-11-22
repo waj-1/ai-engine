@@ -1,0 +1,7 @@
+{# ai_agent/admin/templates/_components/chip.html #}
+{% macro chip(text, variant='brand', dot=False) -%}
+<span class="chip chip-{{ variant }}">
+  {%- if dot -%}<span class="chip-dot"></span>{%- endif -%}
+  {{ text }}
+</span>
+{%- endmacro %}

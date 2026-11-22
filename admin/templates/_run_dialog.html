@@ -1,0 +1,267 @@
+{# _run_dialog.html — the "Run tests" drawer of the Testing area.
+
+   Replaces the always-open "Run now" form that used to sit above the results
+   on /admin/evals. Same POST contract (/admin/eval-runs/trigger, every field
+   name unchanged); only the layout moved: a drawer opened by any
+   `[data-open-run]` button. A button may pre-select the agent and suite with
+   `data-profile` / `data-suite`; `?run_profile=&run_suite=` on the page URL
+   opens it pre-filled (used by the Overview cards and the suite page).
+
+   Context: profiles, suites, models, businesses, agent_kinds,
+   default_expectations, default_expectations_by_kind,
+   profile_versions_by_profile (build_eval_runs_context). #}
+<dialog id="run-dialog" class="drawer" aria-labelledby="run-dialog-title">
+  <form method="post" action="/admin/eval-runs/trigger" class="drawer-body stack-m" id="run-form">
+    <div class="row between">
+      <h2 id="run-dialog-title" class="mb-0">Run tests</h2>
+      <button type="button" class="ghost icon-btn" data-close-run aria-label="Close">&times;</button>
+    </div>
+
+    <fieldset class="field">
+      <legend>What to test</legend>
+      <div class="segmented" role="radiogroup">
+        <label><input type="radio" name="source" value="suite" checked> A test suite</label>
+        <label><input type="radio" name="source" value="live_chats"> Real conversations</label>
+      </div>
+      <p class="hint" data-mode="suite">Replays the suite's prepared cases and checks every answer.</p>
+      <p class="hint" data-mode="live_chats">Picks recent real conversations and has a judge model grade the replies.</p>
+    </fieldset>
+
+    <label class="field">Agent
+      <select name="profile_id" id="trigger-profile" required>
+        <option value="" disabled selected>Choose an agent</option>
+        {% for p in profiles %}
+        <option value="{{ p.profile_id }}" data-kind="{{ p.agent_kind }}" data-slug="{{ p.slug or '' }}">{{ p.display_name }}{% if p.environment %} · {{ p.environment }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+
+    {# --- Suite-only fields --- #}
+    <div data-mode="suite" class="stack-m">
+      <label class="field">Test suite
+        <select name="suite_id" id="trigger-suite">
+          <option value="" disabled selected>Choose a test suite</option>
+          {% for s in suites %}
+          <option value="{{ s.suite_id }}" data-profile="{{ s.profile_id or '' }}" data-kind="{{ s.agent_kind or '' }}">{{ s.name|humanize }}</option>
+          {% endfor %}
+        </select>
+        <span class="hint" id="trigger-suite-hint" hidden>Showing the suites linked to this agent.</span>
+      </label>
+
+    </div>
+
+    <label class="field">Business (optional)
+      <select name="business_id">
+        <option value="">Any / the suite's default</option>
+        {% for b in businesses %}
+        <option value="{{ b.id }}">{{ b.name }}{% if b.subdomain %} ({{ b.subdomain }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <div data-mode="suite">
+      <details class="advanced">
+        <summary>Advanced</summary>
+        <div class="stack-m mt-s">
+          <label class="field">Repeat each case
+            <select name="repeats">
+              <option value="1" selected>Once</option>
+              <option value="3">3 times</option>
+              <option value="5">5 times</option>
+              <option value="10">10 times</option>
+            </select>
+            <span class="hint">Repeating finds flaky cases: a case only counts as reliable when it passes every time. Time and cost grow with each repeat.</span>
+          </label>
+          <label class="field">Cases at a time
+            <select name="concurrency">
+              <option value="" selected>Default (the suite's setting, else 4)</option>
+              <option value="1">1 — one after another</option>
+              <option value="2">2</option>
+              <option value="4">4</option>
+              <option value="8">8</option>
+            </select>
+            <span class="hint">How many cases run at once. Pick 1 when cases write to the same test customer and must not overlap. Voice-call suites always run one at a time.</span>
+          </label>
+          <label class="field">Voice calls
+            <select name="voice_mode">
+              <option value="">Suite default (simulated)</option>
+              <option value="sim">Simulated — free</option>
+              <option value="live">Real call — billable</option>
+            </select>
+            <span class="hint">Only for suites that place voice calls. Schedules and model comparisons always use simulated calls.</span>
+          </label>
+          <label class="field">Model
+            <select name="model_id">
+              <option value="">The agent's own model</option>
+              {% for m in models %}
+              <option value="{{ m.model_id }}">{{ m.name }}{% if m.provider %} ({{ m.provider }}){% endif %}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="field">Agent version
+            <select name="profile_version_id" id="trigger-profile-version">
+              <option value="">Current settings</option>
+            </select>
+            <span class="hint">Test a published version instead of the current settings. Needs a judge model on the suite.</span>
+          </label>
+          <div class="field-grid">
+            <label class="field">Temperature
+              <input type="number" step="0.05" name="temperature" placeholder="default"></label>
+            <label class="field">Max output tokens
+              <input type="number" name="max_output_tokens" placeholder="default"></label>
+            <label class="field">Top-p
+              <input type="number" step="0.05" name="top_p" placeholder="default"></label>
+            <label class="field">Thinking level
+              <select name="thinking_level">
+                <option value="">Model default</option>
+                <option value="minimal">Minimal</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select></label>
+            <label class="field">Thinking budget
+              <input type="number" step="1" min="0" name="thinking_budget" placeholder="0 = off"></label>
+          </div>
+          <span class="hint">Thinking settings apply to Gemini models only; level wins over budget.</span>
+          <label class="field">Prompt versions to use
+            <input name="prompt_overrides_json" placeholder='{"support/system": 3}'>
+            <span class="hint">Technical: JSON map of prompt name to version number.</span>
+          </label>
+          <label class="field">Label for this run
+            <input name="variant_label" placeholder="e.g. Gemini Flash · prompt v3">
+            <span class="hint">Shown in the runs list and comparisons.</span>
+          </label>
+        </div>
+      </details>
+    </div>
+
+    {# --- Live-chat-only fields --- #}
+    <div data-mode="live_chats" class="stack-m" hidden>
+      <label class="field">Agent type
+        <select name="agent_kind" id="trigger-agent-kind">
+          <option value="" disabled selected>Choose the agent type</option>
+          {% for k in agent_kinds %}
+          <option value="{{ k }}">{{ k|humanize }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="field-grid">
+        <label class="field">From the last (days)
+          <input type="number" name="lookback_days" value="30" min="1" max="365"></label>
+        <label class="field">Conversations to grade
+          <input type="number" name="sample_size" value="10" min="1" max="100"></label>
+      </div>
+      <label class="field">Judge model
+        <select name="judge_model" required>
+          <option value="" disabled selected>Choose a judge model</option>
+          {% for m in models %}
+          <option value="{{ m.name }}">{{ m.name }}{% if m.provider %} ({{ m.provider }}){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field">What a good reply looks like
+        <textarea name="expectations" id="trigger-expectations" required rows="4"
+          placeholder="What a good response must satisfy…">{{ default_expectations }}</textarea>
+      </label>
+    </div>
+
+
+    <div class="row">
+      <button type="submit" class="primary">Start run</button>
+      <button type="button" class="ghost" data-close-run>Cancel</button>
+    </div>
+  </form>
+  <script type="application/json" id="profile-versions-data">{{ profile_versions_by_profile | tojson }}</script>
+  <script type="application/json" id="default-expectations-by-kind">{{ default_expectations_by_kind | tojson }}</script>
+</dialog>
+
+<script>
+(function () {
+  var dlg = document.getElementById('run-dialog');
+  if (!dlg) return;
+  var form = document.getElementById('run-form');
+  var profileSel = document.getElementById('trigger-profile');
+  var suiteSel = document.getElementById('trigger-suite');
+  var suiteHint = document.getElementById('trigger-suite-hint');
+  var versionSel = document.getElementById('trigger-profile-version');
+
+  // Suite vs real-conversation fields. The inactive mode's controls are
+  // disabled, otherwise a hidden `required` field silently blocks submit.
+  function syncMode() {
+    var mode = (form.querySelector('input[name="source"]:checked') || {}).value || 'suite';
+    form.querySelectorAll('[data-mode]').forEach(function (el) {
+      var on = el.getAttribute('data-mode') === mode;
+      el.hidden = !on;
+      el.querySelectorAll('input, select, textarea').forEach(function (f) { f.disabled = !on; });
+    });
+  }
+  form.querySelectorAll('input[name="source"]').forEach(function (r) { r.addEventListener('change', syncMode); });
+
+  // Only offer the suites linked to the chosen agent (same agent across
+  // environments = same type + slug); unlinked suites stay available.
+  var profileOpts = {};
+  Array.prototype.forEach.call(profileSel.options, function (o) {
+    if (o.value) profileOpts[o.value] = { kind: o.getAttribute('data-kind'), slug: o.getAttribute('data-slug') };
+  });
+  function sameAgent(a, b) {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    var pa = profileOpts[a], pb = profileOpts[b];
+    return !!(pa && pb && pa.kind === pb.kind && pa.slug && pa.slug === pb.slug);
+  }
+  function syncSuites() {
+    var pid = profileSel.value, linked = 0;
+    Array.prototype.forEach.call(suiteSel.options, function (o) {
+      if (!o.value) return;
+      var sp = o.getAttribute('data-profile');
+      var show = !pid || !sp || sameAgent(pid, sp);
+      if (pid && profileOpts[pid] && !sp) show = o.getAttribute('data-kind') === profileOpts[pid].kind;
+      if (show && sp) linked++;
+      o.hidden = !show; o.disabled = !show;
+    });
+    if (suiteSel.selectedOptions[0] && suiteSel.selectedOptions[0].disabled) suiteSel.value = '';
+    if (suiteHint) suiteHint.hidden = !pid || !linked;
+  }
+  var versionsByProfile = {};
+  try { versionsByProfile = JSON.parse(document.getElementById('profile-versions-data').textContent || '{}') || {}; } catch (e) {}
+  function syncVersions() {
+    var versions = versionsByProfile[profileSel.value] || [];
+    versionSel.innerHTML = '<option value="">Current settings</option>';
+    versions.forEach(function (v) {
+      var opt = document.createElement('option');
+      opt.value = v.version_id;
+      opt.textContent = 'Version ' + v.version_number + (v.promoted_at ? ' — published ' + String(v.promoted_at).slice(0, 10) : '');
+      versionSel.appendChild(opt);
+    });
+  }
+  profileSel.addEventListener('change', function () { syncSuites(); syncVersions(); });
+
+  // Agent type -> default expectations, unless the operator typed their own.
+  var expByKind = {};
+  try { expByKind = JSON.parse(document.getElementById('default-expectations-by-kind').textContent || '{}') || {}; } catch (e) {}
+  var kindSel = document.getElementById('trigger-agent-kind');
+  var expEl = document.getElementById('trigger-expectations');
+  var expEdited = false;
+  if (expEl) expEl.addEventListener('input', function () { expEdited = true; });
+  if (kindSel) kindSel.addEventListener('change', function () {
+    if (!expEdited && expByKind[kindSel.value]) expEl.value = expByKind[kindSel.value];
+  });
+
+  function open(profile, suite) {
+    if (profile) { profileSel.value = profile; }
+    syncSuites(); syncVersions();
+    if (suite) { suiteSel.value = suite; }
+    syncMode();
+    if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-open-run]');
+    if (b) { e.preventDefault(); open(b.getAttribute('data-profile'), b.getAttribute('data-suite')); }
+    if (e.target.closest('[data-close-run]')) dlg.close();
+  });
+  syncMode(); syncSuites();
+  var qp = new URLSearchParams(location.search);
+  if (qp.has('run_profile') || qp.has('run_suite')) open(qp.get('run_profile'), qp.get('run_suite'));
+})();
+</script>

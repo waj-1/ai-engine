@@ -1,0 +1,101 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% block title %}Activity · {{ brand().title }}{% endblock %}
+{% block page_title %}Activity{% endblock %}
+{% block page_subtitle %}Who changed what, and when.{% endblock %}
+{% macro qs(who_=who, what_=what, when_=when, page_=None, et_=entity_type) -%}
+?{% if who_ %}who={{ who_|urlencode }}&{% endif %}{% if what_ %}what={{ what_ }}&{% endif %}{% if when_ %}when={{ when_ }}&{% endif %}{% if et_ %}entity_type={{ et_|urlencode }}&{% endif %}{% if page_ %}page={{ page_ }}{% endif %}
+{%- endmacro %}
+{% block content %}
+
+<div class="page-head">
+  <div class="filter-groups" role="group" aria-label="Filter activity">
+    <div class="filter-group">
+      <span class="filter-label">Who</span>
+      {% for key, label in who_chips %}
+      <a class="filter-chip" href="{{ qs(who_=key) }}" aria-pressed="{{ 'true' if who == key else 'false' }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">What</span>
+      {% for key, label in what_chips %}
+      <a class="filter-chip" href="{{ qs(what_=key) }}" aria-pressed="{{ 'true' if what == key else 'false' }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">When</span>
+      {% for key, label in when_chips %}
+      <a class="filter-chip" href="{{ qs(when_=key) }}" aria-pressed="{{ 'true' if when == key else 'false' }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    {% if entity_type %}
+    <div class="filter-group">
+      <span class="filter-label">Type</span>
+      <span class="filter-chip" aria-pressed="true"><span class="technical">{{ entity_type }}</span></span>
+      <a class="caption" href="{{ qs(et_='') }}">Clear</a>
+    </div>
+    {% endif %}
+  </div>
+  {% if not partner_build() %}
+  <div class="page-head-actions">
+    <details class="menu">
+      <summary class="btn ghost" aria-label="More actions" title="More actions">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+      </summary>
+      <div class="menu-list" role="menu">
+        <a role="menuitem" href="{{ qs() }}format=json" download="activity.json">Export (JSON)</a>
+        <form method="post" action="/admin/audit/verify">
+          <button type="submit" role="menuitem" title="Record a check that this log is being written">Verify log replica</button>
+        </form>
+      </div>
+    </details>
+  </div>
+  {% endif %}
+</div>
+
+{% if items %}
+<ul class="activity-list">
+  {% for i in items %}
+  <li class="activity-row">
+    <span class="activity-avatar{% if i.actor.is_system %} is-system{% endif %}" aria-hidden="true">{{ i.actor.initial }}</span>
+    <div class="activity-body">
+      <div class="activity-sentence">
+        <strong>{% if i.actor.is_me %}You{% else %}{{ i.actor.label }}{% endif %}</strong>
+        {{ i.verb }}{% if i.noun %} {{ i.noun }}{% endif %}
+        {% if i.name %}{% if i.href %}<a href="{{ i.href }}">{{ i.name }}</a>{% else %}<span class="activity-entity">{{ i.name }}</span>{% endif %}{% endif %}
+        {% if i.suffix %}<span class="activity-suffix">{{ i.suffix }}</span>{% endif %}
+        {% if i.is_override %}{{ chip('Override', variant='warn') }}{% endif %}
+      </div>
+      <div class="activity-meta caption">
+        <span title="{{ i.when_full }}">{{ i.when }}</span>
+        {% if i.changed %}· {{ i.changed|length }} field{{ '' if i.changed|length == 1 else 's' }}{% endif %}
+        {% if i.reason %}· “{{ i.reason }}”{% endif %}
+        · <a href="/admin/audit/{{ i.audit_id }}">Details</a>
+      </div>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+<nav class="row between mt-m caption" aria-label="Pages">
+  <span>
+    {% set first = (page - 1) * page_size + 1 %}
+    {% if total is not none %}Showing {{ first }}–{{ first + items|length - 1 }} of {{ total }}{% else %}Page {{ page }}{% endif %}
+  </span>
+  <span class="row">
+    {% if page > 1 %}<a class="btn small" href="{{ qs(page_=page - 1) }}">← Newer</a>{% endif %}
+    {% if (total is none and items|length == page_size) or (total is not none and page * page_size < total) %}
+    <a class="btn small" href="{{ qs(page_=page + 1) }}">Older →</a>
+    {% endif %}
+  </span>
+</nav>
+{% else %}
+<div class="empty-state">
+  {% if who or what or when or entity_type %}
+  <p>No activity matches these filters.</p>
+  <a class="btn" href="/admin/audit">Show all activity</a>
+  {% else %}
+  <p>Nothing has been recorded yet. Changes to agents, knowledge and settings appear here.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

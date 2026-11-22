@@ -1,0 +1,120 @@
+{# Served-vs-latest status for the duplex persona (moved verbatim from the old
+   single-scroll agents.html; facts come from admin/_persona_versions.py). #}
+{% from "_components/chip.html" import chip %}
+{% macro persona_version_status(pv) -%}
+{% if pv %}
+{% set kind = 'warning' if (pv.diverged or pv.warns_at_connect or not pv.served_known) else 'info' %}
+<div class="alert alert-{{ kind }}" style="margin-top:var(--space-s);display:block;">
+  <div style="display:flex;gap:var(--space-xs);align-items:center;flex-wrap:wrap;">
+    <strong>Voice persona <code>{{ pv.slug }}</code></strong>
+    {% if pv.served_known %}
+      {{ chip('callers hear v' ~ pv.served.version_number,
+              variant=('warn' if pv.diverged else 'ok'), dot=True) }}
+    {% else %}
+      {{ chip('served version unnamed', variant='warn', dot=True) }}
+    {% endif %}
+    {% if pv.latest %}
+      {{ chip('latest saved: v' ~ pv.latest.version_number,
+              variant=('brand' if pv.diverged else 'ghost')) }}
+    {% endif %}
+  </div>
+
+  {# 1. WHICH TIER resolved it. The four behave differently under
+       promote/rollback, so naming the tier is what makes the next two
+       lines actionable rather than trivia. #}
+  <p class="caption" style="margin-top:var(--space-xs);">
+    {% if pv.tier == 'snapshot' %}
+    Resolved from <strong>{{ pv.parent.display_name }}</strong>'s promoted
+    snapshot{% if pv.snapshot_version_number %} (profile
+    v{{ pv.snapshot_version_number }}{% if pv.snapshot_source == 'pin' %}, pinned as served{% endif %}){% endif %} —
+    the persona text was frozen into it at promote, so callers in
+    <code>{{ pv.environment }}</code> never read the persona rows this page edits.
+    {% elif pv.tier == 'parent_pin' and pv.from_snapshot %}
+    Resolved from the version <strong>pinned inside
+    {{ pv.parent.display_name }}'s promoted snapshot</strong>{% if pv.snapshot_version_number %}
+    (profile v{{ pv.snapshot_version_number }}){% endif %}, read live because that
+    snapshot froze no text for this slug. The id is still frozen config —
+    repointing the live row's pin does not move it.
+    {% elif pv.tier == 'parent_pin' %}
+    Resolved from the pin on <strong>{{ pv.parent.display_name }}</strong>
+    (<code>prompt_version_ids.{{ pv.slug }}</code>) on the live profile row —
+    <code>{{ pv.environment }}</code> serves live rows, not a snapshot.
+    {% elif pv.tier == 'specialist_pin' %}
+    Resolved from a <strong>legacy pin on the specialist</strong>
+    {% if pv.specialist %}{{ pv.specialist.display_name }}{% endif %}. It still
+    resolves, but the parent owns the persona pin: every connect logs a
+    warning naming both rows, and a persona saved on
+    {{ pv.parent.display_name }} loses to this pin until it moves.
+    {% else %}
+    <strong>Nothing pins this persona.</strong> It resolves to the
+    globally-latest <code>{{ pv.slug }}</code> version for this agent kind, so
+    promote and rollback do not govern it at all — every save ships to
+    callers on the next connect, in every environment, and each connect
+    logs a warning.
+    {% endif %}
+  </p>
+
+  {# 2. Does saving reach a caller? Derived from WHICH ROW the serving tier
+       read, never from the environment's name: an unpinned persona is
+       live-on-save even in prod, and a snapshot-frozen one is not, even in
+       staging when a version is pinned as served. #}
+  <p class="caption" style="margin-top:var(--space-xxs);">
+    {% if pv.save_reaches_callers %}
+    <strong>Saved is live here:</strong> a persona save writes a new version,
+    repoints the row that serves it, and reaches callers on the next connect
+    (profile cache ≤60s).
+    {% else %}
+    <strong>Saved is not live here:</strong> a persona save writes a new
+    version and repoints the live row, which this environment does not read.
+    Promote <strong>{{ pv.parent.display_name }}</strong> (More → Promote
+    on that agent's page) to publish it.
+    {% endif %}
+  </p>
+
+  {# 3. The divergence itself, and the one action that closes it. #}
+  {% if pv.diverged %}
+  <p class="caption" style="margin-top:var(--space-xxs);">
+    <strong>Callers are {{ pv.behind_by }} version{{ '' if pv.behind_by == 1 else 's' }} behind
+    the persona shown in the editor below.</strong>
+    {% if not pv.save_reaches_callers %}
+    Promoting publishes v{{ pv.latest.version_number }}; until then callers stay
+    on v{{ pv.served.version_number }}.
+    {% elif pv.tier == 'specialist_pin' %}
+    Open {{ pv.parent.display_name }} and save the persona there — that writes
+    the pin on the parent, which outranks this one.
+    {% else %}
+    Save the persona below to repoint the pin at v{{ pv.latest.version_number }};
+    the pin serves, not the newest row.
+    {% endif %}
+  </p>
+  {% elif pv.tier == 'specialist_pin' %}
+  <p class="caption" style="margin-top:var(--space-xxs);">
+    Open {{ pv.parent.display_name }} and save the persona there to move the
+    pin onto the owner, and the connect warning stops.
+  </p>
+  {% elif pv.tier == 'global_latest' %}
+  <p class="caption" style="margin-top:var(--space-xxs);">
+    Save the persona while viewing <strong>{{ pv.parent.display_name }}</strong>
+    to write the pin (the save repoints the profile being viewed), or run the
+    <code>pin_voice_persona_versions</code> backfill.
+  </p>
+  {% endif %}
+
+  {% if not pv.served_known %}
+  <p class="caption" style="margin-top:var(--space-xxs);">
+    The served version could not be named — the frozen copy carries no
+    version id, or its row is gone from this environment. Treat the text
+    below as unverified against what callers hear.
+  </p>
+  {% endif %}
+
+  {% if not pv.parent_is_active %}
+  <p class="caption" style="margin-top:var(--space-xxs);">
+    <strong>{{ pv.parent.display_name }} is not the active profile</strong> for
+    this agent kind, and the voice edge loads the active one — so this
+    describes the config of a row no caller is on yet.
+  </p>
+  {% endif %}
+</div>
+{% endif %}
+{%- endmacro %}

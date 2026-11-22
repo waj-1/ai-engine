@@ -1,0 +1,88 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% block title %}Team & access · {{ brand().title }}{% endblock %}
+{% block page_title %}Team &amp; access{% endblock %}
+{% block page_subtitle %}Who can sign in to this portal.{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="row between top">
+    <div>
+      <h2 class="section-title">People</h2>
+      <p class="caption mt-xs" style="max-width:640px;">
+        <strong>Admins</strong> can sign in to this portal and change every agent and setting.
+        Everyone else keeps their access to the WAJ apps but can't open the portal.
+        Each change is recorded in <a href="/admin/audit?what=team">Activity</a>.
+      </p>
+    </div>
+    <div class="row">
+      <input type="search" class="team-search" placeholder="Search people" aria-label="Search people" data-team-search>
+      {% if service_count %}
+      <a class="filter-chip" aria-pressed="{{ 'true' if show_service else 'false' }}"
+         href="{{ '/admin/users' if show_service else '/admin/users?service=1' }}">
+        {{ 'Hide' if show_service else 'Show' }} service accounts ({{ service_count }})
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if people %}
+  <div class="table-wrap mt-m">
+    <table class="table" data-team-table>
+      <thead><tr><th>Person</th><th>Access</th><th>Last active</th><th class="num"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>
+        {% for p in people %}
+        <tr data-search="{{ (p.label ~ ' ' ~ (p.email or '') ~ ' ' ~ (p.phone or ''))|lower }}">
+          <td>
+            <div class="person">
+              <span class="activity-avatar" aria-hidden="true">{{ p.initial }}</span>
+              <div>
+                <div>{{ p.label }}{% if p.is_me %} <span class="caption">(you)</span>{% endif %}</div>
+                <div class="caption">
+                  {% if p.phone and p.email %}{{ p.phone }} · {% endif %}{% if p.app_role %}{{ p.app_role }} in the WAJ app{% endif %}
+                  {% if p.is_service %} · service account{% endif %}
+                </div>
+              </div>
+            </div>
+          </td>
+          <td>{% if p.is_admin %}{{ chip('Admin', variant='brand') }}{% else %}<span class="caption">No portal access</span>{% endif %}</td>
+          <td class="caption">{% if p.last_active %}<span title="{{ p.last_active_full }}">{{ p.last_active }}</span>{% else %}—{% endif %}</td>
+          <td class="num">
+            <form method="post" action="/admin/users/{{ p.id }}/superuser" class="inline-form">
+              <input type="hidden" name="grant" value="{{ 'false' if p.is_admin else 'true' }}">
+              {% if show_service %}<input type="hidden" name="return_service" value="1">{% endif %}
+              {% if p.is_admin %}
+              <button type="submit" class="small ghost"
+                      {% if p.is_me %}disabled title="You can't remove your own admin access"{% endif %}
+                      onclick="return confirm({{ ('Remove admin access from ' ~ p.label ~ '? They will no longer be able to sign in to this portal.')|tojson }});">Remove admin</button>
+              {% else %}
+              <button type="submit" class="small"
+                      onclick="return confirm({{ ('Make ' ~ p.label ~ ' an admin? They will be able to sign in and change every agent and setting.')|tojson }});">Make admin</button>
+              {% endif %}
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="caption mt-s" data-team-count>{{ people|length }} {{ 'person' if people|length == 1 else 'people' }} · {{ admin_count }} admin{{ '' if admin_count == 1 else 's' }}</p>
+  {% else %}
+  <div class="empty-state mt-m"><p>No people found.</p></div>
+  {% endif %}
+</section>
+
+<script>
+(function () {
+  var input = document.querySelector('[data-team-search]');
+  var table = document.querySelector('[data-team-table]');
+  if (!input || !table) return;
+  input.addEventListener('input', function () {
+    var q = input.value.trim().toLowerCase();
+    table.querySelectorAll('tbody tr').forEach(function (tr) {
+      tr.hidden = q && (tr.getAttribute('data-search') || '').indexOf(q) === -1;
+    });
+  });
+})();
+</script>
+{% endblock %}

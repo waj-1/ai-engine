@@ -1,0 +1,127 @@
+{% extends "_base.html" %}
+{# Run detail for a voice check (ai_voice_scenario_runs), in the same
+   verdict-first layout as a text run (eval_run_detail.html): score = share of
+   the call's checked steps that passed, target 100%. Context: router
+   _voice_run_detail + admin/voice_checks.load_voice_run. #}
+{% from "_components/status_chip.html" import run_status, delta %}
+{% set title = run._check_name %}
+{% set finished = run.finished_at or run.started_at %}
+{% set checked = steps|selectattr('checked')|list %}
+{% set n_total = cases|length %}
+{% set n_failed = cases|rejectattr('outcome', 'equalto', 'passed')|list|length %}
+{% set n_passed = n_total - n_failed %}
+{% set case_by_id = {} %}
+{% for c in cases %}{% set _ = case_by_id.update({c.scenario_id: c}) %}{% endfor %}
+{% set score_delta = (run.score - prev_run.score) if (prev_run and run.score is not none and prev_run.score is not none) else none %}
+{% block title %}{{ title }} · Voice check run · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}Voice check of {{ agent_name }} · {{ finished|stamp }}{% endblock %}
+{% block content %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/admin/evals">Testing</a><span aria-hidden="true">›</span>
+  <a href="/admin/evals/runs?kind=voice">Runs</a><span aria-hidden="true">›</span>
+  <a href="/admin/voice-scenarios">Voice checks</a><span aria-hidden="true">›</span>
+  <span>{{ finished|when }}</span>
+</nav>
+
+{% set v = 'running' if run.status in ('queued','running') else ('error' if run.status not in ('passed','failed') else ('ready' if run.status == 'passed' else 'needs_work')) %}
+<section class="verdict-banner is-{{ v }}">
+  <div class="verdict-main">
+    <div class="row">
+      <span class="chip chip-info">Voice</span>
+      {{ run_status(run.status) }}
+    </div>
+    <div class="verdict-figures">
+      <span class="big-number num">{{ run.score|pct }}</span>
+      <span class="verdict-target">target 100%</span>
+      {% if score_delta is not none %}<span class="verdict-delta">{{ delta(score_delta, ' since last run') }}</span>{% endif %}
+    </div>
+    <p class="verdict-sentence">
+      {% if run.status in ('queued','running') %}
+        The call is in progress — reload in a minute for the result.
+      {% elif run.status == 'skipped' %}
+        The call didn't run{% if run.error %}: {{ run.error }}{% endif %}.
+      {% elif run.status not in ('passed','failed') %}
+        The call stopped with an error before every step was checked.
+      {% elif n_total %}
+        {{ n_passed }} of {{ n_total }} checked step{{ 's' if n_total != 1 else '' }} passed.
+        {% if run.status == 'passed' %}The call did everything the check expects.{% else %}{{ n_failed }} step{{ 's' if n_failed != 1 else '' }} didn't happen as expected.{% endif %}
+      {% else %}
+        {{ 'Passed' if run.status == 'passed' else 'Failed' }} — this check has no expectations to score, only caller lines.
+      {% endif %}
+    </p>
+    {% if n_total %}
+    <div class="passbar" role="img" aria-label="{{ n_passed }} passed, {{ n_failed }} failed">
+      <span class="ok" style="width:{{ (n_passed / n_total * 100)|round(2) }}%"></span><span class="err" style="width:{{ (n_failed / n_total * 100)|round(2) }}%"></span>
+    </div>
+    {% endif %}
+  </div>
+  <div class="verdict-actions">
+    {% if prev_run %}
+    <a class="btn primary" href="/admin/evals/compare?runs={{ prev_run.run_id }},{{ run.run_id }}">Compare with previous</a>
+    {% endif %}
+    {% if scenario.enabled and run.status not in ('queued','running') %}
+    <form method="post" action="/admin/voice-scenarios/{{ scenario.slug }}/run" class="inline-form">
+      <button type="submit" class="btn">Run again</button>
+    </form>
+    {% endif %}
+    <a class="btn ghost" href="/admin/voice-scenarios">Open voice checks</a>
+  </div>
+</section>
+
+{% if run.error and run.status not in ('passed','failed','skipped') %}
+<section class="section">
+  <h2>Error</h2>
+  <pre class="code-block error-text">{{ run.error }}</pre>
+</section>
+{% endif %}
+
+<section class="section" id="cases">
+  <h2 class="section-title">The call, step by step</h2>
+  <span class="caption">Caller lines are played into a live call; the other steps are what the check expects to happen.</span>
+  {% if steps %}
+  <div class="table-wrap mt-s">
+  <table class="table">
+    <thead><tr><th class="num">Step</th><th>What happens</th><th>Result</th><th><span class="sr-only">Change</span></th></tr></thead>
+    <tbody>
+      {% for st in steps %}
+      {% set cs = case_by_id.get('Step ' ~ st.n ~ ' · ' ~ st.what) %}
+      <tr {% if st.outcome == 'failed' %}class="diff-changed"{% endif %}>
+        <td class="num caption">{{ st.n }}</td>
+        <td dir="auto">{{ st.what }}{% if st.note %}<div class="caption error-text">{{ st.note|truncate(200) }}</div>{% endif %}</td>
+        <td>
+          {% if st.outcome is none %}<span class="caption">{{ 'Not reached' if run.status not in ('queued','running') else '—' }}</span>
+          {% elif not st.checked %}<span class="caption">Done</span>
+          {% else %}{{ run_status(st.outcome) }}{% endif %}
+        </td>
+        <td>{% if cs and cs.broke %}<span class="chip chip-err" title="Passed in the previous run">Broke</span>{% elif cs and cs.fixed %}<span class="chip chip-ok" title="Failed in the previous run">Fixed</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state compact"><p>This check has no steps.</p></div>
+  {% endif %}
+</section>
+
+{% if transcript %}
+<section class="section">
+  <h2 class="section-title">What was said</h2>
+  <span class="caption">The last part of the call's transcript.</span>
+  <div class="transcript mt-s">
+    {% for t in transcript %}
+    <div class="bubble {{ 'from-caller' if t.role in ('caller','user') else 'from-agent' }}">
+      <span class="bubble-role">{{ 'Caller' if t.role in ('caller','user') else 'Agent' }}</span>
+      <div dir="auto">{{ t.text }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<details class="advanced mt-m">
+  <summary>Technical details</summary>
+  <p class="caption mt-s">Check <code>{{ scenario.slug }}</code> · agent type <code>{{ scenario.agent_kind }}</code>{% if run.context.target %} · called <code>{{ run.context.target }}</code>{% endif %}{% if run_duration %} · took {{ run_duration }}{% endif %} · run <code>{{ run.run_id }}</code></p>
+</details>
+{% endblock %}

@@ -1,0 +1,32 @@
+{# ai_agent/admin/templates/_components/kpi.html #}
+{% from "_components/sparkline.html" import sparkline %}
+{% macro kpi(label, value, delta=None, target=None, series=None, good_when='up') -%}
+<div class="card kpi">
+  <div class="eyebrow">{{ label }}</div>
+  <div class="kpi-value num">{{ value }}</div>
+  {% if delta is not none %}
+    {% set positive = (delta > 0 and good_when == 'up') or (delta < 0 and good_when == 'down') %}
+    <div class="kpi-delta {{ 'ok' if positive else 'bad' }} num">
+      {{ '+' if delta > 0 else '' }}{{ delta }}
+    </div>
+  {% endif %}
+  {% if target %}<div class="caption">Target {{ target }}</div>{% endif %}
+  {% if series %}{{ sparkline(series) }}{% endif %}
+</div>
+{%- endmacro %}
+
+{# stat_tile(t) — partner-facing outcome tile (Overview). `t` is a dict from
+   admin/screens/overview.build_tiles: label, value, optional sub, delta
+   {text, tone ok|bad|neutral}, caption, href, unavailable, approximate.
+   An unavailable tile shows "—" and says so; it never shows a zero. #}
+{% macro stat_tile(t) -%}
+<div class="card kpi stat-tile{% if t.unavailable %} is-unavailable{% endif %}">
+  <div class="eyebrow">{{ t.label }}</div>
+  <div class="kpi-value num">{% if t.href and not t.unavailable %}<a href="{{ t.href }}">{{ t.value }}</a>{% else %}{{ t.value }}{% endif %}</div>
+  {% if t.sub %}<div class="stat-sub">{{ t.sub }}</div>{% endif %}
+  <div class="stat-foot">
+    {% if t.delta %}<span class="stat-delta tone-{{ t.delta.tone }} num">{{ t.delta.text }}</span>{% endif %}
+    {% if t.caption %}<span class="caption">{{ t.caption }}</span>{% endif %}
+  </div>
+</div>
+{%- endmacro %}

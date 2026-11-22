@@ -1,0 +1,317 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/status_chip.html" import run_status %}
+{% from "_components/callout.html" import alert, hint, hint_text %}
+{% block title %}Model comparison · Testing · {{ brand().title }}{% endblock %}
+{% block page_title %}Model comparison{% endblock %}
+{% block page_subtitle %}Which model or setup works best for an agent? Run the same tests on each option.{% endblock %}
+{% block head %}
+<style>
+  /* Vertical wizard — numbered steps, not a wall of selects. */
+  .wizard-step { display:flex; gap:var(--space-m); padding:var(--space-m) 0; border-bottom:1px solid var(--border); }
+  .wizard-step:last-child { border-bottom:0; padding-bottom:0; }
+  .wizard-step-num {
+    flex:0 0 26px; width:26px; height:26px; border-radius:50%;
+    background:var(--accent-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:12px; margin-top:2px;
+  }
+  .wizard-step-body { flex:1; display:flex; flex-direction:column; gap:var(--space-s); min-width:0; }
+  .wizard-step-title { font-weight:600; font-size:13px; margin:0; }
+  .variant-row {
+    border:1px solid var(--border); border-radius:8px; padding:var(--space-s);
+    display:flex; flex-direction:column; gap:var(--space-xs);
+    position:relative; background:var(--surface-sunken);
+  }
+  .variant-row-grid { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:var(--space-s); }
+  .variant-genconfig-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:var(--space-xs); margin-top:var(--space-xs); }
+  .variant-remove {
+    position:absolute; top:6px; right:8px; background:none; border:none;
+    color:var(--fg-3); cursor:pointer; font-size:15px; line-height:1; padding:2px 4px;
+  }
+  .variant-remove:hover { color:var(--error); }
+  .suite-checklist {
+    display:flex; flex-direction:column; gap:var(--space-xxs);
+    max-height:220px; overflow-y:auto; border:1px solid var(--border);
+    border-radius:8px; padding:var(--space-s);
+  }
+  @media (max-width: 720px) {
+    .variant-row-grid, .variant-genconfig-grid { grid-template-columns:1fr; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+{% set tab = tab or 'bakeoffs' %}
+{% set posted = posted if posted is defined else {} %}
+
+<div class="page-head">
+  <div class="page-head-text"><p>Each comparison runs the same test suites on two or more options (a model, a published version, or settings) and recommends the best one.</p></div>
+  <div class="page-head-actions"><button type="button" class="primary" data-open-bakeoff>New comparison</button></div>
+</div>
+
+<section class="section">
+  {% if bakeoffs %}
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr>
+      <th>Comparison</th><th>Agent</th><th class="num">Options</th><th class="num">Test suites</th><th>Status</th><th>Created</th>
+    </tr></thead>
+    <tbody>
+      {% for b in bakeoffs %}
+      <tr>
+        <td><a href="/admin/evals/bakeoffs/{{ b.bakeoff_id }}">{{ b.name }}</a></td>
+        <td>{% if b._profile_name and b._profile_name != b.profile_id %}{{ b._profile_name }}{% else %}Unknown agent ({{ (b.profile_id or '')[:8] }}) <span class="chip chip-warn">Missing here</span>{% endif %}</td>
+        <td class="num">{{ b.n_variants }}</td>
+        <td class="num">{{ b.n_suites }}</td>
+        <td>{{ run_status(b.status or 'running') }}</td>
+        <td class="caption nowrap" title="{{ b.created_at|stamp }}">{{ b.created_at|when }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>No model comparisons yet. A comparison runs your test suites on each option and shows which one passes the most cases, how fast it answers and what it costs.</p>
+    <button type="button" class="primary" data-open-bakeoff>New comparison</button>
+  </div>
+  {% endif %}
+</section>
+
+{# ====================================================================== #}
+{# Create wizard                                                          #}
+{# ====================================================================== #}
+<dialog id="bakeoff-dialog" class="drawer wide" aria-labelledby="bakeoff-dialog-title">
+<div class="drawer-body">
+  <div class="row between">
+    <h2 id="bakeoff-dialog-title" class="mb-0">New model comparison</h2>
+    <button type="button" class="ghost icon-btn" data-close-bakeoff aria-label="Close">&times;</button>
+  </div>
+  <p class="caption">Choose the agent, add two or more options to compare, pick the test suites, and run.</p>
+
+  {% if error %}
+  <div id="bakeoff-form-error">{% call alert('error') %}{{ error }}{% endcall %}</div>
+  {% endif %}
+
+  <form method="post" action="/admin/evals/bakeoffs" id="bakeoff-form"
+        style="display:flex;flex-direction:column;max-width:760px;">
+
+    {# --- Step 1: Profile --- #}
+    <div class="wizard-step">
+      <div class="wizard-step-num">1</div>
+      <div class="wizard-step-body">
+        <p class="wizard-step-title">Agent</p>
+        <label class="caption">Which agent are you comparing options for?
+          <select name="profile_id" id="bo-profile" required style="width:100%;">
+            <option value="" disabled {% if not posted.get('profile_id') %}selected{% endif %}>Choose an agent</option>
+            {% for p in profiles %}
+            <option value="{{ p.profile_id }}" {% if posted.get('profile_id') == p.profile_id %}selected{% endif %}>{{ p.display_name }}{% if p.environment %} · {{ p.environment }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+    </div>
+
+    {# --- Step 2: Variants --- #}
+    <div class="wizard-step">
+      <div class="wizard-step-num">2</div>
+      <div class="wizard-step-body">
+        <p class="wizard-step-title">Options to compare <span class="caption">(at least 2)</span></p>
+        <div id="bo-variants" style="display:flex;flex-direction:column;gap:var(--space-s);">
+          {% for _ in range(2) %}
+          <div class="variant-row">
+            <button type="button" class="variant-remove" aria-label="Remove option" title="Remove option">&times;</button>
+            <div class="variant-row-grid">
+              <label class="caption">Label
+                <input name="variant_label" placeholder="e.g. Gemini 3.5 Flash" style="width:100%;">
+              </label>
+              <label class="caption">Agent version
+                <select name="variant_profile_version_id" data-role="variant-version" style="width:100%;">
+                  <option value="">Current settings</option>
+                </select>
+              </label>
+              <label class="caption">Model
+                <select name="variant_model_id" style="width:100%;">
+                  <option value="">The agent's own model</option>
+                  {% for m in models %}
+                  <option value="{{ m.model_id }}">{{ m.name }}{% if m.provider %} ({{ m.provider }}){% endif %}</option>
+                  {% endfor %}
+                </select>
+              </label>
+            </div>
+            <details>
+              <summary class="caption">Advanced settings (optional)</summary>
+              <div class="variant-genconfig-grid">
+                <label class="caption">Temperature
+                  <input type="number" step="0.05" name="variant_temperature" placeholder="0.2" style="width:100%;"></label>
+                <label class="caption">Thinking level
+                  <select name="variant_thinking_level" style="width:100%;">
+                    <option value="">— default —</option>
+                    <option value="minimal">minimal</option>
+                    <option value="low">low</option>
+                    <option value="medium">medium</option>
+                    <option value="high">high</option>
+                  </select></label>
+                <label class="caption">Max output tokens
+                  <input type="number" name="variant_max_output_tokens" placeholder="—" style="width:100%;"></label>
+                <label class="caption">Top-p
+                  <input type="number" step="0.05" name="variant_top_p" placeholder="—" style="width:100%;"></label>
+              </div>
+            </details>
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" id="bo-add-variant" class="ghost" style="align-self:flex-start;">+ Add option</button>
+      </div>
+    </div>
+
+    {# --- Step 3: Suites --- #}
+    <div class="wizard-step">
+      <div class="wizard-step-num">3</div>
+      <div class="wizard-step-body">
+        <p class="wizard-step-title">Test suites</p>
+        {{ hint_text('The suites linked to this agent — pick at least one.') }}
+        <div id="bo-suites" class="suite-checklist">
+          <p class="caption" style="margin:0;">Choose an agent first.</p>
+        </div>
+      </div>
+    </div>
+
+    {# --- Step 4: Repeats + name + submit --- #}
+    <div class="wizard-step">
+      <div class="wizard-step-num">4</div>
+      <div class="wizard-step-body">
+        <p class="wizard-step-title">Name it &amp; run</p>
+        <label class="caption">Name
+          <input name="name" value="{{ posted.get('name', '') }}" placeholder="e.g. Gemini Flash vs GPT-5 Mini — bookings" required style="width:100%;">
+        </label>
+        <label class="caption">Repeat each case
+          <select name="repeats" style="width:100%;">
+            <option value="1" {% if posted.get('repeats', 1)|string == '1' %}selected{% endif %}>Once</option>
+            <option value="3" {% if posted.get('repeats')|string == '3' %}selected{% endif %}>3 times — find flaky cases</option>
+            <option value="5" {% if posted.get('repeats')|string == '5' %}selected{% endif %}>5 times</option>
+            <option value="10" {% if posted.get('repeats')|string == '10' %}selected{% endif %}>10 times</option>
+          </select>
+          <span class="caption" style="color:var(--text-muted);">Time and cost grow with every repeat, option and suite.</span>
+        </label>
+        <button type="submit" id="bo-submit" class="primary" style="align-self:flex-start;">Run comparison</button>
+      </div>
+    </div>
+  </form>
+
+  <script type="application/json" id="bo-profile-versions-data">{{ profile_versions_by_profile | tojson }}</script>
+  <script type="application/json" id="bo-suites-data">{{ suites_by_profile | tojson }}</script>
+</div>
+</dialog>
+
+<script>
+(function () {
+  var profileSelect = document.getElementById('bo-profile');
+  var variantsContainer = document.getElementById('bo-variants');
+  var suitesContainer = document.getElementById('bo-suites');
+  var addVariantBtn = document.getElementById('bo-add-variant');
+  var submitBtn = document.getElementById('bo-submit');
+  if (!profileSelect || !variantsContainer || !suitesContainer) return;
+
+  var versionsByProfile = {};
+  var suitesByProfile = {};
+  try {
+    versionsByProfile = JSON.parse(document.getElementById('bo-profile-versions-data').textContent || '{}') || {};
+  } catch (e) { versionsByProfile = {}; }
+  try {
+    suitesByProfile = JSON.parse(document.getElementById('bo-suites-data').textContent || '{}') || {};
+  } catch (e) { suitesByProfile = {}; }
+
+  function versionOptionsHtml(pid) {
+    var versions = versionsByProfile[pid] || [];
+    var html = '<option value="">— live —</option>';
+    versions.forEach(function (v) {
+      var label = 'v' + v.version_number;
+      if (v.promoted_at) { label += ' — ' + String(v.promoted_at).slice(0, 19); }
+      html += '<option value="' + v.version_id + '">' + label + '</option>';
+    });
+    return html;
+  }
+
+  function refreshVariantVersionSelects() {
+    var pid = profileSelect.value;
+    var html = versionOptionsHtml(pid);
+    variantsContainer.querySelectorAll('[data-role="variant-version"]').forEach(function (sel) {
+      var current = sel.value;
+      sel.innerHTML = html;
+      if (current && sel.querySelector('option[value="' + current + '"]')) { sel.value = current; }
+    });
+  }
+
+  function refreshSuiteChecklist() {
+    var pid = profileSelect.value;
+    var suites = suitesByProfile[pid] || [];
+    if (!suites.length) {
+      suitesContainer.innerHTML = '<p class="caption" style="margin:0;">No test suites are linked to this agent yet — link one on the Test suites tab.</p>';
+      return;
+    }
+    var html = '';
+    suites.forEach(function (s) {
+      html += '<label class="caption" style="display:flex;align-items:center;gap:var(--space-xxs);">' +
+        '<input type="checkbox" name="suite_ids" value="' + s.suite_id + '"> ' + s.name + '</label>';
+    });
+    suitesContainer.innerHTML = html;
+  }
+
+  function wireRemoveButton(row) {
+    var btn = row.querySelector('.variant-remove');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      if (variantsContainer.querySelectorAll('.variant-row').length <= 2) return;
+      row.remove();
+      updateSubmitState();
+    });
+  }
+
+  function updateSubmitState() {
+    var rows = variantsContainer.querySelectorAll('.variant-row');
+    if (submitBtn) { submitBtn.disabled = rows.length < 2; }
+    rows.forEach(function (row) {
+      var btn = row.querySelector('.variant-remove');
+      if (btn) { btn.style.display = rows.length <= 2 ? 'none' : ''; }
+    });
+  }
+
+  profileSelect.addEventListener('change', function () {
+    refreshVariantVersionSelects();
+    refreshSuiteChecklist();
+  });
+  if (profileSelect.value) {
+    refreshVariantVersionSelects();
+    refreshSuiteChecklist();
+  }
+
+  if (addVariantBtn) {
+    addVariantBtn.addEventListener('click', function () {
+      var rows = variantsContainer.querySelectorAll('.variant-row');
+      var last = rows[rows.length - 1];
+      var clone = last.cloneNode(true);
+      clone.querySelectorAll('input').forEach(function (el) { el.value = ''; });
+      clone.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
+      clone.querySelectorAll('details').forEach(function (el) { el.open = false; });
+      variantsContainer.appendChild(clone);
+      wireRemoveButton(clone);
+      refreshVariantVersionSelects();
+      updateSubmitState();
+    });
+  }
+
+  variantsContainer.querySelectorAll('.variant-row').forEach(wireRemoveButton);
+  updateSubmitState();
+
+  var dlg = document.getElementById('bakeoff-dialog');
+  function openDlg() { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-open-bakeoff]')) openDlg();
+    if (e.target.closest('[data-close-bakeoff]')) dlg.close();
+  });
+  // A rejected submit re-renders this page with the error: reopen the form.
+  if (document.getElementById('bakeoff-form-error')) openDlg();
+})();
+</script>
+{% endblock %}

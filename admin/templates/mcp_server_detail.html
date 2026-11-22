@@ -1,0 +1,196 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% set display = mcp_display_name(row.name) %}
+{% block title %}{{ display }} · Tools & integrations · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ display }}{% endblock %}
+{% block page_subtitle %}{% if row.is_builtin %}Built-in tools, managed by WAJ{% elif row.source == 'bundle' %}A bundle of tools you put together{% else %}An external server you connected{% endif %}{% endblock %}
+{% block head %}
+{% if not row.is_builtin and row.source != 'bundle' %}
+<script defer src="/admin/static/mcp-discover.js?v={{ asset_version }}"></script>
+{% endif %}
+{% endblock %}
+{% block content %}
+<a class="back-link" href="/admin/tools">&larr; Tools &amp; integrations</a>
+
+{% if error %}
+<div class="alert alert-warning mb-m">{{ error }}</div>
+{% endif %}
+
+<div class="detail-layout">
+  <div>
+
+    {# ── Who uses it ─────────────────────────────────────────────────────── #}
+    <section class="section">
+      <h2>Used by</h2>
+      {% if used_by %}
+      <ul class="stack-xs" style="list-style:none;padding:0;margin:0;">
+        {% for p in used_by %}
+        <li><a href="/admin/agents?profile_id={{ p.profile_id }}&env={{ p.environment }}">{{ p.display_name or agent_label(p.agent_kind) }}</a>
+          <span class="caption">· {{ p.environment }}</span></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="caption">No agent uses this server yet. Attach it from an agent's tools on the <a href="/admin/agents">Agents</a> page.</p>
+      {% endif %}
+    </section>
+
+    {% if row.is_builtin %}
+    {# ── Built-in: read-only ─────────────────────────────────────────────── #}
+    <section class="section">
+      <h2>Tools <span class="caption num">({{ members|length }})</span></h2>
+      <span class="caption mb-m" style="display:block;">These tools ship with WAJ and can't be changed here. Open a tool to add usage guidance.</span>
+      {% if row.usage_guidance %}<p>{{ row.usage_guidance }}</p>{% endif %}
+      {% if members %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+          <tbody>
+          {% for m in members %}
+            <tr>
+              <td><div class="name-cell">
+                <a href="/admin/tools/{{ m.tool_id }}">{{ m.display_name or ((m.python_name or '')|replace('_', ' ')|capitalize) or m.tool_id }}</a>
+                <span class="technical">{{ m.python_name }}</span></div></td>
+              <td class="caption"><span class="clamp-1" title="{{ m.description or '' }}">{{ m.description or '—' }}</span></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">No tools in this bundle.</div>
+      {% endif %}
+      <details class="advanced">
+        <summary>Advanced</summary>
+        <dl class="kv">
+          <dt>Context fields</dt><dd><pre class="code-block" style="margin:0;">{{ context_fields_str }}</pre></dd>
+        </dl>
+      </details>
+    </section>
+
+    {% else %}
+    {% if row.source != 'bundle' %}
+    {# ── External: test the live connection ─────────────────────────────── #}
+    <section class="section">
+      <h2>Connection</h2>
+      <span class="caption">Asks the server for its tools right now, using the saved address and token.</span>
+      <form class="mt-s" onsubmit="return false;">
+        <input type="hidden" name="endpoint" value="{{ row.endpoint or '' }}">
+        <input type="hidden" name="transport" value="{{ row.transport or 'http' }}">
+        <input type="hidden" name="auth_env_var" value="{{ row.auth_env_var or '' }}">
+        <button type="button" data-mcp-discover>Test connection</button>
+        <div data-discover-result class="mt-s"></div>
+      </form>
+    </section>
+    {% endif %}
+
+    {# ── Settings (bundle or external) ──────────────────────────────────── #}
+    <section class="section">
+      <h2>Settings</h2>
+      <form method="post" action="/admin/agent-mcp-servers/{{ row.mcp_server_id }}" class="form-stack">
+        <input type="hidden" name="_active_form" value="1">
+        <label class="field">
+          <span class="field-label">Name</span>
+          <input type="text" name="name" value="{{ row.name or '' }}" required>
+        </label>
+        {% if row.source != 'bundle' %}
+        <label class="field">
+          <span class="field-label">Server address (URL)</span>
+          <input type="text" name="endpoint" value="{{ row.endpoint or '' }}" placeholder="https://mcp.example.com/mcp">
+        </label>
+        <label class="field">
+          <span class="field-label">Access token <span class="opt">(optional)</span></span>
+          <input type="text" name="auth_env_var" value="{{ row.auth_env_var or '' }}" placeholder="e.g. MERCHANT_MCP_TOKEN" autocomplete="off" spellcheck="false">
+          <span class="field-help">The <strong>name</strong> of the secret on the engine that holds this server's token &mdash; not the token itself.
+            {% if partner_build() %}Ask your WAJ contact to add the secret.{% else %}Manage secrets in <a href="/admin/env?tab=vars">Settings › Environment variables</a>.{% endif %}</span>
+        </label>
+        <label class="field">
+          <span class="field-label">Tools to allow</span>
+          <input type="text" name="tool_subset" value="{{ tool_subset_str }}" placeholder="Leave blank to allow every tool">
+          <span class="field-help">Tool names separated by commas. Use &ldquo;Test connection&rdquo; above to see what the server offers.</span>
+        </label>
+        {% endif %}
+        <label class="field">
+          <span class="field-label">When should the agent use it? <span class="opt">(optional)</span></span>
+          <textarea name="usage_guidance" rows="3" placeholder="e.g. Use for sales pipeline data.">{{ row.usage_guidance or '' }}</textarea>
+          <span class="field-help">Shown to the agent with the tool list.</span>
+        </label>
+        <label class="field-check">
+          <input type="checkbox" name="is_active" {% if row.is_active %}checked{% endif %}>
+          <span>Active <span class="field-help">Turn off to stop agents using this server without deleting it.</span></span>
+        </label>
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <div class="form-stack">
+            {% if row.source != 'bundle' %}
+            <label class="field">
+              <span class="field-label">Connection type</span>
+              <select name="transport">
+                {% for opt in transport_options %}
+                  <option value="{{ opt }}" {% if row.transport == opt %}selected{% endif %}>{{ opt }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            {% endif %}
+            <label class="field">
+              <span class="field-label">Context fields (JSON)</span>
+              <textarea name="context_fields" rows="4" class="code-block">{{ context_fields_str }}</textarea>
+              <span class="field-help">Values the engine fills in on every call instead of the agent, e.g. <code>{"token": "$ctx.user_token"}</code>.</span>
+            </label>
+          </div>
+        </details>
+        <div class="form-actions">
+          <button type="submit" class="primary">Save changes</button>
+          <a class="btn ghost" href="/admin/tools">Cancel</a>
+        </div>
+      </form>
+    </section>
+
+    {% if row.source == 'bundle' %}
+    {# ── Membership (bundle, non-builtin) ───────────────────────────────── #}
+    <section class="section">
+      <div class="row between">
+        <h2 class="mb-0">Tools in this bundle</h2>
+        <a class="btn" href="/admin/agent-mcp-servers/{{ row.mcp_server_id }}/add-tool">＋ Add HTTP tool</a>
+      </div>
+      <form method="post" action="/admin/agent-mcp-servers/{{ row.mcp_server_id }}/members" class="form-stack mt-s" style="max-width:880px;">
+        {% set tools = picker_tools %}{% set checked = checked_tool_ids %}{% set picked_tools = members %}
+        {% include "_mcp_member_picker.html" %}
+        <div class="form-actions"><button type="submit">Save tools</button></div>
+      </form>
+    </section>
+    {% endif %}
+
+    {# ── Danger zone — last ─────────────────────────────────────────────── #}
+    <section class="section danger-zone">
+      <h2>Danger zone</h2>
+      <p class="caption">Deleting this server removes it from
+        {% if used_by %}{{ used_by|map(attribute='display_name')|reject('none')|unique|join(', ') }}{% else %}every agent that uses it{% endif %}.
+        This cannot be undone.</p>
+      <form method="post" action="/admin/agent-mcp-servers/{{ row.mcp_server_id }}/delete"
+            onsubmit="return confirm('Delete {{ display|e }}? It will be removed from every agent that uses it.');">
+        <button type="submit" class="btn danger">Delete this server</button>
+      </form>
+    </section>
+    {% endif %}
+
+  </div>
+
+  {# ── Details rail ───────────────────────────────────────────────────────── #}
+  <aside class="card">
+    <h2>Details</h2>
+    <dl class="kv">
+      <dt>Type</dt><dd>{% if row.is_builtin %}Built-in{% elif row.source == 'bundle' %}Your bundle{% else %}External{% endif %}</dd>
+      <dt>Status</dt>
+      <dd>{% if row.is_builtin %}{{ chip('Read-only', variant='neutral') }}{% elif row.is_active %}{{ chip('Active', variant='ok', dot=True) }}{% else %}{{ chip('Off', variant='warn', dot=True) }}{% endif %}</dd>
+      <dt>Tools</dt><dd class="num">{% if tool_count is not none %}{{ tool_count }}{% else %}all{% endif %}</dd>
+      <dt>Agents</dt><dd class="num">{{ used_by|length }}</dd>
+      {% if row.source != 'bundle' and row.endpoint %}
+      <dt>Address</dt><dd><span class="technical">{{ row.endpoint }}</span></dd>
+      {% endif %}
+      {% if row.updated_at %}<dt>Updated</dt><dd class="num">{{ row.updated_at[:10] }}</dd>{% endif %}
+      <dt>Code name</dt><dd><span class="technical">{{ row.name }}</span></dd>
+      <dt>ID</dt><dd><span class="technical">{{ row.mcp_server_id }}</span></dd>
+    </dl>
+  </aside>
+</div>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% block title %}Prompt diff · {{ brand().title }}{% endblock %}
+{% block page_title %}Prompt diff{% endblock %}
+{% block page_subtitle %}
+  {{ prompt.agent_kind }} · {{ prompt.slug }} · v{{ version_a.version_number }} → v{{ version_b.version_number }}
+{% endblock %}
+{% block content %}
+{# Back to the agent this was opened from (its Instructions tab) when the
+   link carried profile_id; the kind-level list otherwise. #}
+{% set back_pid = request.query_params.get('profile_id') %}
+{% if back_pid %}
+<a href="/admin/agents?env={{ current_env }}&profile_id={{ back_pid|urlencode }}&tab=instructions" class="caption">&larr; back to the agent's instructions</a>
+{% else %}
+<a href="/admin/agents?env={{ current_env }}&kind={{ prompt.agent_kind }}" class="caption">&larr; back to agents</a>
+{% endif %}
+
+<div class="card" style="margin-top:var(--space-m);">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-m);">
+    <div>
+      <div class="eyebrow">v{{ version_a.version_number }} (was)</div>
+      <p class="num caption">
+        Created {{ (version_a.created_at or '')[:19] }}<br>
+        by {{ version_a.created_by or '—' }}<br>
+        {{ (version_a.content or '')|length }} chars
+      </p>
+    </div>
+    <div>
+      <div class="eyebrow">v{{ version_b.version_number }} (now)</div>
+      <p class="num caption">
+        Created {{ (version_b.created_at or '')[:19] }}<br>
+        by {{ version_b.created_by or '—' }}<br>
+        {{ (version_b.content or '')|length }} chars
+      </p>
+    </div>
+    <div>
+      <div class="eyebrow">Length delta</div>
+      <p class="num" style="font-size:18px;font-weight:600;color:{% if length_delta > 0 %}var(--success){% elif length_delta < 0 %}var(--error){% else %}var(--fg-1){% endif %};">
+        {% if length_delta > 0 %}+{% endif %}{{ length_delta }} chars
+      </p>
+    </div>
+  </div>
+</div>
+
+{# Unified diff rendering — additions/deletions ride the status tokens
+   (theme-aware), hunk headers ghost-coloured. Each row is its own div so
+   long single lines wrap inside the cell instead of forcing horizontal
+   scroll. #}
+<div class="card diff-block" style="margin-top:var(--space-m);">
+  {% if not diff_rows %}
+    <p class="caption">No textual difference between v{{ version_a.version_number }} and v{{ version_b.version_number }}.</p>
+  {% endif %}
+  {% for row in diff_rows %}
+    {% if row.kind == 'add' %}
+      <div class="diff-line diff-line-add">+ {{ row.text }}</div>
+    {% elif row.kind == 'del' %}
+      <div class="diff-line diff-line-del">- {{ row.text }}</div>
+    {% elif row.kind == 'hunk' %}
+      <div class="diff-line diff-line-hunk">{{ row.text }}</div>
+    {% elif row.kind == 'meta' %}
+      <div class="diff-line diff-line-meta">{{ row.text }}</div>
+    {% else %}
+      <div class="diff-line diff-line-ctx">  {{ row.text }}</div>
+    {% endif %}
+  {% endfor %}
+</div>
+
+<div style="margin-top:var(--space-m);display:flex;gap:var(--space-s);">
+  <a class="ghost" href="/admin/prompts/{{ prompt.prompt_id }}/compare?env={{ current_env }}{% if back_pid %}&profile_id={{ back_pid|urlencode }}{% endif %}">A/B compare on a suite</a>
+  <a class="ghost" href="/admin/prompts/{{ prompt.prompt_id }}/optimize?env={{ current_env }}{% if back_pid %}&profile_id={{ back_pid|urlencode }}{% endif %}">Optimize prompt with an LLM</a>
+</div>
+{% endblock %}

@@ -1,0 +1,208 @@
+{# _tab_mcp.html — the Tools & integrations screen body (Connections area).
+   (1) Servers — one compact row per MCP server: your bundles, external
+       connections, then the built-in (read-only) bundles. Friendly name with
+       the stored code name as muted technical text; "Used by" names agents.
+   (2) Tool catalog — every agent_tools row, collapsed per server that
+       exposes it, with search + agent / access / guidance filters. Each row
+       opens its /admin/tools/{id} editor. A catalog, not a binding: a tool
+       reaches an LLM only through an agent's MCP attachment.
+   (3) Platform services — backing integrations + credential status
+       (collapsed; engineering detail).
+   Context: admin/router.build_integrations_context(env). #}
+{% from "_components/chip.html" import chip %}
+{% set servers = mcp_bundles + mcp_external + mcp_builtin %}
+
+<div class="page-head">
+  <div class="page-head-text">
+    <p class="caption">Tools are grouped into servers: built-in ones, bundles you put together, and external servers you connect.</p>
+  </div>
+  <div class="page-head-actions">
+    <a class="btn" href="/admin/mcp/create">＋ Create bundle</a>
+    <a class="btn primary" href="/admin/mcp/connect">＋ Connect server</a>
+  </div>
+</div>
+
+{# ── Servers ─────────────────────────────────────────────────────────────── #}
+<section class="section" id="servers">
+  <h2>Servers <span class="caption num">({{ servers|length }})</span></h2>
+  {% if servers %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Name</th><th>Type</th><th class="num">Tools</th><th>Used by</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for m in servers %}
+        <tr>
+          <td>
+            <div class="name-cell">
+              <a href="/admin/agent-mcp-servers/{{ m.mcp_server_id }}">{{ m.display_name }}</a>
+              <span class="technical">{{ m.name }}</span>
+            </div>
+          </td>
+          <td>{{ chip(m.type_label, variant='neutral' if m.is_builtin else ('info' if m.source == 'external' else 'brand')) }}</td>
+          <td class="num">{{ m.tool_count if m.tool_count is not none else 'all' }}</td>
+          <td class="caption">
+            {% if m.used_by %}
+              {{ m.used_by[:2]|join(', ') }}{% if m.used_by|length > 2 %} <span title="{{ m.used_by[2:]|join(', ') }}">+{{ m.used_by|length - 2 }} more</span>{% endif %}
+            {% else %}<span class="muted">No agent yet</span>{% endif %}
+          </td>
+          <td>
+            {% if m.is_builtin %}{{ chip('Read-only', variant='neutral') }}
+            {% elif m.is_active %}{{ chip('Active', variant='ok', dot=True) }}
+            {% else %}{{ chip('Off', variant='warn', dot=True) }}{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No servers yet. Connect an external server or create a bundle of tools.</div>
+  {% endif %}
+</section>
+
+{# ── Tool catalog ───────────────────────────────────────────────────────── #}
+<section class="section" id="tools">
+  <div class="row between">
+    <h2 class="mb-0">Tool catalog <span class="caption num">({{ all_tools|length }})</span></h2>
+    {% if all_tools %}
+    {% set guided = all_tools | selectattr('usage_guidance') | list %}
+    <span class="caption num" title="Usage guidance tells the agent when and how to call a tool">{{ guided|length }} of {{ all_tools|length }} tools have usage guidance</span>
+    {% endif %}
+  </div>
+  <span class="caption" style="display:block;margin:var(--space-xxs) 0 var(--space-m);">Open a tool to edit its name, description and usage guidance &mdash; the notes that tell the agent when to use it.</span>
+
+  {% if all_tools %}
+  <div class="filter-row" id="tool-filters">
+    <input type="search" id="tool-search" placeholder="Search tools…" aria-label="Search tools">
+    <select id="tool-agent" aria-label="Agent">
+      <option value="">All agents</option>
+      {% for k in (tool_agent_kinds if tool_agent_kinds is defined else []) %}<option value="{{ k }}">{{ agent_label(k) }}</option>{% endfor %}
+    </select>
+    <select id="tool-scope" aria-label="Access">
+      <option value="">Reads and changes</option>
+      <option value="read">Only reads data</option>
+      <option value="write">Changes data</option>
+    </select>
+    <label class="field-check"><input type="checkbox" id="tool-noguide"> Missing guidance</label>
+    <label class="field-check"><input type="checkbox" id="tool-deprecated"> Show retired</label>
+    <span class="caption num" id="tool-count" style="margin-left:auto;"></span>
+  </div>
+
+  <div class="group-list" id="tool-groups">
+    {% set _groups = tool_groups if tool_groups is defined else [{'server': none, 'tools': all_tools}] %}
+    {% for g in _groups %}
+    <details data-group>
+      <summary>
+        {% if g.server %}
+          <strong>{{ g.server.display_name }}</strong>
+          <span class="technical">{{ g.server.name }}</span>
+        {% else %}
+          <strong>Not in any server</strong>
+        {% endif %}
+        <span class="caption num" style="margin-left:auto;" data-group-count>{{ g.tools|length }} tools</span>
+      </summary>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Tool</th><th>What it does</th><th>Agent</th><th>Access</th><th>Guidance</th></tr></thead>
+          <tbody>
+          {% for t in g.tools %}
+            {% set label = t.display_name or (t.python_name|replace('_', ' ')|capitalize) %}
+            <tr data-tool
+                data-search="{{ (label ~ ' ' ~ t.python_name ~ ' ' ~ (t.description or ''))|lower }}"
+                data-agent="{{ ([t.agent_kind] + (t.additional_agent_kinds or []))|join(' ') }}"
+                data-scope="{{ t.scope or 'read' }}"
+                data-guided="{{ '1' if t.usage_guidance else '0' }}"
+                data-deprecated="{{ '1' if t.is_deprecated else '0' }}"
+                {% if t.is_deprecated %}hidden style="opacity:.6;"{% endif %}>
+              <td>
+                <div class="name-cell">
+                  <a href="/admin/tools/{{ t.tool_id }}">{{ label }}</a>
+                  <span class="technical">{{ t.python_name }}</span>
+                </div>
+              </td>
+              <td class="caption"><span class="clamp-1" style="max-width:420px;" title="{{ t.description or '' }}">{{ t.description or '—' }}</span></td>
+              <td class="caption">{{ agent_label(t.agent_kind) or '—' }}</td>
+              <td>{{ chip('Changes data' if t.scope == 'write' else 'Reads', variant='warn' if t.scope == 'write' else 'neutral') }}</td>
+              <td>
+                {% if t.is_deprecated %}{{ chip('Retired', variant='neutral') }}
+                {% elif t.usage_guidance %}{{ chip('Added', variant='ok') }}
+                {% else %}<a class="caption" href="/admin/tools/{{ t.tool_id }}">Add</a>{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+  <div class="empty-state" id="tool-empty" hidden>No tools match these filters.</div>
+  {% else %}
+  <div class="empty-state">No tools registered yet &mdash; the engine registers its tools on start-up.</div>
+  {% endif %}
+</section>
+
+{# ── Platform services (engineering detail, collapsed) ──────────────────── #}
+{% if cards %}
+<details class="advanced">
+  <summary>Platform services ({{ cards|length }})</summary>
+  <p class="caption mb-s">Backing services the engine uses, and whether their credentials are set.</p>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Service</th><th>What it's for</th><th>Credentials</th></tr></thead>
+      <tbody>
+      {% for c in cards %}
+        <tr>
+          <td><strong>{{ c.name }}</strong><br><span class="technical">{{ c.env_vars|join(', ') }}</span></td>
+          <td class="caption">{{ c.description }}</td>
+          <td>{{ chip(c.status_label, variant='ok' if c.status == 'ok' else 'warn', dot=True) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% endif %}
+
+<script>
+(function () {
+  const root = document.getElementById('tool-groups');
+  if (!root) return;
+  const q = document.getElementById('tool-search');
+  const agent = document.getElementById('tool-agent');
+  const scope = document.getElementById('tool-scope');
+  const noguide = document.getElementById('tool-noguide');
+  const dep = document.getElementById('tool-deprecated');
+  const count = document.getElementById('tool-count');
+  const empty = document.getElementById('tool-empty');
+  const groups = Array.from(root.querySelectorAll('details[data-group]'));
+  function apply() {
+    const term = (q.value || '').trim().toLowerCase();
+    const filtering = !!(term || agent.value || scope.value || noguide.checked);
+    let shown = 0;
+    groups.forEach(function (g) {
+      let n = 0;
+      g.querySelectorAll('tr[data-tool]').forEach(function (tr) {
+        const ok = (!term || tr.dataset.search.indexOf(term) !== -1)
+          && (!agent.value || (' ' + tr.dataset.agent + ' ').indexOf(' ' + agent.value + ' ') !== -1)
+          && (!scope.value || tr.dataset.scope === scope.value)
+          && (!noguide.checked || tr.dataset.guided === '0')
+          && (dep.checked || tr.dataset.deprecated === '0');
+        tr.hidden = !ok;
+        if (ok) n += 1;
+      });
+      g.hidden = n === 0;
+      g.querySelector('[data-group-count]').textContent = n + (n === 1 ? ' tool' : ' tools');
+      if (filtering) g.open = n > 0;
+      shown += n;
+    });
+    count.textContent = filtering ? shown + ' matching' : '';
+    empty.hidden = shown !== 0;
+  }
+  [q, agent, scope, noguide, dep].forEach(function (el) {
+    el.addEventListener(el.tagName === 'INPUT' && el.type === 'search' ? 'input' : 'change', apply);
+  });
+  apply();
+  groups.forEach(function (g) { g.open = false; });
+})();
+</script>

@@ -1,0 +1,439 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/status_chip.html" import run_status, delta %}
+{# Defaults so the template also renders from a bare context (tests, older callers). #}
+{% set target = target if target is defined else none %}
+{% set suite = suite if suite is defined and suite else {} %}
+{% set prev_run = prev_run if prev_run is defined else none %}
+{% set agent_name = agent_name if agent_name is defined else 'the agent' %}
+{% set agent_missing = agent_missing if agent_missing is defined else false %}
+{% set show = show if show is defined else '' %}
+{% set run_duration = run_duration if run_duration is defined else '' %}
+{% set results = run.results or [] %}
+{% set cases = cases if cases is defined else build_case_rows(results) %}
+{% set total = cases|length %}
+{% set n_failed = cases|selectattr('outcome', 'equalto', 'failed')|list|length %}
+{% set n_flaky = cases|selectattr('outcome', 'equalto', 'flaky')|list|length %}
+{% set n_passed = total - n_failed - n_flaky %}
+{% set n_broke = cases|selectattr('broke')|list|length %}
+{% set n_fixed = cases|selectattr('fixed')|list|length %}
+{% set title = (suite.name|humanize) if suite else ('Real conversations check' if not run.suite_id else 'Test run') %}
+{% set finished = run.finished_at or run.started_at or run.created_at %}
+{% set score_delta = (run.score - prev_run.score) if (prev_run and run.score is not none and prev_run.score is not none) else none %}
+{% block title %}{{ title }} · Run · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}Test run of {{ agent_name }} · {{ finished|stamp }}{% endblock %}
+{% block content %}
+{# While the run is in flight the status + score update IN PLACE via
+   eval-run-detail-poll.js ({run_id}/status.json); when it settles the poller
+   reloads ONCE so the cases render. #}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/admin/evals">Testing</a><span aria-hidden="true">›</span>
+  <a href="/admin/evals/runs">Runs</a><span aria-hidden="true">›</span>
+  {% if suite %}<a href="/admin/evals/suites/{{ suite.suite_id }}">{{ title }}</a><span aria-hidden="true">›</span>{% endif %}
+  <span>{{ finished|when }}</span>
+</nav>
+
+{% set v = 'running' if run.status in ('queued','running') else ('error' if run.status in ('errored','cancelled') else ('ready' if run.status == 'passed' else 'needs_work')) %}
+<section class="verdict-banner is-{{ v }}" data-run-detail data-run-id="{{ run.run_id }}"
+         data-inflight="{{ '1' if run.status in ('queued','running') else '0' }}">
+  <div class="verdict-main">
+    <div class="row">
+      <span data-detail-status>{{ run_status(run.status) }}</span>
+      {% if agent_missing %}<span class="chip chip-warn" title="This run's agent doesn't exist in this environment">Agent missing here</span>{% endif %}
+    </div>
+    <div class="verdict-figures">
+      <span class="big-number num" data-detail-score>{{ run.score|pct }}</span>
+      {% if target is not none %}<span class="verdict-target">target {{ target|pct }}</span>{% endif %}
+      {% if score_delta is not none %}<span class="verdict-delta">{{ delta(score_delta, ' since last run') }}</span>{% endif %}
+    </div>
+    <p class="verdict-sentence">
+      {% if run.status in ('queued','running') %}
+        Running now — results appear here as soon as it finishes.
+      {% elif run.status == 'errored' %}
+        The run stopped with an error before it could be scored.
+      {% elif run.status == 'cancelled' %}
+        The run was cancelled; cases that finished are kept below.
+      {% elif total %}
+        {{ n_passed }} of {{ total }} cases passed{% if n_flaky %}, {{ n_flaky }} only some of the time{% endif %}.
+        {% if target is not none and run.score is not none %}
+          {% if run.score >= target %}Meets the target{% else %}{{ (target - run.score)|pts(signed=False) }} below the target{% endif %}{% if prev_run %}; {% if n_broke %}{{ n_broke }} case{{ 's' if n_broke != 1 else '' }} broke{% else %}nothing broke{% endif %}{% if n_fixed %} and {{ n_fixed }} got fixed{% endif %} since the previous run{% endif %}.
+        {% endif %}
+      {% else %}
+        No case results were recorded for this run.
+      {% endif %}
+    </p>
+    {% if total %}
+    <div class="passbar" role="img" aria-label="{{ n_passed }} passed, {{ n_flaky }} flaky, {{ n_failed }} failed">
+      <span class="ok" style="width:{{ (n_passed / total * 100)|round(2) }}%"></span><span class="warn" style="width:{{ (n_flaky / total * 100)|round(2) }}%"></span><span class="err" style="width:{{ (n_failed / total * 100)|round(2) }}%"></span>
+    </div>
+    {% endif %}
+  </div>
+  <div class="verdict-actions">
+    {% if prev_run %}
+    <a class="btn primary" href="/admin/evals/compare?runs={{ prev_run.run_id }},{{ run.run_id }}">Compare with previous</a>
+    {% endif %}
+    {% if run.suite_id and not agent_missing and run.status not in ('queued','running') %}
+    <form method="post" action="/admin/eval-runs/trigger" class="inline-form">
+      <input type="hidden" name="source" value="suite">
+      <input type="hidden" name="profile_id" value="{{ run.profile_id }}">
+      <input type="hidden" name="suite_id" value="{{ run.suite_id }}">
+      {% if (run.context or {}).business_id %}<input type="hidden" name="business_id" value="{{ run.context.business_id }}">{% endif %}
+      <button type="submit" class="btn">Run again</button>
+    </form>
+    {% endif %}
+    {% if suite %}<a class="btn ghost" href="/admin/evals/suites/{{ suite.suite_id }}">Open test suite</a>{% endif %}
+  </div>
+</section>
+
+{# Cooperative cancel — only while running AND a tracker job row exists. #}
+{% if run.status == 'running' and cancel_job_id %}
+<form method="post" action="/admin/jobs/{{ cancel_job_id }}/cancel" class="row mt-s">
+  <button type="submit" class="danger"
+          onclick="return confirm('Cancel this test run? Cases that already finished are kept.');">Cancel run</button>
+  <span class="caption">Stops between cases — the case in progress finishes first.</span>
+</form>
+{% endif %}
+
+{% if run.error %}
+<section class="section">
+  <h2>Error</h2>
+  <pre class="code-block error-text">{{ run.error }}</pre>
+</section>
+{% endif %}
+
+{% if run_kpis %}
+<section class="section">
+  <div class="kpi-strip">
+    <div><div class="eyebrow">Cases passed</div><div class="kpi-value num">{{ n_passed }} / {{ total }}</div></div>
+    <div><div class="eyebrow">Typical response time</div><div class="kpi-value num">{{ run_kpis.latency_p50_ms|ms }}</div></div>
+    <div><div class="eyebrow">Cost</div><div class="kpi-value num" title="{{ 'Not recorded for this run' if run_kpis.cost_usd is none else '' }}">{{ run_kpis.cost_usd|money }}</div></div>
+    <div><div class="eyebrow">Run time</div><div class="kpi-value num">{{ run_duration or '—' }}</div></div>
+  </div>
+</section>
+{% endif %}
+
+<section class="section" id="cases">
+  <div class="row between">
+    <h2 class="section-title mb-0">Cases</h2>
+    {% if total %}
+    {% set default_filter = show if show in ('failed','broke','passed','all') else ('failed' if (n_failed + n_flaky) else 'all') %}
+    <div class="segmented" role="group" aria-label="Show cases" data-case-filter data-default="{{ default_filter }}">
+      <button type="button" data-filter="failed">Failed only ({{ n_failed + n_flaky }})</button>
+      {% if prev_run %}<button type="button" data-filter="broke">Broke since last run ({{ n_broke }})</button>{% endif %}
+      <button type="button" data-filter="passed">Passed ({{ n_passed }})</button>
+      <button type="button" data-filter="all">All ({{ total }})</button>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if cases %}
+  <div class="case-list mt-m">
+    {% for c in cases %}
+    {% set first = c.attempts[0] %}
+    {% set failing = (c.attempts|rejectattr('passed')|first) or first %}
+    {% set vd = failing.scorer_detail if failing.scorer_detail is mapping else {} %}
+    <details class="case-row is-{{ c.outcome }}" data-outcome="{{ c.outcome }}" data-broke="{{ '1' if c.broke else '0' }}">
+      <summary>
+        <span class="case-status">
+          {% if c.outcome == 'passed' %}{{ run_status('passed') }}
+          {% elif c.outcome == 'flaky' %}<span class="chip chip-warn"><span class="chip-dot"></span>Flaky {{ c.passes }}/{{ c.n }}</span>
+          {% else %}{{ run_status('failed') }}{% endif %}
+        </span>
+        <span class="case-name">{{ c.scenario_id|humanize }}</span>
+        {% set n_tool_err = c.attempts|map(attribute='tool_error_count')|select('number')|sum %}
+        <span class="case-flag">{% if c.broke %}<span class="chip chip-err" title="Passed in the previous run">Broke</span>{% elif c.fixed %}<span class="chip chip-ok" title="Failed in the previous run">Fixed</span>{% endif %}{% if n_tool_err %} <span class="chip chip-warn" title="Tool calls that returned an error">{{ n_tool_err }} tool error{{ 's' if n_tool_err != 1 else '' }}</span>{% endif %}</span>
+        <span class="case-reason" dir="auto">{{ c.reason }}</span>
+        <span class="caption num nowrap">{{ c.latency_ms|ms if c.latency_ms is not none else '' }}</span>
+      </summary>
+      <div class="case-body stack-m">
+        <div class="row caption">
+          {% if c.category %}<span>{{ c.category|humanize }}</span><span aria-hidden="true">·</span>{% endif %}
+          <span class="technical">{{ c.scenario_id }}</span>
+        </div>
+
+        {% set fails = (vd.checks or [])|rejectattr('ok')|list %}
+        {% if c.outcome != 'passed' and (failing.reason or fails or vd.limit_breaches or failing.missing_substrings or failing.missing_expected_tools or failing.errored_expected_tools or failing.error) %}
+        <div>
+          <div class="eyebrow">Why it failed</div>
+          {% if failing.reason %}<div class="markdown-body" data-md>{{ failing.reason }}</div>{% endif %}
+          {% if failing.error %}<p class="error-text">{{ failing.error }}</p>{% endif %}
+          {% if fails %}
+          <ul class="check-fails">
+            {% for ch in fails %}
+            <li><strong>{{ ch.type|check_label }}</strong>{% if ch.turn is defined and ch.turn is not none %} <span class="caption">(turn {{ ch.turn }})</span>{% endif %}
+              {% if ch.detail %}<div class="caption" dir="auto">{% if ch.type in ('regex','not_regex') %}Looked for: {% endif %}<code>{{ ch.detail|check_detail|truncate(220) }}</code></div>{% endif %}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% if vd.limit_breaches %}
+          <ul class="check-fails">
+            {% for b in vd.limit_breaches %}<li><strong>{{ b.kind|limit_label }}</strong> <span class="caption">turn {{ b.turn }}: {{ b.value }} (limit {{ b.limit }})</span> <span class="technical">{{ b.kind }}</span></li>{% endfor %}
+          </ul>
+          {% endif %}
+          {% if failing.missing_substrings %}<p>Answer was missing: {% for frag in failing.missing_substrings %}{{ chip(frag, variant='warn') }} {% endfor %}</p>{% endif %}
+          {% if failing.missing_expected_tools %}<p>Didn't use: {% for t in failing.missing_expected_tools %}<code>{{ t }}</code> {% endfor %}</p>{% endif %}
+          {% if failing.forbidden_tools_used %}<p>Used a tool it shouldn't: {% for t in failing.forbidden_tools_used %}<code>{{ t }}</code> {% endfor %}</p>{% endif %}
+          {% if failing.errored_expected_tools %}<p>Used, but it only returned errors: {% for t in failing.errored_expected_tools %}<code>{{ t }}</code> {% endfor %}</p>{% endif %}
+        </div>
+        {% endif %}
+
+        {% if c.question %}
+        <div><div class="eyebrow">Question</div><div dir="auto" class="pre-wrap">{{ c.question }}</div></div>
+        {% endif %}
+        {% set expected = first.expected or first.expected_answer or (first.expected_substrings|join(', ') if first.expected_substrings else '') %}
+        {% if expected %}
+        <div><div class="eyebrow">Expected</div><div class="markdown-body" data-md dir="auto">{{ expected }}</div></div>
+        {% endif %}
+
+        {% for sc in c.attempts %}
+        {% set sd = sc.scorer_detail if sc.scorer_detail is mapping else {} %}
+        <div class="attempt">
+          {% if c.n > 1 %}<div class="row caption"><strong>Attempt {{ loop.index }}</strong> {{ run_status('passed' if sc.passed else 'failed', dot=False) }}{% if sc.score is not none %} <span class="num">{{ sc.score|pct }}</span>{% endif %}</div>{% endif %}
+          {% if sd.transcript %}
+          <div class="eyebrow">Conversation ({{ sd.transcript|length }} turns)</div>
+          <div class="transcript">
+            {% for t in sd.transcript %}
+            <div class="bubble {{ 'from-caller' if t.role in ('caller','user') else 'from-agent' }}">
+              <span class="bubble-role">{{ 'Caller' if t.role in ('caller','user') else 'Agent' }}</span>
+              <div dir="auto">{{ t.text }}</div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="eyebrow">Answer</div>
+          <div class="markdown-body answer-box" data-md dir="auto">{{ sc.actual or sc.actual_output or sc.actual_output_excerpt or '—' }}</div>
+          {% endif %}
+          {% if sc.eval_ref %}
+          <p class="caption mt-s">
+            {% if sc._trace_ids %}
+              {% for tid in sc._trace_ids %}<a href="/admin/observability?background=1&amp;hours=720&amp;search={{ sc.eval_ref }}#trace={{ tid }}">{{ "See how the agent worked it out" if sc._trace_ids|length == 1 else "Turn " ~ loop.index ~ ": see how the agent worked it out" }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+              <span>— its messages, tool calls and answers</span>
+            {% elif eval_traces_unavailable %}
+              The agent's trace can't be loaded right now (telemetry unavailable).
+            {% else %}
+              No agent trace was recorded for this attempt. The agent may have stopped before replying, or this environment doesn't record traces.
+            {% endif %}
+          </p>
+          {% endif %}
+          {% if sc.tool_errors %}
+          <div class="mt-s"><div class="eyebrow">Tool errors ({{ sc.tool_errors|length }})</div>
+            <ul class="check-fails">
+              {% for e in sc.tool_errors %}<li><code>{{ e.tool }}</code>{% if e.turn is defined and e.turn is not none %} <span class="caption">(turn {{ e.turn }})</span>{% endif %} <span class="caption break-all" dir="auto">{{ e.error|truncate(200) }}</span></li>{% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+          {% if sc.empty_tool_results %}<p class="caption">Returned nothing: {% for t in sc.empty_tool_results %}<code>{{ t }}</code> {% endfor %}</p>{% endif %}
+          {% if sc.passed and sc.reason %}<div class="mt-s"><div class="eyebrow">Judge's note</div><div class="markdown-body" data-md dir="auto">{{ sc.reason }}</div></div>
+          {% elif c.n > 1 and not sc.passed %}<p class="caption" dir="auto">{{ sc|case_reason }}</p>{% endif %}
+        </div>
+        {% endfor %}
+
+        <details class="advanced">
+          <summary>More detail</summary>
+          <div class="stack-s mt-s">
+            {% if vd %}
+            <div class="row">
+              {% if vd.mode %}{{ chip('Simulated call' if vd.mode == 'sim' else 'Real call', variant='neutral') }}{% endif %}
+              {% if vd.turns is not none %}{{ chip(vd.turns ~ ' turns', variant='neutral') }}{% endif %}
+              {% if vd.termination %}{{ chip('Ended: ' ~ vd.termination, variant='neutral') }}{% endif %}
+              {% if vd.audio_bytes_received is not none %}{{ chip(vd.audio_bytes_received|count ~ ' bytes of audio', variant='neutral') }}{% endif %}
+            </div>
+            {% if vd.checks %}
+            <div class="eyebrow">Checks</div>
+            <table class="table">
+              <thead><tr><th>Check</th><th>Turn</th><th>Result</th><th>Detail</th></tr></thead>
+              <tbody>
+              {% for ch in vd.checks %}
+                <tr><td>{{ ch.type|check_label if not ch.ok else (ch.type|humanize) }}</td>
+                  <td class="num">{{ ch.turn if ch.turn is not none else (ch.step if ch.step is defined else '—') }}</td>
+                  <td>{{ run_status('passed' if ch.ok else 'failed', dot=False) }}</td>
+                  <td class="caption break-all" dir="auto">{% if ch.url %}<code>{{ ch.url }}</code> {% endif %}{{ ((ch.detail|check_detail) or ch.body_head or ch.error or '—')|truncate(160) }}</td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% endif %}
+            {% if vd.missing_proposals %}<p>Expected but never offered: {% for p in vd.missing_proposals %}{{ chip(p, variant='err') }} {% endfor %}</p>{% endif %}
+            {% if vd.proposals %}
+            <details><summary class="caption">Actions offered ({{ vd.proposals|length }})</summary>
+              <pre class="code-block copyable">{{ vd.proposals|pretty_json }}</pre></details>
+            {% endif %}
+            {% if vd.per_turn %}
+            {% set _lat = vd.per_turn|map(attribute='latency_ms')|select('number')|list %}
+            <div class="eyebrow">Per-turn timing{% if _lat %} · slowest first reply {{ _lat|max|ms }}{% endif %}</div>
+            <table class="table">
+              <thead><tr><th>Turn</th><th class="num">First reply</th><th class="num">Whole turn</th></tr></thead>
+              <tbody>{% for p in vd.per_turn %}<tr><td class="num">{{ p.turn }}</td><td class="num">{{ p.latency_ms|ms }}</td><td class="num">{{ p.turn_ms|ms }}</td></tr>{% endfor %}</tbody>
+            </table>
+            {% endif %}
+            {% endif %}
+            {% if failing.analysis %}<div><div class="eyebrow">Analyzer notes</div>
+              {% if failing.analysis is mapping %}<pre class="code-block copyable">{{ failing.analysis|pretty_json }}</pre>{% else %}<div class="markdown-body" data-md>{{ failing.analysis }}</div>{% endif %}</div>{% endif %}
+            <details>
+              <summary class="caption">Raw result (JSON)</summary>
+              <pre class="code-block copyable">{{ failing|pretty_json }}</pre>
+            </details>
+          </div>
+        </details>
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+  <p class="empty-state case-empty" hidden>No cases match this filter.</p>
+  {% else %}
+  <div class="empty-state">No case results were recorded for this run.</div>
+  {% endif %}
+</section>
+
+<section class="section">
+  <details class="advanced">
+    <summary>Technical details</summary>
+    <div class="stack-m mt-m">
+      {% if run_kpis %}
+      <dl class="kv">
+        <dt>Reliable cases <span class="caption">(pass every repeat)</span></dt><dd class="num">{{ run_kpis.passhat_k|pct }}{% if not run_kpis.repeated %} <span class="caption">— run once, so the same as cases passed</span>{% endif %}</dd>
+        {% if run_kpis.repeated %}<dt>Cases passed at least once</dt><dd class="num">{{ run_kpis.pass_at_k|pct }} <span class="caption">over {{ run_kpis.k }} repeats</span></dd>{% endif %}
+        <dt>Attempts</dt><dd class="num">{{ run_kpis.total_attempts }}</dd>
+        <dt>Time to first word</dt><dd class="num">{{ run_kpis.ttft_p50_ms|ms }} <span class="caption">median</span></dd>
+        <dt>Time to full answer</dt><dd class="num">{{ run_kpis.ttlt_p50_ms|ms }} <span class="caption">median</span></dd>
+        <dt>Tokens</dt><dd class="num">{% if run_kpis.tokens_total is none %}— <span class="caption">not recorded</span>{% else %}{{ run_kpis.tokens_total|count }} <span class="caption">({{ run_kpis.tokens_in|count }} in / {{ run_kpis.tokens_out|count }} out)</span>{% endif %}</dd>
+        <dt>Model calls per case</dt><dd class="num">{{ run_kpis.avg_iterations if run_kpis.avg_iterations is not none else '—' }}</dd>
+        <dt>Tool calls per case</dt><dd class="num">{{ run_kpis.avg_tool_count if run_kpis.avg_tool_count is not none else '—' }}</dd>
+        <dt>Tool errors</dt><dd class="num">{% if run_kpis.tool_errors is none %}— <span class="caption">not recorded</span>{% else %}{{ run_kpis.tool_errors }}{% if run_kpis.tool_errors %} <span class="caption">in {{ run_kpis.cases_with_tool_errors }} case{{ 's' if run_kpis.cases_with_tool_errors != 1 else '' }}</span>{% endif %}{% endif %}</dd>
+        <dt>Run id</dt><dd><code>{{ run.run_id }}</code></dd>
+        {% if run.suite_id %}<dt>Suite id</dt><dd><code>{{ run.suite_id }}</code></dd>{% endif %}
+        <dt>Agent id</dt><dd><code>{{ run.profile_id }}</code></dd>
+        {% if run.lmnr_trace_id %}<dt>Run trace</dt><dd><a href="/admin/observability/{{ run.lmnr_trace_id }}">Open the test run's own trace</a> <span class="caption">(timing and result per case; each case links to the agent's trace)</span></dd>{% endif %}
+      </dl>
+      {% if run_kpis.repeated and run_kpis.by_category and (run_kpis.by_category|length > 1) %}
+      <table class="table narrow">
+        <thead><tr><th>Category</th><th class="num">Cases</th><th class="num">Passed at least once</th><th class="num">Reliable</th></tr></thead>
+        <tbody>{% for row in run_kpis.by_category %}<tr><td>{{ row.category|humanize }}</td><td class="num">{{ row.scenarios }}</td><td class="num">{{ row.pass_at_k|pct }}</td><td class="num">{{ row.passhat_k|pct }}</td></tr>{% endfor %}</tbody>
+      </table>
+      {% endif %}
+      {% endif %}
+      {% if run.context %}
+      <div><div class="eyebrow">Run settings</div><pre class="code-block copyable">{{ run.context | tojson(indent=2) }}</pre></div>
+      {% endif %}
+      {% if results %}
+      <div class="grid-2">
+        <div class="chart-card"><figcaption>Response time per case</figcaption>
+          <div style="position:relative;height:220px;flex:1;"><canvas id="chart-latency"></canvas></div></div>
+        <div class="chart-card" id="chart-judge-wrap"><figcaption>Judge scores</figcaption>
+          <div style="position:relative;height:220px;flex:1;"><canvas id="chart-judge"></canvas></div></div>
+      </div>
+      <script type="application/json" id="eval-charts-data">{{ chart_data | tojson }}</script>
+      {% endif %}
+      {% if lmnr_spans %}
+      <div>
+        <div class="eyebrow">Trace spans ({{ lmnr_spans|length }})</div>
+        <table data-tabulator data-tabulator-page-size="50" data-tabulator-render="basic">
+          <thead><tr><th>Span</th><th>Type</th><th>Duration</th><th>In tok</th><th>Out tok</th><th>Status</th></tr></thead>
+          <tbody>
+          {% for s in lmnr_spans %}
+            <tr>
+              <td><a href="/admin/observability/explorer#trace={{ s.traceId }}&span={{ s.spanId }}"><code>{{ s.name }}</code></a></td>
+              <td>{{ chip(s.spanType, variant='brand' if s.spanType == 'LLM' else 'neutral') }}</td>
+              <td class="num">{{ s.duration_ms|ms }}</td>
+              <td class="num">{{ s.inputTokens|count if s.inputTokens else '—' }}</td>
+              <td class="num">{{ s.outputTokens|count if s.outputTokens else '—' }}</td>
+              <td>{% if s.status == 'success' %}{{ run_status('passed', dot=False) }}{% elif s.status == 'error' %}{{ run_status('errored', dot=False) }}{% else %}—{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+      {% if sibling_runs %}
+      <form method="get" action="/admin/evals/compare" class="row">
+        <input type="hidden" name="a" value="{{ run.run_id }}">
+        <label class="caption">Compare with another run of this suite
+          <select name="b" required>
+            {% for s in sibling_runs %}
+            <option value="{{ s.run_id }}">{{ (s.finished_at or s.created_at)|stamp }} · {{ s.status|status_label }}{% if s.score is not none %} · {{ s.score|pct }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit">Compare</button>
+      </form>
+      {% endif %}
+    </div>
+  </details>
+</section>
+
+<script>
+(function () {
+  // Case filter: Failed only (default when anything failed) / Broke / Passed / All.
+  var bar = document.querySelector('[data-case-filter]');
+  if (bar) {
+    var rows = document.querySelectorAll('.case-row');
+    var empty = document.querySelector('.case-empty');
+    function apply(f) {
+      var shown = 0;
+      rows.forEach(function (r) {
+        var o = r.getAttribute('data-outcome');
+        var on = f === 'all' || (f === 'failed' && o !== 'passed') || (f === 'passed' && o === 'passed')
+          || (f === 'broke' && r.getAttribute('data-broke') === '1');
+        r.hidden = !on; if (on) shown++;
+      });
+      bar.querySelectorAll('button').forEach(function (b) {
+        b.setAttribute('aria-pressed', b.getAttribute('data-filter') === f ? 'true' : 'false');
+      });
+      if (empty) empty.hidden = shown > 0;
+    }
+    bar.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-filter]');
+      if (b) apply(b.getAttribute('data-filter'));
+    });
+    apply(bar.getAttribute('data-default'));
+  }
+
+  // Technical charts (Chart.js is deferred in _base.html — wait for it).
+  var dataEl = document.getElementById('eval-charts-data');
+  if (!dataEl) return;
+  function whenChartReady(cb) {
+    if (typeof Chart !== 'undefined') { cb(); return; }
+    var tries = 0;
+    var timer = setInterval(function () {
+      if (typeof Chart !== 'undefined') { clearInterval(timer); cb(); }
+      else if (tries++ > 100) clearInterval(timer);
+    }, 50);
+  }
+  whenChartReady(function () {
+    var results = [];
+    try { results = JSON.parse(dataEl.textContent || '[]') || []; } catch (e) { return; }
+    if (!results.length) return;
+    var cs = getComputedStyle(document.documentElement);
+    var accent = cs.getPropertyValue('--accent').trim() || '#0E8784';
+    var accentSoft = cs.getPropertyValue('--accent-soft').trim() || '#E4F3F2';
+    var errc = cs.getPropertyValue('--error').trim() || '#DC2626';
+    var lat = document.getElementById('chart-latency');
+    if (lat) new Chart(lat.getContext('2d'), {
+      type: 'bar',
+      data: { labels: results.map(function (r, i) { return '#' + (i + 1); }),
+              datasets: [{ label: 'ms', data: results.map(function (r) { return Number(r.latency_ms) || 0; }),
+                           backgroundColor: results.map(function (r) { return r.passed ? accentSoft : errc; }),
+                           borderColor: accent, borderWidth: 1 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false },
+        tooltip: { callbacks: { title: function (it) { return results[it[0].dataIndex].label; } } } },
+        scales: { y: { beginAtZero: true, ticks: { font: { size: 10 } } }, x: { ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: true } } } }
+    });
+    var bins = [0, 0, 0, 0, 0], any = false;
+    results.forEach(function (r) {
+      if (r.judge_score == null) return; any = true;
+      bins[Math.min(4, Math.max(0, Math.floor(Number(r.judge_score) * 5)))]++;
+    });
+    var jw = document.getElementById('chart-judge-wrap');
+    if (!any) { if (jw) jw.style.display = 'none'; return; }
+    new Chart(document.getElementById('chart-judge').getContext('2d'), {
+      type: 'bar',
+      data: { labels: ['0–20%', '20–40%', '40–60%', '60–80%', '80–100%'], datasets: [{ data: bins, backgroundColor: accent }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    });
+  });
+})();
+</script>
+<script src="/admin/static/eval-run-detail-poll.js?v={{ asset_version }}" defer></script>
+<script src="/admin/static/copy-json.js?v={{ asset_version }}" defer></script>
+{% endblock %}

@@ -1,0 +1,317 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/status_chip.html" import run_status, score_chip, delta %}
+{% from "_components/business_picker.html" import business_picker %}
+{% from "_components/callout.html" import alert, hint_text, info %}
+{# Defaults so the template also renders from a bare context (tests). #}
+{% set suite_runs = suite_runs if suite_runs is defined else [] %}
+{% set latest_run = latest_run if latest_run is defined else none %}
+{% set agent_name = agent_name if agent_name is defined else none %}
+{% set agent_missing = agent_missing if agent_missing is defined else false %}
+{% set target = target if target is defined else ((suite.pass_threshold or 0.7)|float) %}
+{% set title = suite.name|humanize or 'Test suite' %}
+{% block title %}{{ title }} · Test suites · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}Test suite{% if agent_name %} for {{ agent_name }}{% endif %} · {{ (suite.scenarios or [])|length }} cases · target {{ target|pct }}{% endblock %}
+{% block content %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/admin/evals">Testing</a><span aria-hidden="true">›</span>
+  <a href="/admin/evals/suites">Test suites</a><span aria-hidden="true">›</span>
+  <span>{{ title }}</span>
+</nav>
+
+{% if imported_count is defined and imported_count is not none %}
+{% call alert('success') %}Imported {{ imported_count }} case{{ 's' if imported_count != 1 else '' }} from the CSV.{% endcall %}
+{% endif %}
+{% if agent_missing %}
+{% call alert('warning') %}This suite is linked to an agent that doesn't exist in this environment ({{ agent_name }}), so it can't run here. Choose an agent under Settings below and save.{% endcall %}
+{% endif %}
+
+<div class="page-head">
+  <div class="page-head-text">
+    {% if latest_run %}
+    <div class="row">
+      {{ run_status(latest_run.status) }}
+      <span class="big-number num suite-score">{{ latest_run.score|pct }}</span>
+      <span class="caption">target {{ target|pct }}</span>
+      {% if latest_run._delta is not none %}{{ delta(latest_run._delta, ' since the run before') }}{% endif %}
+    </div>
+    <p class="caption">Last run {{ (latest_run.finished_at or latest_run.created_at)|when }} ·
+      <a href="/admin/evals/runs/{{ latest_run.run_id }}{{ '?show=failed' if latest_run.status == 'failed' else '' }}">{{ 'See what failed' if latest_run.status == 'failed' else 'Open the run' }}</a></p>
+    {% else %}
+    <p>This suite hasn't been run yet.</p>
+    {% endif %}
+  </div>
+  <div class="page-head-actions">
+    {% if suite.profile_id and not agent_missing %}
+    <button type="button" class="primary" data-open-suite-run>Run this suite</button>
+    {% else %}
+    <button type="button" class="primary" disabled title="Link the suite to an agent first (Settings below)">Run this suite</button>
+    {% endif %}
+  </div>
+</div>
+
+<section class="section">
+  <h2>Run history</h2>
+  {% if suite_runs %}
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>When</th><th>Result</th><th class="num">Score</th><th>Change</th><th>Kind of run</th><th></th></tr></thead>
+    <tbody>
+      {% for r in suite_runs[:8] %}
+      <tr>
+        <td class="nowrap" title="{{ (r.finished_at or r.created_at)|stamp }}">{{ (r.finished_at or r.created_at)|when }}</td>
+        <td>{{ run_status(r.status) }}</td>
+        <td class="num">{{ score_chip(r.score, target) }}</td>
+        <td>{% if r._delta is not none %}{{ delta(r._delta) }}{% else %}<span class="caption">—</span>{% endif %}</td>
+        <td class="caption">{{ r._label or 'Standard' }}</td>
+        <td><div class="row end nowrap"><a class="btn small ghost" href="/admin/evals/runs/{{ r.run_id }}">Open</a></div></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if suite_runs|length > 8 %}<p class="caption mt-s"><a href="/admin/evals/runs?suite_id={{ suite.suite_id }}">All {{ suite_runs|length }}+ runs of this suite</a></p>{% endif %}
+  {% else %}
+  <p class="caption">No runs yet — use <strong>Run this suite</strong> above.</p>
+  {% endif %}
+</section>
+
+{# Standalone CSV-import form, declared outside the save form (no nested
+   forms); the file input below attaches to it via form="…". #}
+<form id="eval-suite-csv-import" method="post" enctype="multipart/form-data"
+      action="/admin/evals/suites/{{ suite.suite_id }}/import"></form>
+
+<form method="post" action="/admin/evals/suites/{{ suite.suite_id }}" id="suite-form">
+
+  <section class="section">
+    <div class="row between">
+      <div>
+        <h2 class="section-title">Cases</h2>
+        <span class="caption">Each case is a question and the answer you expect. Edit in place, then Save.</span>
+      </div>
+      {% if scenarios %}<span class="caption">{{ scenarios|length }} cases</span>{% endif %}
+    </div>
+    {% if scenarios %}
+    <div class="table-wrap mt-s">
+    <table class="table suite-cases">
+      <thead>
+        <tr><th style="width:16%;">Case</th><th style="width:13%;">Category</th><th>Question</th><th>Expected answer</th><th style="width:7%;"><span class="sr-only">Remove</span></th></tr>
+      </thead>
+      <tbody>
+        {% for sc in scenarios %}
+        {% set known = ['id', 'category', 'question', 'expected_answer'] %}
+        {% set extra = {} %}
+        {% for k, v in sc.items() %}{% if k not in known %}{% set _ = extra.update({k: v}) %}{% endif %}{% endfor %}
+        <tr>
+          <td>
+            <input type="hidden" name="scenario_ids" value="{{ sc.id or '' }}">
+            <input type="hidden" name="scenario_extra_{{ loop.index0 }}" value='{{ extra|tojson }}'>
+            <div>{{ (sc.id or '—')|humanize }}</div>
+            <div class="technical">{{ sc.id or '' }}</div>
+            {% if extra %}
+            <details class="advanced mt-xs"><summary>Advanced</summary>
+              <pre class="code-block mt-xs">{{ extra|pretty_json }}</pre></details>
+            {% endif %}
+          </td>
+          <td><input name="scenario_category_{{ loop.index0 }}" value="{{ sc.category or '' }}" aria-label="Category"></td>
+          <td>
+            <div data-md-editable>
+              <div class="md-field-head"><button type="button" class="ghost" data-md-preview-toggle>Preview</button></div>
+              <textarea name="scenario_question_{{ loop.index0 }}" rows="2" dir="auto" aria-label="Question">{{ sc.question or '' }}</textarea>
+              {% if not sc.question %}
+                {% if (extra.caller is mapping) and extra.caller.goal %}<p class="hint" dir="auto">Voice call — the caller's goal: {{ extra.caller.goal|truncate(160) }}</p>
+                {% elif extra.turns and (extra.turns[0] is mapping) and extra.turns[0].say %}<p class="hint" dir="auto">Voice call ({{ extra.turns|length }} turn{{ 's' if extra.turns|length != 1 else '' }}) — the caller says: “{{ extra.turns[0].say|truncate(140) }}”</p>{% endif %}
+              {% endif %}
+            </div>
+          </td>
+          <td>
+            <div data-md-editable>
+              <div class="md-field-head"><button type="button" class="ghost" data-md-preview-toggle>Preview</button></div>
+              <textarea name="scenario_expected_{{ loop.index0 }}" rows="2" dir="auto" aria-label="Expected answer">{{ sc.expected_answer or '' }}</textarea>
+            </div>
+          </td>
+          <td><label class="checkbox caption"><input type="checkbox" name="scenario_delete_{{ loop.index0 }}" value="1"> Remove</label></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><p>No cases yet. Add one below or import a CSV.</p></div>
+    {% endif %}
+
+    <details class="advanced mt-m" {% if not scenarios %}open{% endif %}>
+      <summary>Add a case</summary>
+      <div class="field-grid mt-s add-case-grid">
+        <label class="field">Question<textarea name="new_scenario_question" rows="2" dir="auto"></textarea></label>
+        <label class="field">Expected answer<textarea name="new_scenario_expected" rows="2" dir="auto"></textarea></label>
+        <label class="field">Category<input name="new_scenario_category" placeholder="e.g. booking"></label>
+        <label class="field">Case name (optional)<input name="new_scenario_id" placeholder="made from the question"></label>
+      </div>
+      <label class="field mt-s">Technical: case JSON (optional)
+        <textarea name="new_scenario_json" rows="3" class="code-block"
+                  placeholder='{"caller": {"persona": "...", "goal": "..."}, "checks": []}'></textarea>
+        <span class="hint">For voice-call cases (caller, limits, checks). The fields above win over the same keys here.</span>
+      </label>
+    </details>
+
+    <details class="advanced mt-m">
+      <summary>Import cases from a CSV file</summary>
+      <div class="stack-s mt-s">
+        <p class="caption">One case per row. Needs a <code>question</code> column; <code>id</code>, <code>category</code>, <code>expected_answer</code>, <code>expected_substrings</code> (separated by <code>;</code>), <code>locale</code> and the context ids are optional. Rows are added — nothing is overwritten.</p>
+        <div class="row">
+          <input type="file" name="csv_file" accept=".csv,text/csv" form="eval-suite-csv-import" required>
+          <button type="submit" form="eval-suite-csv-import">Upload CSV</button>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <section class="section">
+    <h2>Settings</h2>
+    <div class="settings-grid">
+      <label class="field">Name
+        <input name="name" value="{{ suite.name or '' }}" required>
+      </label>
+      <label class="field">Agent
+        <select name="profile_id">
+          <option value="">Not linked (agent type: {{ suite.agent_kind|humanize }})</option>
+          {% for p in profiles %}
+          <option value="{{ p.profile_id }}" {% if suite.profile_id == p.profile_id %}selected{% endif %}>{{ p.display_name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field">Target score
+        <span class="input-suffix"><input type="number" step="1" min="0" max="100" value="{{ (target * 100)|round|int }}" data-pct-for="suite-threshold"><span>%</span></span>
+        <input type="hidden" name="pass_threshold" id="suite-threshold" value="{{ suite.pass_threshold }}">
+        <span class="hint">A run passes when its score reaches this.</span>
+      </label>
+      <label class="field">Judge model
+        <select name="evaluator_model_id">
+          <option value="">None — check expected words only</option>
+          {% for m in models %}
+          <option value="{{ m.model_id }}" {% if suite.evaluator_model_id and suite.evaluator_model_id == m.model_id %}selected{% endif %}>{{ m.name }}{% if not m.is_active %} (inactive){% endif %}</option>
+          {% endfor %}
+        </select>
+        <span class="hint">Reads each answer and scores it against the expected answer. Needed for model comparisons.</span>
+      </label>
+      <label class="checkbox"><input type="checkbox" name="is_active" {% if suite.is_active %}checked{% endif %}> Active (paused suites are skipped by schedules)</label>
+    </div>
+
+    <details class="advanced mt-m">
+      <summary>Advanced</summary>
+      <div class="stack-m mt-s">
+        <label class="field">How cases are run
+          <select name="runner_kind">
+            {% for rk, rk_label in runner_options %}
+            <option value="{{ rk }}" {% if (suite.runner_kind or "chat") == rk %}selected{% endif %}>{{ rk_label }}</option>
+            {% endfor %}
+          </select>
+          <span class="hint technical">runner_kind: {{ suite.runner_kind or 'chat' }}</span>
+        </label>
+        {% set dc = suite.default_context or {} %}
+        <div>
+          <div class="eyebrow">Defaults for every run</div>
+          <p class="hint">Every run of this suite starts with these; the Run form and individual cases can override them.</p>
+          <div class="settings-grid mt-s">
+            <label class="field">Business
+              {{ business_picker(name="default_business_id", businesses=businesses, selected_id=dc.business_id or "", placeholder="— no default —", style="width:100%;") }}
+            </label>
+            <label class="field">Language
+              <select name="default_locale">
+                {% for loc, lbl in [('', 'Not set'), ('en', 'English'), ('ar', 'Arabic'), ('tr', 'Turkish'), ('ru', 'Russian')] %}
+                <option value="{{ loc }}" {% if (dc.locale or '') == loc %}selected{% endif %}>{{ lbl }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="field">Branch id <input name="default_branch_id" value="{{ dc.branch_id or '' }}" class="mono" placeholder="optional"></label>
+            <label class="field">Customer id <input name="default_customer_id" value="{{ dc.customer_id or '' }}" class="mono" placeholder="optional"></label>
+            {% for key, label, _ph in eval_context_fields() %}
+            <label class="field">{{ label }} <input name="default_{{ key }}" value="{{ dc[key] or '' }}" class="mono" placeholder="optional"></label>
+            {% endfor %}
+          </div>
+          <label class="field mt-s">Technical: extra context (JSON)
+            <textarea name="default_context_json" rows="3" class="code-block"
+                      placeholder='{"screen_context": {"flow": "home"}}'>{{ (dc.extra | tojson(indent=2)) if dc.extra else '' }}</textarea>
+          </label>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <div class="row form-actions">
+    <button class="primary" type="submit">Save suite</button>
+    <a class="btn ghost" href="/admin/evals/suites">Cancel</a>
+  </div>
+</form>
+
+{% if suite.profile_id and not agent_missing %}
+<dialog id="suite-run-dialog" class="drawer" aria-labelledby="suite-run-title">
+  <form method="post" action="/admin/eval-runs/trigger" class="drawer-body stack-m">
+    <div class="row between">
+      <h2 id="suite-run-title" class="mb-0">Run {{ title }}</h2>
+      <button type="button" class="ghost icon-btn" data-close-suite-run aria-label="Close">&times;</button>
+    </div>
+    <p class="caption">Runs all {{ (suite.scenarios or [])|length }} cases against {{ agent_name }}. You'll go to the run page and see results as they come in.</p>
+    <input type="hidden" name="source" value="suite">
+    <input type="hidden" name="profile_id" value="{{ suite.profile_id }}">
+    <input type="hidden" name="suite_id" value="{{ suite.suite_id }}">
+    <label class="field">Business (optional)
+      <select name="business_id">
+        <option value="">The suite's default</option>
+        {% for b in businesses %}<option value="{{ b.id }}">{{ b.name }}{% if b.subdomain %} ({{ b.subdomain }}){% endif %}</option>{% endfor %}
+      </select>
+    </label>
+    <details class="advanced">
+      <summary>Advanced</summary>
+      <div class="stack-m mt-s">
+        <label class="field">Repeat each case
+          <select name="repeats"><option value="1" selected>Once</option><option value="3">3 times</option><option value="5">5 times</option><option value="10">10 times</option></select>
+          <span class="hint">Finds flaky cases: a case only counts as reliable when it passes every time.</span>
+        </label>
+        {% if suite.runner_kind != 'voice_live' %}
+        <label class="field">Cases at a time
+          <select name="concurrency"><option value="" selected>{% if (suite.default_context or {}).get('concurrency') %}Suite setting ({{ suite.default_context.concurrency }}){% else %}Default (4){% endif %}</option><option value="1">1 — one after another</option><option value="2">2</option><option value="4">4</option><option value="8">8</option></select>
+          <span class="hint">Pick 1 when cases write to the same test customer and must not overlap.</span>
+        </label>
+        {% endif %}
+        {% if suite.runner_kind == 'voice_live' %}
+        <label class="field">Voice calls
+          <select name="voice_mode"><option value="">Simulated (free)</option><option value="live">Real call — billable</option></select>
+        </label>
+        {% endif %}
+        <label class="field">Model
+          <select name="model_id"><option value="">The agent's own model</option>
+            {% for m in models %}<option value="{{ m.model_id }}">{{ m.name }}</option>{% endfor %}</select>
+        </label>
+      </div>
+    </details>
+    <div class="row">
+      <button type="submit" class="primary">Start run</button>
+      <button type="button" class="ghost" data-close-suite-run>Cancel</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+
+<script>
+(function () {
+  var dlg = document.getElementById('suite-run-dialog');
+  document.addEventListener('click', function (e) {
+    if (!dlg) return;
+    if (e.target.closest('[data-open-suite-run]')) { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); }
+    if (e.target.closest('[data-close-suite-run]')) dlg.close();
+  });
+  if (dlg && new URLSearchParams(location.search).has('run')) { if (dlg.showModal) dlg.showModal(); }
+  // Percent input -> the 0..1 pass_threshold the POST contract expects.
+  document.querySelectorAll('[data-pct-for]').forEach(function (inp) {
+    var target = document.getElementById(inp.getAttribute('data-pct-for'));
+    inp.addEventListener('input', function () {
+      var v = parseFloat(inp.value);
+      if (!isNaN(v)) target.value = (Math.max(0, Math.min(100, v)) / 100).toFixed(2);
+    });
+  });
+})();
+</script>
+{% endblock %}

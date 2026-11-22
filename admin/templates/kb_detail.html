@@ -1,0 +1,353 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import hint, hint_text, info %}
+{% block title %}{{ row.name }} · Knowledge bases · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ row.name }}{% endblock %}
+{% block page_subtitle %}{{ kb_kind_label(row.kind) }}{% if row.agent_kind %} · used by {{ agent_label(row.agent_kind) }}{% endif %}{% endblock %}
+{% block content %}
+<a class="back-link" href="/admin/kb">&larr; Knowledge bases</a>
+{% set uploaded = request.query_params.get('uploaded') %}
+{% set upload_error = request.query_params.get('error') %}
+{% set job_id = request.query_params.get('job_id') %}
+{% if uploaded or upload_error %}
+<div style="margin-bottom:var(--space-m);display:flex;gap:var(--space-xs);flex-wrap:wrap;">
+  {% if uploaded %}{{ chip('Uploaded — ' ~ uploaded ~ ' chunks added', variant='ok', dot=True) }}{% endif %}
+  {% if upload_error %}{{ chip(upload_error, variant='warn', dot=True) }}{% endif %}
+</div>
+{% endif %}
+{% if job_id %}
+{# Live-progress panel: KB ingestion now runs on a background daemon thread
+   via admin/_jobs.start_tracked_job, so we poll /admin/jobs/{id}.json every
+   3s for status + metadata updates the worker stamps via merge_job_metadata.
+   When the job hits a terminal state we trigger a one-shot reload so the
+   sidebar's "embeddings count" / "last refreshed" reflect the final commit. #}
+<div id="kb-ingest-panel" class="card"
+     data-job-id="{{ job_id }}"
+     style="margin-bottom:var(--space-m);">
+  <div style="display:flex;align-items:center;gap:var(--space-s);flex-wrap:wrap;">
+    <strong>Ingestion in progress</strong>
+    <span class="num" id="kb-ingest-job">job {{ job_id[:8] }}</span>
+    <span id="kb-ingest-status" class="caption">status: queued</span>
+    <span id="kb-ingest-counts" class="caption"></span>
+    <a class="ghost" href="/admin/jobs?kind=kb_upload" style="margin-left:auto;">All jobs →</a>
+  </div>
+  <p id="kb-ingest-error" class="caption" style="color:var(--error);margin-top:var(--space-xs);display:none;"></p>
+</div>
+<script>
+(function () {
+  const panel = document.getElementById('kb-ingest-panel');
+  if (!panel) return;
+  const jobId = panel.getAttribute('data-job-id');
+  const statusEl = document.getElementById('kb-ingest-status');
+  const countsEl = document.getElementById('kb-ingest-counts');
+  const errorEl = document.getElementById('kb-ingest-error');
+  // Terminal states stop the poll loop and one-shot-reload the page so
+  // the embeddings/page-count sidebar refreshes against the new commits.
+  const TERMINAL = new Set(['succeeded', 'failed', 'cancelled']);
+  let timer = null;
+
+  function tick() {
+    fetch('/admin/jobs/' + encodeURIComponent(jobId) + '.json', {
+      credentials: 'same-origin',
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (row) {
+        const status = row.status || 'unknown';
+        statusEl.textContent = 'status: ' + status;
+        const md = row.metadata || {};
+        const parts = [];
+        if (md.files_done !== undefined && md.file_count !== undefined) {
+          parts.push(md.files_done + '/' + md.file_count + ' files');
+        }
+        if (md.chunk_count !== undefined) {
+          parts.push(md.chunk_count + ' chunks');
+        }
+        if (md.embed_ms_total !== undefined) {
+          parts.push((md.embed_ms_total / 1000).toFixed(1) + 's embed');
+        }
+        countsEl.textContent = parts.join(' · ');
+        if (row.error) {
+          errorEl.textContent = row.error;
+          errorEl.style.display = '';
+        }
+        if (TERMINAL.has(status)) {
+          if (timer) { clearInterval(timer); timer = null; }
+          // One-shot reload to refresh the embeddings count display; the
+          // status query param survives so the chip stays visible.
+          setTimeout(function () { window.location.reload(); }, 800);
+        }
+      })
+      .catch(function (err) {
+        // Transient errors (e.g. 404 right after enqueue if the row
+        // isn't visible yet) — keep polling; only log so devs notice.
+        if (window.console) console.warn('kb-ingest poll:', err);
+      });
+  }
+
+  tick();
+  timer = setInterval(tick, 3000);
+})();
+</script>
+{% endif %}
+
+{% set synced = row.kind in ['gitbook', 'ms_drive', 'http'] %}
+{% set cfg = row.config or {} %}
+<div class="detail-layout">
+  <div>
+
+    {# ── ① Documents: what the agent knows, with the upload area on top ── #}
+    {% if row.kind == 'pgvector' %}
+    <section class="section" id="documents">
+      <div class="row between">
+        <h2 class="mb-0">Documents</h2>
+        {% if pages is not none %}
+        <span class="caption num">{{ pages_total }} document{{ 's' if pages_total != 1 else '' }} · {{ chunks_total }} searchable passage{{ 's' if chunks_total != 1 else '' }}</span>
+        {% endif %}
+      </div>
+      <span class="caption mb-m" style="display:block;margin-top:var(--space-xxs);">Agents search these when they answer. Add files to teach the agent something new.</span>
+
+      <form method="post" action="/admin/kb/{{ row.source_id }}/upload" enctype="multipart/form-data"
+            class="dropzone mb-m" id="kb-dropzone">
+        <div class="form-stack" style="max-width:none;">
+          <label class="field">
+            <span class="field-label">Add documents</span>
+            <input type="file" name="files" multiple required accept=".md,.txt,.html,.pdf,.docx" id="kb-files">
+            <span class="field-help">Drop files here or choose them. PDF, Word, Markdown, text or HTML &mdash; up to 5&nbsp;MB each.</span>
+          </label>
+          <div class="form-grid">
+            <label class="field">
+              <span class="field-label">Title <span class="opt">(optional)</span></span>
+              <input name="title" placeholder="Defaults to the file name">
+            </label>
+            <label class="field">
+              <span class="field-label">Kind of document</span>
+              <select name="page_type">
+                <option value="user_guide">User guide</option>
+                <option value="feature_explanation">Feature explanation</option>
+                <option value="navigation_help">Navigation help</option>
+                <option value="business_concept">Business concept</option>
+                <option value="troubleshooting">Troubleshooting</option>
+                <option value="faq">FAQ</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">Language</span>
+              <select name="language">
+                <option value="en">English</option>
+                <option value="ar">Arabic</option>
+                <option value="tr">Turkish</option>
+                <option value="ru">Russian</option>
+              </select>
+            </label>
+          </div>
+          <div><button class="primary" type="submit">Upload</button></div>
+        </div>
+      </form>
+
+      {% if pages is not none %}
+        {% if pages %}
+        <div class="table-wrap" style="max-height:560px;overflow-y:auto;">
+          <table class="table">
+            <thead style="position:sticky;top:0;z-index:1;"><tr><th>Title</th><th>Kind</th><th>Language</th><th class="num">Passages</th><th>Source</th><th>Added</th></tr></thead>
+            <tbody>
+              {% for p in pages %}
+              <tr>
+                <td><span class="clamp-1" style="max-width:280px;" title="{{ p.title or '' }}">{{ p.title or '—' }}</span></td>
+                <td class="caption">{{ (p.type or '—')|replace('_', ' ') }}</td>
+                <td class="caption">{{ p.language or '—' }}</td>
+                <td class="num">{{ p.chunk_count }}</td>
+                <td class="caption"><span class="clamp-1" style="max-width:200px;">
+                  {% if p.source and (p.source.startswith('http://') or p.source.startswith('https://')) %}
+                  <a href="{{ p.source }}" target="_blank" rel="noopener">{{ p.source }}</a>
+                  {% else %}{{ p.source or '—' }}{% endif %}</span>
+                </td>
+                <td class="caption num" style="white-space:nowrap;">{{ (p.created_at or '')[:10] or '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if pages_total > pages|length %}
+        <p class="caption mt-s">Showing the first {{ pages|length }} of {{ pages_total }} documents.</p>
+        {% endif %}
+        {% else %}
+        <div class="empty-state">No documents yet &mdash; upload the first one above.</div>
+        {% endif %}
+      {% else %}
+      <p class="caption">This knowledge base keeps its documents in its own table
+        (<span class="technical">{{ cfg.get('table') or 'not set' }}</span>), so they aren't listed here.</p>
+      {% endif %}
+    </section>
+    {% else %}
+    <section class="section" id="source">
+      <h2>Source</h2>
+      {% if synced %}
+      <p class="caption">The agent reads this {{ kb_kind_label(row.kind)|lower }}. It is synced on a schedule
+        {%- if row.refresh_cadence %} ({{ row.refresh_cadence }}){% endif %}.
+        {% if row.last_refreshed_at %}Last synced <span class="num">{{ row.last_refreshed_at[:16]|replace('T', ' ') }}</span>.
+        {% else %}It has not been synced yet, so the agent finds nothing in it until the first sync runs.{% endif %}</p>
+      {% else %}
+      <p class="caption">The agent reads a live database table directly &mdash; there is nothing to upload or refresh.</p>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {# ── ② Settings ── #}
+    <section class="section" id="settings">
+      <h2>Settings</h2>
+      <form method="post" action="/admin/kb/{{ row.source_id }}" class="form-stack">
+        <input type="hidden" name="_active_form" value="1">
+        <input type="hidden" name="_additional_kinds_form" value="1">
+        <label class="field">
+          <span class="field-label">Name</span>
+          <input name="name" value="{{ row.name or '' }}" required>
+        </label>
+        <label class="field">
+          <span class="field-label">Agent</span>
+          <select name="agent_kind">
+            <option value="">Not attached</option>
+            {% for k in agent_kinds %}
+            <option value="{{ k }}" {% if k == row.agent_kind %}selected{% endif %}>{{ agent_label(k) }}</option>
+            {% endfor %}
+            {% if row.agent_kind and row.agent_kind not in agent_kinds %}
+            <option value="{{ row.agent_kind }}" selected>{{ agent_label(row.agent_kind) }}</option>
+            {% endif %}
+          </select>
+          <span class="field-help">The agent that searches this knowledge base.</span>
+        </label>
+        <fieldset class="field-set">
+          <legend>Also used by</legend>
+          {% set extra = row.additional_agent_kinds or [] %}
+          <div class="check-grid">
+            {% for k in agent_kinds %}{% if k != row.agent_kind %}
+            <label class="field-check"><input type="checkbox" name="additional_agent_kinds" value="{{ k }}" {% if k in extra %}checked{% endif %}> {{ agent_label(k) }}</label>
+            {% endif %}{% endfor %}
+            {% for k in extra %}{% if k not in agent_kinds %}
+            <label class="field-check"><input type="checkbox" name="additional_agent_kinds" value="{{ k }}" checked> {{ agent_label(k) }}</label>
+            {% endif %}{% endfor %}
+          </div>
+        </fieldset>
+        {% if synced %}
+        <div class="form-grid">
+          <label class="field">
+            <span class="field-label">Sync schedule</span>
+            <input name="refresh_cadence" value="{{ row.refresh_cadence or '' }}" placeholder="daily">
+          </label>
+          <label class="field">
+            <span class="field-label">Warn when older than (hours)</span>
+            <input name="freshness_sla_hours" type="number" value="{{ row.freshness_sla_hours or '' }}">
+          </label>
+        </div>
+        {% endif %}
+        <label class="field-check">
+          <input type="checkbox" name="is_active" {% if row.is_active %}checked{% endif %}>
+          <span>Active <span class="field-help">Turn off to stop agents searching it without deleting anything.</span></span>
+        </label>
+
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <div class="form-stack">
+            <label class="field">
+              <span class="field-label">Source type</span>
+              <select name="kind">
+                {% for k in kinds %}
+                <option value="{{ k }}" {% if k == row.kind %}selected{% endif %}>{{ kb_kind_label(k) }} ({{ k }})</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">Configuration (JSON)</span>
+              <textarea name="config" class="code-block" style="min-height:180px;">{{ row.config|pretty_json }}</textarea>
+              <span class="field-help">Read by the ingestion and search code for this source type.</span>
+            </label>
+            {% if row.kind == 'pgvector' %}
+            {% set cfg_table = cfg.get('table') %}
+            {% if cfg_table %}
+            <details>
+              <summary class="caption" style="cursor:pointer;">Storage table <span class="technical">public.{{ cfg_table }}</span> ({{ schema_rows|length }} columns)</summary>
+              {% if schema_rows %}
+              <table class="table mt-s">
+                <thead><tr><th>Column</th><th>Type</th></tr></thead>
+                <tbody>
+                  {% for c in schema_rows %}
+                  <tr><td><code>{{ c.column_name }}</code></td><td class="caption">{{ c.data_type }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              {% else %}
+              <p class="caption">No columns found (the table may not exist in this environment).</p>
+              {% endif %}
+            </details>
+            {% endif %}
+            {% endif %}
+          </div>
+        </details>
+
+        <div class="form-actions">
+          <button class="primary" type="submit">Save changes</button>
+          <a class="btn ghost" href="/admin/kb">Cancel</a>
+        </div>
+      </form>
+    </section>
+
+    {# ── ③ Danger zone — always last ── #}
+    <section class="section danger-zone">
+      <h2>Danger zone</h2>
+      <p class="caption">Permanently deletes this knowledge base and every document in it. Agents that use it are detached automatically. This cannot be undone.</p>
+      <form method="post"
+            action="/admin/kb/{{ row.source_id }}/delete"
+            onsubmit="return confirm('Delete {{ row.name|e }} and all its documents? This cannot be undone.')">
+        <button class="btn danger" type="submit">Delete knowledge base</button>
+      </form>
+    </section>
+
+  </div>
+
+  {# ── Details rail ── #}
+  <aside class="card">
+    <h2>Details</h2>
+    <dl class="kv">
+      <dt>Status</dt>
+      <dd>{% if row.is_active %}{{ chip('Active', variant='ok', dot=True) }}{% else %}{{ chip('Off', variant='warn', dot=True) }}{% endif %}</dd>
+      <dt>Source type</dt><dd>{{ kb_kind_label(row.kind) }}</dd>
+      <dt>Agent</dt>
+      <dd>{% if row.agent_kind %}{{ agent_label(row.agent_kind) }}{% else %}{{ chip('Not attached', variant='warn') }}{% endif %}
+        {% if row.additional_agent_kinds %}<br><span class="caption">+ {{ row.additional_agent_kinds|length }} more</span>{% endif %}</dd>
+      {% if row.kind == 'pgvector' and pages is not none %}
+      <dt>Documents</dt><dd class="num">{{ pages_total }}</dd>
+      <dt>Passages</dt><dd class="num">{{ chunks_total }}</dd>
+      {% endif %}
+      {% if synced %}
+      <dt>Last synced</dt><dd class="num">{{ (row.last_refreshed_at or 'never')[:16]|replace('T', ' ') }}</dd>
+      {% endif %}
+      {% if row.kind == 'gitbook' %}
+      <dt>Space</dt><dd><span class="technical">{{ cfg.get('space_id') or '—' }}</span></dd>
+      {% endif %}
+      <dt>Updated</dt><dd class="num">{{ (row.updated_at or '—')[:10] }}</dd>
+      <dt>ID</dt><dd><span class="technical">{{ row.source_id }}</span></dd>
+    </dl>
+  </aside>
+</div>
+
+<script>
+(function () {
+  const zone = document.getElementById('kb-dropzone');
+  const input = document.getElementById('kb-files');
+  if (!zone || !input) return;
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    zone.addEventListener(ev, function (e) { e.preventDefault(); zone.classList.add('is-over'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    zone.addEventListener(ev, function (e) { e.preventDefault(); zone.classList.remove('is-over'); });
+  });
+  zone.addEventListener('drop', function (e) {
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+      input.files = e.dataTransfer.files;
+    }
+  });
+})();
+</script>
+{% endblock %}

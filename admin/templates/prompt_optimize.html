@@ -1,0 +1,144 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% block title %}Optimize prompt · {{ brand().title }}{% endblock %}
+{% block page_title %}Optimize prompt with an LLM{% endblock %}
+{% block page_subtitle %}
+  {{ prompt.agent_kind }} · {{ prompt.slug }} — feed failing scenarios to a meta-prompt and stream the rewrite.
+{% endblock %}
+{% block content %}
+{# Back to the agent this was opened from (its Instructions tab) when the
+   link carried profile_id; the kind-level list otherwise. #}
+{% set back_pid = request.query_params.get('profile_id') %}
+{% if back_pid %}
+<a href="/admin/agents?env={{ current_env }}&profile_id={{ back_pid|urlencode }}&tab=instructions" class="caption">&larr; back to the agent's instructions</a>
+{% else %}
+<a href="/admin/agents?env={{ current_env }}&kind={{ prompt.agent_kind }}" class="caption">&larr; back to agents</a>
+{% endif %}
+
+<div class="card" style="margin-top:var(--space-m);">
+  <form id="optimize-form" style="display:grid;grid-template-columns:1fr 1fr auto;gap:var(--space-m);align-items:end;">
+    <label>
+      <span class="eyebrow">Eval run to learn from</span>
+      <select name="based_on_run_id" required style="width:100%;">
+        <option value="">— pick a run —</option>
+        {% for r in runs %}
+        <option value="{{ r.run_id }}">
+          {{ (r.created_at or '')[:19] }} · {{ r.status }} · score {{ r.score if r.score is not none else '—' }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span class="eyebrow">Optimizer model</span>
+      <select name="model_id" required style="width:100%;">
+        <option value="">— pick a model —</option>
+        {% for m in models %}
+        <option value="{{ m.model_id }}">{{ m.name }} — {{ m.model_string }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="primary" id="optimize-button">Optimize &rarr;</button>
+  </form>
+  {% if latest_version %}
+  <p class="caption" style="margin-top:var(--space-s);">
+    Current prompt is <strong>v{{ latest_version.version_number }}</strong>
+    ({{ (latest_version.content or '')|length }} chars,
+    saved {{ (latest_version.created_at or '')[:19] }}).
+  </p>
+  {% else %}
+  <p class="caption">No prompt versions yet — write a v1 in /admin/agents first.</p>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-top:var(--space-m);">
+  <div class="eyebrow">Optimizer output (streaming)</div>
+  <pre id="optimize-output" class="code-block"
+       style="min-height:240px;white-space:pre-wrap;margin:var(--space-s) 0 0;"></pre>
+  <p id="optimize-status" class="caption" style="margin-top:var(--space-xs);">Idle — pick a run and a model, then click Optimize.</p>
+</div>
+
+<div class="card" id="save-card" style="margin-top:var(--space-m);display:none;">
+  <h2>Save as new version</h2>
+  <form method="post" action="/admin/prompts/{{ prompt.prompt_id }}/versions">
+    {% if back_pid %}{# opened from an agent: the save also points that agent at the new version #}
+    <input type="hidden" name="profile_id" value="{{ back_pid }}">
+    <input type="hidden" name="prompt_key" value="{{ prompt.slug }}">
+    {% endif %}
+    <textarea name="content" id="save-textarea" class="code-block"
+              style="width:100%;min-height:240px;"></textarea>
+    <div style="display:flex;gap:var(--space-s);align-items:center;margin-top:var(--space-xs);">
+      <input name="notes" value="Optimized by LLM" placeholder="Change note" style="flex:1;">
+      <button type="submit" class="primary">Save new version</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById("optimize-form");
+  const output = document.getElementById("optimize-output");
+  const status = document.getElementById("optimize-status");
+  const saveCard = document.getElementById("save-card");
+  const saveTextarea = document.getElementById("save-textarea");
+  const button = document.getElementById("optimize-button");
+  if (!form) return;
+
+  form.addEventListener("submit", async function (ev) {
+    ev.preventDefault();
+    output.textContent = "";
+    saveCard.style.display = "none";
+    saveTextarea.value = "";
+    status.textContent = "Optimizing — streaming response…";
+    button.disabled = true;
+
+    const fd = new FormData(form);
+    const resp = await fetch("/admin/prompts/{{ prompt.prompt_id }}/optimize", {
+      method: "POST",
+      body: fd,
+      headers: {"Accept": "text/event-stream"},
+    });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      status.textContent = "Failed: " + (txt.slice(0, 240) || resp.status);
+      button.disabled = false;
+      return;
+    }
+
+    // Minimal SSE parser — each event is `data: {...}\n\n`.
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let full = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const chunk = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 2);
+        if (!chunk.startsWith("data:")) continue;
+        const payload = chunk.slice(5).trim();
+        try {
+          const evt = JSON.parse(payload);
+          if (evt.type === "delta" && evt.content) {
+            output.textContent += evt.content;
+            full += evt.content;
+          } else if (evt.type === "done") {
+            status.textContent = "Done — review the output and save if it looks good.";
+            saveTextarea.value = evt.content || full;
+            saveCard.style.display = "block";
+          } else if (evt.type === "error") {
+            status.textContent = "Error: " + evt.content;
+          }
+        } catch (err) {
+          // Ignore malformed chunks; the next one might be intact.
+        }
+      }
+    }
+    button.disabled = false;
+  });
+})();
+</script>
+{% endblock %}

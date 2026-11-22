@@ -1,0 +1,136 @@
+# ADK and AI
+google-genai==1.73.1
+openai==2.32.0
+langchain==1.2.15
+langsmith==0.7.32
+langchain-core==1.4.8
+langchain-openai==1.1.14
+langchain-google-genai==4.2.2
+# The Anthropic integration is loaded lazily by runtime/llm_factory.py only when
+# an agent_models row selects that provider. Keeping it opt-in means the default
+# image stays slim, but pinning the version here guarantees a working build when
+# an admin picks `anthropic` (which, since the 2026-08-16 Vertex removal, is the
+# only route to a Claude model).
+#
+# REMOVED 2026-08-16: langchain-google-vertexai==3.2.4. Its three builders needed
+# GCP Application Default Credentials, which do not exist on Azure compute, so
+# they were selectable in the admin UI and non-functional. It also dragged in
+# google-cloud-aiplatform, google-cloud-bigquery, google-cloud-resource-manager,
+# google-cloud-vectorsearch and vertexai. Gemini is unaffected — it runs on
+# langchain-google-genai (below), not Vertex.
+langchain-anthropic==1.4.8
+# Direct SDK use (not via LangChain): structured JSON-schema output, PDF/image input,
+# server-side refusal fallbacks. Same version langchain-anthropic resolves to.
+anthropic==0.122.0
+# Agents' tool loop (create_react_agent) — replaces a hand-rolled loop that
+# mis-handled Gemini's tool_call_chunks and looped 10× against merged tool names.
+langgraph==1.1.8
+
+# Web Framework
+fastapi==0.136.0
+uvicorn[standard]==0.44.0
+pydantic==2.13.2
+python-multipart==0.0.26
+# Admin MCP server (mounted at /mcp on the control-plane; ENABLE_ADMIN_MCP=1)
+mcp==1.28.1
+
+# Database
+supabase==2.28.3
+postgrest==2.28.3
+
+# Cloud Storage — Azure Blob is the only backend (CLOUD_STORAGE_BACKEND defaults
+# to azure_blob). Imported lazily inside the backend's methods, so a broken
+# install can't break `import shared.cloud_storage`.
+#
+# REMOVED 2026-08-16: google-cloud-storage==3.10.1, together with
+# shared/storage_backends/gcs_backend.py. The GCS default was actively harmful:
+# deployments that set no backend silently fell back to GCS credentials that
+# do not exist on Azure compute.
+azure-storage-blob==12.30.0
+azure-identity==1.25.3
+
+# Utilities
+python-dotenv==1.2.2
+pyjwt==2.12.1
+# ES256 JWT verification (core.auth, the main project's JWKS) needs PyJWT's
+# crypto backend. Previously present only transitively (azure-identity).
+cryptography==50.0.0
+httpx==0.28.1
+jsonpatch==1.33
+# Grapheme clusters + Unicode emoji properties for common/emoji_names.py (the
+# agents' emoji note): stdlib `re`/`unicodedata` can't segment 1️⃣, 🏴󠁧󠁢󠁥󠁮󠁧󠁿 or
+# 💇‍♂️ and Python 3.11's Unicode data stops at 14.0. Already in the lock via tiktoken.
+regex==2026.7.19
+
+# Documentation and scraping
+langchain-community==0.4.1
+tqdm==4.67.3
+nest-asyncio==1.6.0
+python-docx==1.2.0
+# Docs crawlers: HTML parsing, HTML→markdown, PDF text
+beautifulsoup4==4.15.0
+markdownify==1.2.3
+pdfplumber==0.11.10
+
+# Admin portal — Jinja2 for templates (HTMX comes via CDN)
+jinja2==3.1.6
+# Signed state tokens (the /agents demo portal)
+itsdangerous==2.2.0
+# Split a phone number into country code + number
+phonenumbers==9.0.40
+
+# Observability + evals — self-hosted Laminar (lmnr-ai/lmnr, Apache-2.0).
+# OTel-native: Laminar.initialize() auto-instruments LangChain/LangGraph and
+# every supported LLM provider (OpenAI, Anthropic, Gemini, …). Point the
+# SDK at the docker-compose stack with LMNR_BASE_URL / LMNR_HTTP_PORT /
+# LMNR_GRPC_PORT and a project API key from the local dashboard at :5667.
+#
+# Floor is 0.7.43. lmnr 0.7.42 constrained opentelemetry-instrumentation-langchain
+# to >=0.47.1,<0.48.0 while leaving opentelemetry-api unbounded above. The 0.47.x
+# instrumentor does `from opentelemetry._events import get_event_logger`, and that
+# module was deleted in opentelemetry-api 1.44.0 (released 2026-07-16). Once a
+# rebuild's resolver drifted onto 1.44.0, lmnr's instrumentor loop raised
+# ModuleNotFoundError for `langchain` and `openai`, caught it, and booted with those
+# two instrumentors silently disabled — killing every per-tool (`*.tool`) and
+# `ChatGoogleGenerativeAI.chat` span in prod on 2026-07-21 while the LLM-level spans
+# kept working. 0.7.43 pins opentelemetry-instrumentation-langchain==0.52.4, which
+# has no `opentelemetry._events` import at all.
+lmnr[all]==0.7.43
+# The OTel core is pinned explicitly because it is otherwise purely transitive via
+# lmnr and re-resolves on every image rebuild — that silent roll-forward is what
+# caused the outage above. These are the versions lmnr 0.7.43 already forces (it
+# pins semantic-conventions==0.60b1, which pins opentelemetry-api==1.39.1, which
+# in turn forces opentelemetry-instrumentation==0.60b1). Stating them here makes
+# the coupling visible and turns a future lmnr bump that moves the OTel floor into
+# a loud resolver conflict instead of another silent drift.
+opentelemetry-api==1.39.1
+opentelemetry-sdk==1.39.1
+opentelemetry-semantic-conventions==0.60b1
+# wrapt 2.x made wrap_function_wrapper's `module` argument positional-only,
+# which the OTel/lmnr auto-instrumentors call as a kwarg — breaking Laminar
+# trace emission ("wrap_function_wrapper() got an unexpected keyword argument
+# 'module'"). Pin to 1.x until the bundled instrumentors catch up.
+# Still unfixed upstream: instrumentation-langchain 0.52.4 continues to call
+# wrap_function_wrapper(module="langchain_core.callbacks", ...). The pinned
+# opentelemetry-instrumentation 0.60b1 happens to cap wrapt<2 itself, but newer
+# ones (0.65b0) relax that to wrapt<3 — so this pin stays the durable guard.
+# TODO: drop this pin once lmnr[all]/opentelemetry instrumentors support wrapt 2
+# (re-test trace emission end-to-end after unpinning).
+wrapt==1.17.3
+
+# Testing (optional)
+pytest==9.0.3
+pytest-asyncio==1.3.0
+pytest-cov==7.1.0
+
+# Used by scripts/import_payload_docs.py to read a Payload CMS database
+psycopg2-binary==2.9.12
+tokencost==0.1.26
+
+# Azure Voice Live duplex provider — raw WebSocket transport (see voice/live/providers/azure_voice_live.py)
+aiohttp==3.14.3
+
+# Azure AI Speech SDK — continuous recognition with interim results for
+# live transcription sockets.
+# Native wheel: the image needs libssl3 + libasound2 (Dockerfile).
+azure-cognitiveservices-speech==1.53.0

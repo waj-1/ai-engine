@@ -1,0 +1,44 @@
+{% extends "_base.html" %}
+{% block title %}Create a bundle · {{ brand().title }}{% endblock %}
+{% block page_title %}Create a bundle{% endblock %}
+{% block page_subtitle %}Group existing tools under one name so an agent can get them all at once.{% endblock %}
+{% block content %}
+<a class="back-link" href="/admin/tools">&larr; Tools &amp; integrations</a>
+
+{% if error %}
+<div class="alert alert-warning mb-m">{{ error }}</div>
+{% endif %}
+
+{# POST contract unchanged: name, usage_guidance, context_fields and the
+   member_tool_ids checkboxes, whose DOM order is the exposed order. Ticked
+   tools move into "Selected" (in the order they were ticked), which sits
+   before the pool in the DOM — so selected-first is also the saved order. #}
+<form method="post" action="/admin/mcp/create" class="form-stack" style="max-width:880px;">
+  <label class="field">
+    <span class="field-label">Name</span>
+    <input type="text" name="name" required placeholder="e.g. Sales tools" value="{{ form.name or '' }}">
+  </label>
+  <label class="field">
+    <span class="field-label">When should the agent use it? <span class="opt">(optional)</span></span>
+    <textarea name="usage_guidance" rows="3" placeholder="e.g. Use for questions about the sales pipeline.">{{ form.usage_guidance or '' }}</textarea>
+    <span class="field-help">Shown to the agent with the tool list, so it knows when this bundle is relevant.</span>
+  </label>
+
+  {% include "_mcp_member_picker.html" %}
+
+  <details class="advanced">
+    <summary>Advanced</summary>
+    <label class="field">
+      <span class="field-label">Context fields (JSON)</span>
+      <textarea name="context_fields" rows="4" class="code-block">{{ form.context_fields or '{}' }}</textarea>
+      <span class="field-help">Values the engine fills in on every call instead of the agent, e.g. <code>{"token": "$ctx.user_token"}</code>.</span>
+    </label>
+  </details>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">Create bundle</button>
+    <a class="btn ghost" href="/admin/tools">Cancel</a>
+  </div>
+</form>
+
+{% endblock %}

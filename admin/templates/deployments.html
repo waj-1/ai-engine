@@ -1,0 +1,233 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/tabs.html" import tabs %}
+{% from "_components/callout.html" import alert, hint, hint_text, info, info_text %}
+{% block title %}Deployments · {{ brand().title }}{% endblock %}
+{% block page_title %}Releases{% endblock %}
+{% block page_subtitle %}{% if tab == 'history' %}Recent engine deploys and rollbacks.{% elif tab == 'targets' %}Where each environment's engine runs.{% else %}Ship a new engine version, or roll back to an earlier one.{% endif %}{% endblock %}
+{% block content %}
+
+{% include "_releases_tabs.html" %}
+{% set repo_ok = runtime_env and runtime_env.deploy.repo_set %}
+{% set token_ok = repo_ok and runtime_env.deploy.github_token_set %}
+
+{# ------------------------------------------------------------------ #}
+{# DISPATCH tab: one deploy form + rollback                            #}
+{# ------------------------------------------------------------------ #}
+{% if tab == 'dispatch' %}
+
+<section class="section">
+  <h2>Deploy a new engine version</h2>
+  <span class="caption">Builds the engine from the code version you pick and rolls it out to Production.
+    Agent setups don't change — publish those from <a href="/admin/env">Promote agent changes</a>.</span>
+  {% if not token_ok %}
+  <div class="disabled-note mt-s" role="note">
+    <strong>Deploying from the portal isn't set up.</strong>
+    {% if not repo_ok %}
+    Ask an engineer to name the repository whose deploy workflows this service runs.
+    <span class="technical">GITHUB_DEPLOY_REPO is not configured</span>
+    {% else %}
+    Ask an engineer to add a GitHub deploy token to this service. Until then, every merge to the main
+    branch still deploys automatically.
+    <span class="technical">GITHUB_DEPLOY_TOKEN is not set</span>
+    {% endif %}
+  </div>
+  {% endif %}
+  <form method="post" action="/admin/env/prod/deploy" class="deploy-form mt-m" data-deploy-form="prod">
+    <fieldset {% if not token_ok %}disabled{% endif %}>
+      <div class="field">
+        <span class="field-label">Environment</span>
+        <span>Production</span>
+      </div>
+      <label class="field">
+        <span class="field-label">Code version</span>
+        <input name="git_ref" value="main" placeholder="main or v1.2.3" pattern="main|v[0-9]+(\.[0-9]+){0,2}([-+][0-9A-Za-z.-]+)?" required>
+        <span class="hint">Use <code>main</code> for the latest reviewed code, or a release tag such as <code>v1.2.3</code>.</span>
+      </label>
+      <div class="row mt-s">
+        <button class="primary" type="submit"
+                {% if not token_ok %}aria-disabled="true" title="Deploying from the portal isn't set up"{% endif %}
+                onclick="return confirm('Deploy ' + this.form.git_ref.value + ' to Production?');">Deploy to Production</button>
+        <span class="caption" data-deploy-inflight style="display:none;"></span>
+      </div>
+    </fieldset>
+  </form>
+</section>
+
+<section class="section">
+  <h2>Roll back</h2>
+  <span class="caption">Sends all traffic back to an earlier engine version straight away, skipping the usual checks.
+    Use it only when the current version is broken; the rollback is recorded in Activity.</span>
+  {% if not token_ok %}
+  <div class="disabled-note mt-s" role="note">
+    <strong>Rolling back from the portal isn't set up</strong> for the same reason as deploys.
+  </div>
+  {% endif %}
+  <form method="post" action="/admin/env/prod/rollback" class="deploy-form mt-m" data-rollback-form>
+    <fieldset {% if not token_ok %}disabled{% endif %}>
+      <label class="field">
+        <span class="field-label">Version to roll back to</span>
+        <select name="target_revision_pick" data-revision-select disabled>
+          <option value="">Loading recent versions…</option>
+        </select>
+        <span class="hint" data-revision-status></span>
+      </label>
+      <details class="advanced" data-revision-advanced>
+        <summary class="caption">Advanced: enter a revision name</summary>
+        <label class="field mt-s">
+          <span class="field-label">Revision name</span>
+          <input name="target_revision" pattern="[a-z0-9][a-z0-9\-]{0,62}" placeholder="ai-engine--0000095" data-revision-manual>
+          <span class="hint">Overrides the list above. Find names with
+            <code>az containerapp revision list -n ai-engine -g rg-example -o table</code>.</span>
+        </label>
+      </details>
+      <div class="row mt-s">
+        <button type="submit" class="danger" {% if not token_ok %}aria-disabled="true"{% endif %}>Roll back</button>
+      </div>
+    </fieldset>
+  </form>
+</section>
+
+<script>
+(function () {
+  var form = document.querySelector('[data-rollback-form]');
+  if (!form) return;
+  var select = form.querySelector('[data-revision-select]');
+  var manual = form.querySelector('[data-revision-manual]');
+  var status = form.querySelector('[data-revision-status]');
+  var adv = form.querySelector('[data-revision-advanced]');
+  function fmt(iso) { try { return new Date(iso).toLocaleString(); } catch (e) { return iso || ''; } }
+  fetch('/admin/deploy-revisions.json?env=prod', {credentials: 'same-origin', cache: 'no-store'})
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function (d) {
+      var revs = d.revisions || [];
+      if (!revs.length) throw new Error(d.error || 'No earlier versions found.');
+      select.innerHTML = revs.map(function (r, i) {
+        var label = r.name + ' · ' + fmt(r.created_at) + (r.image_tag ? ' · ' + r.image_tag : '') +
+          (r.traffic ? ' · live now (' + r.traffic + '%)' : (r.below_floor ? ' · too old to roll back to' : (r.active ? '' : ' · inactive')));
+        return '<option value="' + r.name + '"' + (r.traffic || r.below_floor ? ' disabled' : '') + '>' + label + '</option>';
+      }).join('');
+      var firstOk = revs.find(function (r) { return !r.traffic && !r.below_floor; });
+      if (firstOk) select.value = firstOk.name;
+      select.disabled = false;
+      status.textContent = 'The newest ' + revs.length + ' versions. Inactive versions are switched back on automatically.';
+    })
+    .catch(function (err) {
+      select.innerHTML = '<option value="">List unavailable</option>';
+      status.textContent = (err && err.message ? err.message : "Couldn't load recent versions.") +
+        ' Enter a revision name under Advanced instead.';
+      if (adv && !form.querySelector('fieldset').disabled) adv.open = true;
+    });
+  form.addEventListener('submit', function (ev) {
+    // One target_revision reaches the server: the typed name wins, else the pick.
+    if (!manual.value && select.value) manual.value = select.value;
+    if (!manual.value) {
+      ev.preventDefault();
+      status.textContent = 'Pick a version, or enter a revision name under Advanced.';
+      if (adv) adv.open = true;
+      return;
+    }
+    if (!confirm('Send 100% of Production traffic to ' + manual.value + '? This skips the usual checks.')) {
+      ev.preventDefault();
+    }
+  });
+})();
+</script>
+
+{# ------------------------------------------------------------------ #}
+{# HISTORY tab: recent deploys table                                   #}
+{# ------------------------------------------------------------------ #}
+{% elif tab == 'history' %}
+
+<section class="section" data-deploy-monitor data-deploy-env="">
+  <div class="row between">
+    <h2 class="section-title">Recent deploys</h2>
+    <span class="caption" data-deploy-fetched>Loading…</span>
+  </div>
+  <div id="deploy-empty-hint" class="disabled-note mt-s" role="note" hidden></div>
+  <table data-tabulator data-tabulator-page-size="10" class="mt-s">
+    <thead><tr>
+      <th>Started</th><th>Env</th><th>Workflow</th><th>Ref / SHA</th>
+      <th>Actor</th><th>Status</th><th>Duration</th><th>Logs</th>
+    </tr></thead>
+    <tbody data-deploy-runs>
+      <tr><td colspan="8" class="caption">Fetching recent runs…</td></tr>
+    </tbody>
+  </table>
+</section>
+
+{# ------------------------------------------------------------------ #}
+{# TARGETS tab: add-target form + registered targets table             #}
+{# ------------------------------------------------------------------ #}
+{% else %}
+
+<details class="card collapse-card" style="margin-bottom:var(--space-m);">
+  <summary>Add target</summary>
+  <form method="post" action="/admin/deployments" style="display:grid;grid-template-columns:repeat(4, 1fr);gap:var(--space-s);">
+    <label>Environment<br>
+      <select name="environment">
+        <option value="staging">staging</option>
+        <option value="prod">prod</option>
+      </select>
+    </label>
+    <label>Label<br><input name="label" required placeholder="aca-staging"></label>
+    <label style="grid-column:span 2;">Base URL<br><input name="base_url" required placeholder="https://ai-engine-staging.example.azurecontainerapps.io"></label>
+    <label>Auth env var<br><input name="auth_env_var" placeholder="AI_AGENT_TOKEN_STAGING"></label>
+    <label style="grid-column:span 2;">Description<br><input name="description" placeholder="Azure Container App in rg-example (staging)"></label>
+    <label style="display:flex;align-items:center;gap:var(--space-xs);">
+      <input type="checkbox" name="is_default"> Default for this env
+    </label>
+    <div style="grid-column:1/-1;display:flex;justify-content:flex-end;">
+      <button class="primary" type="submit">Add</button>
+    </div>
+  </form>
+</details>
+
+<section class="card">
+  <h2>Registered targets</h2>
+  {{ hint_text('E2E uses the env\'s default target; auth_env_var names the token\'s env var — never paste the token.') }}
+  <table data-tabulator data-tabulator-page-size="25">
+    <thead><tr>
+      <th>Env</th><th>Label</th><th>Base URL</th><th>Auth env var</th><th>Default</th><th>Active</th><th>Description</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ chip(r.environment, variant='ok' if r.environment == 'prod' else ('warn' if r.environment == 'staging' else 'brand')) }}</td>
+        <td><code>{{ r.label }}</code></td>
+        <td><span class="caption">{{ r.base_url }}</span></td>
+        <td>{{ r.auth_env_var or '—' }}</td>
+        <td>{% if r.is_default %}{{ chip('default', variant='ok', dot=True) }}{% else %}—{% endif %}</td>
+        <td>{% if r.is_active %}{{ chip('Active', variant='ok', dot=True) }}{% else %}{{ chip('Inactive', variant='ghost') }}{% endif %}</td>
+        <td class="caption">{{ r.description or '' }}</td>
+        <td>
+          <details>
+            <summary class="caption" style="cursor:pointer;">Edit</summary>
+            <form method="post" action="/admin/deployments/{{ r.target_id }}" style="display:grid;gap:var(--space-xs);margin-top:var(--space-xs);min-width:280px;">
+              <input name="environment" value="{{ r.environment }}" placeholder="environment">
+              <input name="label" value="{{ r.label }}" placeholder="label">
+              <input name="base_url" value="{{ r.base_url }}" placeholder="base_url">
+              <input name="auth_env_var" value="{{ r.auth_env_var or '' }}" placeholder="auth_env_var">
+              <input name="description" value="{{ r.description or '' }}" placeholder="description">
+              <label><input type="checkbox" name="is_default" {% if r.is_default %}checked{% endif %}> default</label>
+              <label><input type="checkbox" name="is_active" {% if r.is_active %}checked{% endif %}> active</label>
+              <button type="submit" class="primary" style="padding:2px 8px;font-size:11px;">Save</button>
+            </form>
+          </details>
+          <form method="post" action="/admin/deployments/{{ r.target_id }}/delete" style="margin-top:var(--space-xs);" onsubmit="return confirm('Delete this target?');">
+            <button type="submit" class="danger" style="padding:2px 8px;font-size:11px;">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="caption">No targets configured.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% endif %}
+
+<script src="/admin/static/deploy-poll.js?v={{ asset_version }}" defer></script>
+
+{% endblock %}

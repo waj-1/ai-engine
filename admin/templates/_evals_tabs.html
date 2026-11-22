@@ -1,0 +1,8 @@
+{# admin/templates/_evals_tabs.html — retired include, kept so existing
+   `{% include "_evals_tabs.html" %}` lines keep rendering.
+
+   The Suites & Runs / Production monitoring / Bake-offs strip is now part of
+   the Testing area's section tabs (Test suites · Monitoring · Model
+   comparison · Voice checks · Engineering tests), which _base.html renders
+   automatically from the request path — see admin/nav.py SECTION_TABS. Rendering
+   the old strip here too would stack two tab bars on the same screen. #}

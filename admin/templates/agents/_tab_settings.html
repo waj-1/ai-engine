@@ -1,0 +1,139 @@
+{# Settings — basics (name, description, status), model, channel address,
+   plus Advanced (request body, operator notes, IDs). Two forms, one Save:
+     #form-settings → POST /admin/profiles/{id}: display_name, description,
+       status, model_main_id, model_light_id, endpoint_path (+ delegatable
+       re-posted as-is). No array field is posted, so tools / knowledge /
+       sub-agents are untouched.
+     #form-validators → POST /admin/profiles/{id}/input-validators. #}
+{% from "agents/_savebar.html" import savebar %}
+{% from "_components/callout.html" import alert %}
+{% from "_components/chip.html" import chip %}
+<div data-tab-root>
+<form method="post" action="/admin/profiles/{{ agent.id }}" id="form-settings" data-tab-form data-form-label="Settings">
+{% if active_profile.delegatable %}<input type="hidden" name="delegatable" value="on">{% endif %}
+<section class="section">
+  <h2>Basics</h2>
+  <span class="caption">How the agent is named and described across the portal. The description is also what a parent agent reads before handing it work.</span>
+  <div class="form-grid-2">
+    <label class="field">Name
+      <input name="display_name" value="{{ active_profile.display_name or '' }}" required {% if readonly %}readonly{% endif %}>
+    </label>
+    <label class="field">Status
+      <select name="status" {% if readonly %}disabled{% endif %}>
+        {% set st_labels = {'active': 'Active — serves people', 'draft': 'Draft — not served', 'archived': 'Archived — hidden', 'specialist': 'Specialist — only via a parent agent'} %}
+        {% for s in ('active', 'draft', 'archived', 'specialist') %}
+        <option value="{{ s }}" {% if (active_profile.status or 'active') == s %}selected{% endif %}>{{ st_labels[s] }}</option>
+        {% endfor %}
+        {% if active_profile.status == 'template' %}<option value="" selected>Template</option>{% endif %}
+      </select>
+    </label>
+    <label class="field span-2">Description
+      <textarea name="description" rows="3" {% if readonly %}readonly{% endif %}>{{ active_profile.description or '' }}</textarea>
+    </label>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Model</h2>
+  <span class="caption">The language model that writes the answers. <a href="/admin/agents?tab=models&env={{ current_env }}">Manage models</a></span>
+  {% if all_models %}
+  <div class="form-grid-2">
+    <label class="field">Main model
+      <select name="model_main_id" {% if readonly %}disabled{% endif %}>
+        {% if not active_profile.model_main_id %}
+        <option value="" selected disabled>— no model assigned —</option>
+        {% endif %}
+        {% for m in all_models %}
+        <option value="{{ m.model_id }}" {% if m.model_id == active_profile.model_main_id %}selected{% endif %}>
+          {{- m.name }} — {{ m.model_string }}
+          {%- if m.environment != current_env %} [{{ m.environment }}]{% endif %}
+          {%- if not m.is_active %} (inactive){% endif -%}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field"><span class="field-label">Light model <span class="muted">(quick jobs like titles)</span></span>
+      <select name="model_light_id" {% if readonly %}disabled{% endif %}>
+        <option value="" {% if not active_profile.model_light_id %}selected{% endif %}>— same as main —</option>
+        {% for m in all_models %}
+        <option value="{{ m.model_id }}" {% if m.model_id == active_profile.model_light_id %}selected{% endif %}>{{ m.name }} — {{ m.model_string }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  {% if main_model %}<p class="caption mt-xs"><a href="/admin/agent-models/{{ main_model.model_id }}">Open {{ main_model.name }}</a></p>{% endif %}
+  {% else %}
+  <p class="caption mt-s">No models registered yet — add one on the <a href="/admin/agents?tab=models">Models tab</a> first.</p>
+  {% endif %}
+</section>
+
+<section class="section">
+  <h2>Memory</h2>
+  <p class="caption">What this agent remembers about the people it talks to, and for how long.</p>
+  <a class="btn" href="/admin/agents/memory?agent_kind={{ active_profile.agent_kind }}&env={{ current_env }}">Memory settings &rarr;</a>
+</section>
+
+<section class="section">
+  <h2>Channel</h2>
+  <span class="caption">Where apps send messages for this agent. Leave as is unless an engineer asks you to change it.</span>
+  <div class="form-grid-2">
+    <label class="field"><span class="field-label">Channel address <span class="muted">(technical)</span></span>
+      <input name="endpoint_path" value="{{ active_profile.endpoint_path or '' }}" placeholder="/chat/stream" class="mono" {% if readonly %}readonly{% endif %}>
+    </label>
+  </div>
+  {% if not voice_enabled and not readonly %}
+  <p class="caption mt-xs">Voice calls: <a href="/admin/agents/{{ agent.id }}/voice?env={{ current_env }}">set up voice for this agent</a>.</p>
+  {% endif %}
+</section>
+</form>
+
+<section class="section">
+  <details class="advanced">
+    <summary><span class="section-title">Advanced</span> <span class="caption">— for engineers</span></summary>
+    <dl class="kv mt-m">
+      <dt>Agent ID</dt><dd><code>{{ agent.id }}</code></dd>
+      <dt>Kind</dt><dd><code>{{ agent.kind }}</code></dd>
+      <dt>Slug</dt><dd><code>{{ agent.slug }}</code></dd>
+      <dt>Environment</dt><dd>{{ current_env }}</dd>
+    </dl>
+
+    <h3 class="h3 mt-l">Expected request body</h3>
+    {% if not active_profile.endpoint_path %}
+      <p class="caption">Set a channel address above to see its request schema.</p>
+    {% elif not input_schema %}
+      {% call alert('warning') %}<code>{{ active_profile.endpoint_path }}</code> is not a registered route (or takes no body) — wire it up in <code>main.py</code>.{% endcall %}
+    {% elif not input_schema.model_name %}
+      <p class="caption">The route exists but has no body parameter (e.g. a GET handler).</p>
+    {% else %}
+      <p class="caption num">Model <strong>{{ input_schema.model_name }}</strong>{% if input_schema.methods %} · {{ input_schema.methods|join(', ') }}{% endif %}</p>
+      <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Field</th><th>Type</th><th>Required</th></tr></thead>
+        <tbody>
+          {% for f in input_schema.fields %}
+          <tr>
+            <td><code>{{ f.name }}</code>{% if f.description %}<div class="caption">{{ f.description|truncate(120) }}</div>{% endif %}</td>
+            <td class="caption num">{{ f.type }}</td>
+            <td>{% if f.required %}{{ chip('required', variant='warn') }}{% else %}{{ chip('optional', variant='neutral') }}{% endif %}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="caption">No fields detected on the body model.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <details class="mt-s">
+        <summary class="caption">Raw JSON Schema</summary>
+        <pre class="code-block small-code">{{ input_schema.schema | pretty_json }}</pre>
+      </details>
+    {% endif %}
+
+    <h3 class="h3 mt-l">Operator notes &amp; example payloads</h3>
+    <form method="post" action="/admin/profiles/{{ agent.id }}/input-validators" id="form-validators" data-tab-form data-form-label="Operator notes">
+      <textarea name="input_validators" class="code-block small-code" rows="8" {% if readonly %}readonly{% endif %}
+                placeholder='{"examples":[{"name":"minimal","payload":{...}}],"notes":"..."}'>{{ input_validators | pretty_json }}</textarea>
+    </form>
+  </details>
+</section>
+{{ savebar('Save settings', readonly) }}
+</div>
