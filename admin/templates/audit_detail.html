@@ -1,0 +1,95 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% block title %}Activity entry · {{ brand().title }}{% endblock %}
+{% block page_title %}Activity entry{% endblock %}
+{% block page_subtitle %}{{ entry.when_full }}{% endblock %}
+{% block content %}
+<p class="mb-m"><a href="/admin/audit">← Activity</a></p>
+
+<section class="section">
+  <h2 class="activity-detail-title">
+    {% if entry.actor.is_me %}You{% else %}{{ entry.actor.label }}{% endif %}
+    {{ entry.verb }}{% if entry.noun %} {{ entry.noun }}{% endif %}
+    {% if entry.name %}{% if entry.href %}<a href="{{ entry.href }}">{{ entry.name }}</a>{% else %}{{ entry.name }}{% endif %}{% endif %}
+    {% if entry.suffix %}{{ entry.suffix }}{% endif %}
+  </h2>
+  <dl class="kv mt-m">
+    <dt>Who</dt>
+    <dd>{{ entry.actor.label }}{% if entry.actor.email and entry.actor.email != entry.actor.label %} <span class="caption">{{ entry.actor.email }}</span>{% endif %}{% if entry.actor.is_me %} <span class="caption">(you)</span>{% endif %}</dd>
+    <dt>What</dt>
+    <dd>{{ entry.verb[:1]|upper }}{{ entry.verb[1:] }}{% if entry.is_override %} {{ chip('Override', variant='warn') }}{% endif %}</dd>
+    {% if entry.name or entry.noun %}
+    <dt>Item</dt>
+    <dd>{% if entry.href %}<a href="{{ entry.href }}">{{ entry.name or entry.noun }}</a>{% else %}{{ entry.name or entry.noun }}{% endif %}{% if entry.noun %} <span class="caption">{{ entry.noun }}</span>{% endif %}</dd>
+    {% endif %}
+    <dt>When</dt>
+    <dd>{{ entry.when_full }} <span class="caption">({{ entry.when }})</span></dd>
+    {% if entry.reason %}
+    <dt>Reason given</dt>
+    <dd>“{{ entry.reason }}”</dd>
+    {% endif %}
+  </dl>
+</section>
+
+<section class="section">
+  <h2>Changes</h2>
+  {% if changes %}
+  <span class="caption">{{ changes|length }} field{{ '' if changes|length == 1 else 's' }} {{ 'set' if not row.before else 'changed' }}.</span>
+  <div class="change-list mt-s">
+    {% for c in changes %}
+    <div class="change-item">
+      <div class="change-head">
+        <strong>{{ c.label }}</strong>
+        {% if c.kind == 'added' %}{{ chip('added', variant='ok') }}{% elif c.kind == 'removed' %}{{ chip('removed', variant='err') }}{% endif %}
+        <span class="technical">{{ c.key }}</span>
+      </div>
+      {% if c.text is not none %}
+      <pre class="code-block raw-json mt-xs">{{ c.text }}</pre>
+      {% elif c.diff is not none %}
+      <div class="diff-block mt-xs">
+        {% for cls, line in c.diff %}<div class="diff-line diff-line-{{ cls }}">{{ line }}</div>{% endfor %}
+      </div>
+      {% elif not row.before %}
+      <div class="change-values">{{ c.after }}</div>
+      {% else %}
+      <div class="change-values"><span class="change-old">{{ c.before }}</span> <span aria-hidden="true">→</span> <span class="change-new">{{ c.after }}</span></div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="caption">No field-level changes were recorded for this entry.</p>
+  {% endif %}
+</section>
+
+<section class="section">
+  <details>
+    <summary class="caption">Technical details and raw data</summary>
+    <dl class="kv mt-s">
+      <dt>Entry id</dt><dd class="technical">{{ row.audit_id }}</dd>
+      <dt>Action code</dt><dd class="technical">{{ row.action }}</dd>
+      <dt>Entity type</dt><dd class="technical">{{ row.entity_type or '—' }}</dd>
+      <dt>Entity id</dt><dd class="technical">{{ row.entity_id or '—' }}</dd>
+      <dt>Actor id</dt><dd class="technical">{{ row.actor_user_id or 'system' }}</dd>
+      <dt>Recorded at</dt><dd class="technical">{{ row.created_at or '—' }}</dd>
+      {% if row.signed_hash %}<dt>Signed hash</dt><dd class="technical">{{ row.signed_hash }}</dd>{% endif %}
+    </dl>
+    <div class="form-grid-2 mt-m">
+      <div>
+        <div class="eyebrow mb-s">Before</div>
+        {% if row.before %}<pre class="code-block num copyable raw-json">{{ row.before|tojson(indent=2) }}</pre>{% else %}<p class="caption">—</p>{% endif %}
+      </div>
+      <div>
+        <div class="eyebrow mb-s">After</div>
+        {% if row.after %}<pre class="code-block num copyable raw-json">{{ row.after|tojson(indent=2) }}</pre>{% else %}<p class="caption">—</p>{% endif %}
+      </div>
+    </div>
+    {% if row.metadata %}
+    <div class="eyebrow mt-m mb-s">Extra metadata</div>
+    <pre class="code-block num copyable raw-json">{{ row.metadata|tojson(indent=2) }}</pre>
+    {% endif %}
+  </details>
+</section>
+
+<script src="/admin/static/copy-json.js?v={{ asset_version }}" defer></script>
+{% endblock %}

@@ -1,0 +1,15 @@
+{# One Save per tab. agents.js enables it when any [data-tab-form] in the
+   tab differs from how the page loaded, posts every changed form, and
+   reports the first failure inline. #}
+{% macro savebar(label='Save changes', readonly=False) -%}
+{% if not readonly %}
+<div class="savebar" data-savebar>
+  <span class="savebar-state" data-savebar-state>No unsaved changes</span>
+  <div class="savebar-error" data-savebar-error role="alert" hidden></div>
+  <div class="row savebar-actions">
+    <button type="button" class="ghost" data-discard disabled>Discard</button>
+    <button type="button" class="primary" data-save disabled>{{ label }}</button>
+  </div>
+</div>
+{% endif %}
+{%- endmacro %}

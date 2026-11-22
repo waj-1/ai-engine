@@ -1,0 +1,337 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/status_chip.html" import run_status %}
+{% from "_components/callout.html" import alert, hint, hint_text, info, info_text %}
+{% block title %}Engineering tests · Testing · {{ brand().title }}{% endblock %}
+{% block page_title %}Engineering tests{% endblock %}
+{% block page_subtitle %}Run the engine's automated code tests (staff only).{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>Run suites</h2>
+  {{ hint_text('Suites run sequentially; results appear under Recent runs after a few seconds.') }}
+  <form method="post" action="/admin/tests/run" style="display:flex;flex-direction:column;gap:var(--space-s);">
+    <div class="filter-bar">
+      <label style="flex:1;min-width:0;">
+        <input type="search" id="suite-filter" placeholder="Filter suites…">
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap;cursor:pointer;">
+        <input type="checkbox" id="suite-select-all"> Select all
+      </label>
+    </div>
+    <div id="suite-list" style="display:grid;grid-template-columns:repeat(2, 1fr);gap:var(--space-xs);max-height:320px;overflow:auto;padding:var(--space-s);border:1px solid var(--border);border-radius:6px;">
+      {% for s in suites %}
+      <label class="card" style="display:flex;align-items:flex-start;gap:var(--space-xs);padding:var(--space-xs) var(--space-s);margin:0;cursor:pointer;">
+        <input type="checkbox" name="suites" value="{{ s.key }}"
+               {% if s.key in ('smoke',) %}checked{% endif %}>
+        <span>
+          <strong style="font-size:13px;">{{ s.label }}</strong>
+          {% if s.description %}
+          <div class="caption">{{ s.description }}</div>
+          {% endif %}
+        </span>
+      </label>
+      {% else %}
+      <div class="empty-state" style="grid-column:1/-1;">
+        <div class="icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 12h6m-3-3v6M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+        </div>
+        <p>No test suites available.</p>
+      </div>
+      {% endfor %}
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:var(--space-s);align-items:center;">
+      <button type="submit" class="primary">Run selected</button>
+    </div>
+  </form>
+</section>
+
+<section class="card" style="margin-top:var(--space-m);">
+  <h2>Recent runs</h2>
+  {% if runs %}
+  <table data-tabulator data-tabulator-page-size="25">
+    <thead><tr>
+      <th>When</th><th>Suite</th><th>Status</th><th>Pass</th><th>Fail</th><th>Skip</th><th>Duration</th>
+    </tr></thead>
+    <tbody>
+    {% for r in runs %}
+      <tr>
+        <td class="caption num"><a href="/admin/tests/{{ r.run_id }}">{{ (r.created_at or '')[:19] }}</a></td>
+        <td><a href="/admin/tests/{{ r.run_id }}"><code>{{ r.suite }}</code></a></td>
+        <td>
+          {{ run_status(r.status) }}
+        </td>
+        <td class="num">{{ r.pass_count if r.pass_count is not none else '—' }}</td>
+        <td class="num">{{ r.fail_count if r.fail_count is not none else '—' }}</td>
+        <td class="num">{{ r.skip_count if r.skip_count is not none else '—' }}</td>
+        <td class="num">{% if r.duration_ms %}{{ (r.duration_ms / 1000)|round(1) }}s{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="icon">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 12h6m-3-3v6M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+    </div>
+    <p>No runs yet. Pick a suite above and hit Run.</p>
+  </div>
+  {% endif %}
+</section>
+
+<section class="card" style="margin-top:var(--space-m);">
+  <h2>Recent agent E2E runs</h2>
+  {{ hint_text("End-to-end checks of one agent, started from the agent's page (Agents › an agent › Run E2E).") }}
+  {% if e2e_runs %}
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>When</th><th>Agent</th><th>Environment</th><th>Result</th><th class="num">Passed</th><th class="num">Failed</th></tr></thead>
+    <tbody>
+    {% for r in e2e_runs %}
+      <tr>
+        <td class="caption nowrap"><a href="/admin/e2e/runs/{{ r.run_id }}" title="{{ r.created_at|stamp }}">{{ r.created_at|when }}</a></td>
+        <td>{{ r._agent }}</td>
+        <td>{{ r.environment|capitalize }}</td>
+        <td>{{ run_status(r.status) }}</td>
+        <td class="num">{{ r.pass_count if r.pass_count is not none else '—' }}</td>
+        <td class="num">{{ r.fail_count if r.fail_count is not none else '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state compact"><p>No agent E2E runs yet.</p></div>
+  {% endif %}
+</section>
+
+<!-- ───────────────────────────── Test fixtures ───────────────────────────── -->
+<!-- Folded in from the old standalone /admin/test-fixtures screen. CRUD POST
+     routes + the .env.test export still live in admin/test_fixtures_handlers.py;
+     only the list view moved here. The GET /admin/test-fixtures list now
+     302-redirects to /admin/tests#fixtures so old bookmarks survive. -->
+<section class="card" id="fixtures" style="margin-top:var(--space-l);">
+  <h2>Test fixtures
+    {% call info() %}WAJ_TEST_&lt;UPPER_NAME&gt; naming convention — in pytest, request the <code>test_fixture</code> fixture and call <code>test_fixture("name")</code> to read it back. Conventional names: <code>business_jwt</code>, <code>test_business_id</code>, <code>test_branch_id</code>. See also docs/03-test.md.{% endcall %}
+  </h2>
+  {% call hint() %}Store the JWTs/UUIDs pytest needs once per env, then <strong>Download .env.test</strong> for a sourceable file.{% endcall %}
+  {{ hint_text('Test data only — the runtime never reads fixtures; runtime config lives in Environments → Variables.') }}
+  <p class="caption" style="margin-top:var(--space-xxs);">
+    Fixtures live in <code>public.test_fixtures</code> (service-role-only).
+    For runtime env vars use
+    <a href="/admin/env?tab=variables">Environments → Environment variables</a>.
+  </p>
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-s);">
+    <a class="ghost" href="{{ fixtures_export_url or ('/admin/test-fixtures/export?env=' ~ current_env) }}">Download .env.test</a>
+  </div>
+
+  <h3 style="margin-bottom:var(--space-xs);">Add fixture for <code>{{ current_env }}</code></h3>
+  <form method="post" action="/admin/test-fixtures"
+        class="form-grid-2" style="margin-bottom:var(--space-m);">
+    <input type="hidden" name="environment" value="{{ current_env }}">
+    <label>Name<br>
+      <input name="name" required placeholder="business_jwt"
+             pattern="^[a-z][a-z0-9_]{0,62}$"
+             title="lowercase letters, digits, underscore; starts with a letter">
+    </label>
+    <label>Kind<br>
+      <select name="kind">
+        {% for k in (kinds or ['jwt','uuid','string','json','secret']) %}
+          <option value="{{ k }}" {% if k == 'string' %}selected{% endif %}>{{ k }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label style="grid-column:1/-1;">Description<br>
+      <input name="description" placeholder="Supabase JWT for the test tenant">
+    </label>
+    <label style="grid-column:1/-1;">Value<br>
+      <textarea name="value" required rows="2"
+                placeholder="paste the JWT, UUID, or other secret here"></textarea>
+    </label>
+    <div style="grid-column:1/-1;display:flex;justify-content:flex-end;">
+      <button class="primary" type="submit">Add fixture</button>
+    </div>
+  </form>
+
+  <h3 style="margin-bottom:var(--space-xs);">{{ current_env|upper }} fixtures ({{ (test_fixtures or [])|length }})</h3>
+  {# Plain table — hidden secret values would not render correctly through
+     Tabulator's HTML formatter, and row counts here are expected to stay
+     well under the 20-row threshold that would justify it. #}
+  {% if test_fixtures %}
+  <table style="width:100%;">
+    <thead><tr>
+      <th>Name</th><th>Kind</th><th>Value</th><th>Description</th><th>Last used</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for r in test_fixtures %}
+      <tr>
+        <td><code>{{ r.name }}</code><div class="caption">WAJ_TEST_{{ r.name|upper }}</div></td>
+        <td>{{ chip(r.kind, variant='mauve' if r.kind in ('jwt','secret') else 'brand') }}</td>
+        <td>
+          {% if r._revealed %}
+            <code style="word-break:break-all;display:inline-block;max-width:46ch;">{{ r._display_value }}</code>
+            <button type="button" class="ghost caption"
+                    data-copy-target="fx-val-{{ r.fixture_id }}"
+                    style="margin-left:var(--space-xs);">Copy</button>
+            <textarea id="fx-val-{{ r.fixture_id }}"
+                      style="position:absolute;left:-9999px;" aria-hidden="true"
+                      readonly>{{ r.value }}</textarea>
+            {% if r._hidden %}
+              <a class="caption" href="/admin/tests?env={{ current_env }}#fixtures"
+                 style="margin-left:var(--space-xs);">Hide</a>
+            {% endif %}
+          {% else %}
+            <code class="caption">{{ r._display_value }}</code>
+            <a class="caption" href="/admin/tests?env={{ current_env }}&reveal={{ r.fixture_id }}#fixtures"
+               style="margin-left:var(--space-xs);">Reveal</a>
+          {% endif %}
+        </td>
+        <td class="caption">{{ r.description or '' }}</td>
+        <td class="caption num">{{ (r.last_used_at or '')[:19] or '—' }}</td>
+        <td style="white-space:nowrap;">
+          <details>
+            <summary class="caption">Edit</summary>
+            <form method="post" action="/admin/test-fixtures/{{ r.fixture_id }}"
+                  style="display:grid;grid-template-columns:repeat(2, 1fr);gap:var(--space-xs);margin-top:var(--space-xs);min-width:32ch;">
+              <label class="caption">Name<br>
+                <input name="name" value="{{ r.name }}" required
+                       pattern="^[a-z][a-z0-9_]{0,62}$">
+              </label>
+              <label class="caption">Kind<br>
+                <select name="kind">
+                  {% for k in (kinds or ['jwt','uuid','string','json','secret']) %}
+                    <option value="{{ k }}" {% if k == r.kind %}selected{% endif %}>{{ k }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label class="caption" style="grid-column:1/-1;">Environment<br>
+                <select name="environment">
+                  {% for e in (environments or ['dev','staging','prod']) %}
+                    <option value="{{ e }}" {% if e == r.environment %}selected{% endif %}>{{ e }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label class="caption" style="grid-column:1/-1;">Value<br>
+                <textarea name="value" required rows="3">{{ r.value }}</textarea>
+              </label>
+              <label class="caption" style="grid-column:1/-1;">Description<br>
+                <input name="description" value="{{ r.description or '' }}">
+              </label>
+              <div style="grid-column:1/-1;display:flex;justify-content:space-between;gap:var(--space-xs);">
+                <button class="primary" type="submit">Save</button>
+              </div>
+            </form>
+            <form method="post" action="/admin/test-fixtures/{{ r.fixture_id }}/delete"
+                  style="margin-top:var(--space-xs);"
+                  onsubmit="return confirm('Delete fixture {{ r.name }}? Test scripts depending on it will skip until recreated.');">
+              <button class="danger" type="submit">Delete</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="icon">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 0 2-2h2a2 2 0 0 0 2 2"/></svg>
+    </div>
+    <p>No fixtures yet for <code>{{ current_env }}</code>. Add one above.</p>
+  </div>
+  {% endif %}
+</section>
+
+<script>
+  // ── Suite filter + select-all ─────────────────────────────────────────────
+  (function () {
+    var filterInput  = document.getElementById('suite-filter');
+    var selectAll    = document.getElementById('suite-select-all');
+    var suiteList    = document.getElementById('suite-list');
+
+    if (!filterInput || !selectAll || !suiteList) return;
+
+    function visibleLabels() {
+      return Array.prototype.filter.call(
+        suiteList.querySelectorAll('label'),
+        function (lbl) { return lbl.style.display !== 'none'; }
+      );
+    }
+
+    function syncSelectAll() {
+      var visible   = visibleLabels();
+      var checked   = visible.filter(function (lbl) {
+        return lbl.querySelector('input[name="suites"]').checked;
+      });
+      if (checked.length === 0) {
+        selectAll.checked       = false;
+        selectAll.indeterminate = false;
+      } else if (checked.length === visible.length) {
+        selectAll.checked       = true;
+        selectAll.indeterminate = false;
+      } else {
+        selectAll.checked       = false;
+        selectAll.indeterminate = true;
+      }
+    }
+
+    // Filter: hide labels whose text doesn't match the query.
+    filterInput.addEventListener('input', function () {
+      var q = filterInput.value.trim().toLowerCase();
+      Array.prototype.forEach.call(
+        suiteList.querySelectorAll('label'),
+        function (lbl) {
+          var text = (lbl.textContent || '').toLowerCase();
+          lbl.style.display = (!q || text.indexOf(q) !== -1) ? '' : 'none';
+        }
+      );
+      syncSelectAll();
+    });
+
+    // Select-all: toggle checked state on all currently visible suite boxes.
+    selectAll.addEventListener('change', function () {
+      var state = selectAll.checked;
+      visibleLabels().forEach(function (lbl) {
+        lbl.querySelector('input[name="suites"]').checked = state;
+      });
+      selectAll.indeterminate = false;
+    });
+
+    // Keep select-all in sync when individual boxes change.
+    suiteList.addEventListener('change', function (e) {
+      if (e.target && e.target.name === 'suites') syncSelectAll();
+    });
+
+    // Initialise state on page load.
+    syncSelectAll();
+  }());
+
+  // ── Copy-to-clipboard wiring for the inline fixture value buttons ─────────
+  // We stash the raw value in a hidden textarea (so the on-screen text can
+  // still be the masked placeholder when the row is hidden) and copy from
+  // that. Using navigator.clipboard with an execCommand fallback keeps it
+  // working in older WebKit / file:// contexts where the async API is gated.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-copy-target]');
+    if (!btn) return;
+    e.preventDefault();
+    var target = document.getElementById(btn.dataset.copyTarget);
+    if (!target) return;
+    var text = target.value || target.textContent || '';
+    var done = function () {
+      var prev = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(function () { btn.textContent = prev; }, 1200);
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, function () {
+        target.select(); document.execCommand('copy'); done();
+      });
+    } else {
+      target.select(); document.execCommand('copy'); done();
+    }
+  });
+</script>
+
+{% endblock %}

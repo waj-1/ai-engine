@@ -1,0 +1,20 @@
+{# ai_agent/admin/templates/_components/sparkline.html #}
+{% macro sparkline(values, width=210, height=26) -%}
+{%- if values and values|length > 1 -%}
+  {%- set vmin = values|min -%}
+  {%- set vmax = values|max -%}
+  {%- set vrange = (vmax - vmin) if vmax != vmin else 1 -%}
+  {%- set n = values|length -%}
+  {%- set step = width / (n - 1) -%}
+  {%- set points = [] -%}
+  {%- for v in values -%}
+    {%- set x = loop.index0 * step -%}
+    {%- set y = height - ((v - vmin) / vrange) * (height - 2) - 1 -%}
+    {%- set _ = points.append(x|round(2)|string + ',' + y|round(2)|string) -%}
+  {%- endfor -%}
+  <svg class="sparkline" width="{{ width }}" height="{{ height }}" viewBox="0 0 {{ width }} {{ height }}">
+    <polyline fill="none" stroke="var(--accent)" stroke-width="1.6"
+              points="{{ points|join(' ') }}"/>
+  </svg>
+{%- endif -%}
+{%- endmacro %}

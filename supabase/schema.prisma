@@ -1,0 +1,10 @@
+// Datasource-only schema: the db-functions runner uses PrismaClient purely as a
+// raw-SQL executor; no models are ever generated or referenced.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

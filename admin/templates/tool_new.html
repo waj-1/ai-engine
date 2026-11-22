@@ -1,0 +1,160 @@
+{% extends "_base.html" %}
+{% from "_components/callout.html" import hint, hint_text, info %}
+{% block title %}New HTTP tool · {{ brand().title }}{% endblock %}
+{% block page_title %}New HTTP tool{% endblock %}
+{% block page_subtitle %}Create a tool the agent can call by configuring an HTTP endpoint — no Python required.{% endblock %}
+{% block head %}
+<script src="/admin/static/tool-dry-run.js?v={{ asset_version }}" defer></script>
+{% endblock %}
+{% block content %}
+<a class="back-link" href="{{ cancel_url or '/admin/tools' }}">&larr; {% if mcp_name %}{{ mcp_display_name(mcp_name) }}{% else %}Tools &amp; integrations{% endif %}</a>
+
+<div style="display:grid;grid-template-columns:1fr 320px;gap:var(--space-m);align-items:start;">
+
+  <section class="card">
+    {% if error %}
+      <p class="caption" style="color:var(--error);">{{ error }}</p>
+    {% endif %}
+
+    <form method="post" action="{{ form_action or '/admin/tools' }}" style="display:flex;flex-direction:column;gap:var(--space-s);">
+
+      {% if mcp_name %}
+      <p class="caption">Creating an HTTP tool inside MCP <strong>{{ mcp_name }}</strong> — it will be added as a member on save.</p>
+      {% endif %}
+
+      <label class="field">
+        <span class="field-label">Tool code name</span>
+        <input type="text" name="python_name" required pattern="[a-z][a-z0-9_]*"
+               placeholder="e.g. lookup_inventory"
+               value="{{ form.python_name or '' }}">
+        {{ hint_text('The LLM sees this as the tool name — lowercase letters, digits, underscores.') }}
+      </label>
+
+      <label class="field">
+        <span class="field-label">Name</span>
+        <input type="text" name="display_name" value="{{ form.display_name or '' }}">
+      </label>
+
+      <label class="field">
+        <span class="field-label">Description</span>
+        <textarea name="description" rows="4" required
+                  placeholder="What the LLM should know about when to call this tool.">{{ form.description or '' }}</textarea>
+        {{ hint_text('This is the LLM-visible description — write it like a docstring.') }}
+      </label>
+
+      <label class="field">
+        <span class="field-label">Usage guidance</span>
+        <textarea name="usage_guidance" rows="4"
+                  placeholder="e.g. Active pipeline = stage NOT IN (won, lost). 'New this week' filters created_at.">{{ form.usage_guidance or '' }}</textarea>
+        {{ hint_text("Rendered under this tool in the agent's in-prompt catalog — field semantics, metric definitions, gotchas.") }}
+      </label>
+
+      <div class="form-grid">
+        <label class="field">
+          <span class="field-label">Category</span>
+          <input type="text" name="category" value="{{ form.category or 'http' }}">
+        </label>
+        <fieldset class="field-set">
+          <legend>Access</legend>
+          <label style="display:inline-flex;gap:var(--space-xs);align-items:center;margin-right:var(--space-s);">
+            <input type="radio" name="scope" value="read" {% if (form.scope or 'read') == 'read' %}checked{% endif %}> Only reads data
+          </label>
+          <label style="display:inline-flex;gap:var(--space-xs);align-items:center;">
+            <input type="radio" name="scope" value="write" {% if form.scope == 'write' %}checked{% endif %}> Changes data
+          </label>
+        </fieldset>
+      </div>
+
+      <div class="form-grid">
+        <label class="field">
+          <span class="field-label">Agent</span>
+          <select name="agent_kind" required>
+            {% for k in agent_kinds %}
+              <option value="{{ k }}" {% if form.agent_kind == k %}selected{% endif %}>{{ agent_label(k) }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Also available to <span class="opt">(code names, comma-separated)</span></span>
+          <input type="text" name="additional_agent_kinds"
+                 placeholder="comma-separated, e.g. support,billing"
+                 value="{{ form.additional_agent_kinds or '' }}">
+        </label>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:var(--space-s) 0;">
+
+      <label class="field">
+        <span class="field-label">Address (URL)</span>
+        <input type="url" name="endpoint_url" required
+               placeholder="https://example.com/api/lookup"
+               value="{{ form.endpoint_url or '' }}">
+      </label>
+
+      <div class="form-grid">
+        <label class="field">
+          <span class="field-label">Method</span>
+          <select name="http_method">
+            {% for m in ['POST', 'GET', 'PUT', 'PATCH', 'DELETE'] %}
+              <option value="{{ m }}" {% if (form.http_method or 'POST') == m %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Access token <span class="opt">(optional)</span></span>
+          <input type="text" name="auth_env_var"
+                 placeholder="e.g. INVENTORY_API_TOKEN (optional)"
+                 value="{{ form.auth_env_var or '' }}">
+          <span class="field-help">The name of the secret on the engine that holds the token &mdash; not the token itself.</span>
+        </label>
+        <label class="field">
+          <span class="field-label">Timeout (seconds)</span>
+          <input type="number" name="timeout_seconds" min="1" max="600"
+                 value="{{ form.timeout_seconds or 30 }}">
+        </label>
+      </div>
+
+      <label class="field">
+        <span class="field-label">Inputs (JSON Schema)</span>
+        <textarea name="argument_schema" rows="14" required class="code-block num"
+                  title='Top-level JSON Schema object. {"type":"object","properties":{...},"required":[...]}'>{{ form.argument_schema or default_schema }}</textarea>
+        {% call hint() %}Top-level must be a JSON-Schema object with a <code>properties</code> map — validated on submit.{% endcall %}
+        {% call info() %}
+          Example: <code>{"type":"object","properties":{"sku":{"type":"string"}},"required":["sku"]}</code>
+        {% endcall %}
+      </label>
+
+      <div style="display:flex;gap:var(--space-s);">
+        <button type="submit" class="primary">Create HTTP tool</button>
+        <a class="btn ghost" href="{{ cancel_url or '/admin/tools' }}">Cancel</a>
+      </div>
+    </form>
+
+    {# Dry-run panel. Sits inside the same .card as the form so the JS can
+       walk up to find the form via section.closest('form')'s nearest
+       ancestor — but it's rendered AFTER the </form> tag, so it falls
+       through to the previous-sibling search in tool-dry-run.js. #}
+    <section class="card" data-tool-dry-run style="margin-top:var(--space-m);">
+      <p class="caption">Loading dry-run UI…</p>
+      <div data-dry-run-result></div>
+    </section>
+  </section>
+
+  <aside style="display:flex;flex-direction:column;gap:var(--space-m);">
+    <div class="card">
+      <h3 style="margin-top:0;">How it works</h3>
+      {% call info() %}
+        On every call, the agent runtime builds a Pydantic model from your JSON schema and a
+        <code>StructuredTool</code> wired to your endpoint via <code>httpx</code>. The LLM sees
+        the description + schema and decides when to call it.<br><br>
+        <strong>Auth:</strong> if <code>auth_env_var</code> is set and the agent service has that
+        env var, requests carry <code>Authorization: Bearer &lt;value&gt;</code>. Secrets never
+        hit the database.<br><br>
+        <strong>Errors:</strong> non-2xx responses come back to the LLM as
+        <code>HTTP 4xx error: ...</code> so it can self-correct rather than crash the turn.
+      {% endcall %}
+    </div>
+  </aside>
+
+</div>
+{% endblock %}

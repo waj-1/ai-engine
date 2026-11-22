@@ -1,0 +1,216 @@
+{% extends "_base.html" %}
+{% from "_components/status_chip.html" import run_status, delta %}
+{% set is_voice = is_voice if is_voice is defined else false %}
+{% set base = matrix.columns[0] %}
+{% set last = matrix.columns[-1] %}
+{% block title %}Compare runs · Testing · {{ brand().title }}{% endblock %}
+{% block page_title %}Compare runs{% endblock %}
+{% block page_subtitle %}Did the change help? The first run is the baseline{% if runs|length > 2 %}, the last one the change{% endif %}.{% endblock %}
+
+{# Plain names for the metric matrix; engineering detail stays under Technical. #}
+{% set METRIC_LABELS = {
+  "pass_rate": "Cases passed",
+  "mean_judge_score": "Judge score (average)",
+  "pass_at_1": "Cases passed (first try)",
+  "pass_at_k": "Passed at least once",
+  "passhat_k": "Reliable (passed every repeat)",
+  "mean_score": "Score (average)",
+  "ttft_p50": "Time to first word (median)",
+  "ttft_p95": "Time to first word (slowest 5%)",
+  "total_p50": "Time to full answer (median)",
+  "total_p95": "Time to full answer (slowest 5%)",
+  "cost_total": "Total cost",
+  "tokens_total": "Tokens used",
+  "iterations": "Model calls per case",
+  "tool_count": "Tool calls per case"
+} %}
+{% set PRIMARY = ["pass_rate", "mean_judge_score"] %}
+{% set PRIMARY_GLOBAL = ["total_p50", "cost_total"] %}
+{% macro fmt(metric, v) -%}
+{%- if v is none -%}—
+{%- elif metric in ('pass_rate','mean_judge_score','pass_at_1','pass_at_k','passhat_k','mean_score') -%}{{ v|pct }}
+{%- elif metric.startswith('ttft') or metric.startswith('total') -%}{{ v|ms }}
+{%- elif metric == 'cost_total' -%}{{ v|money }}
+{%- elif metric == 'tokens_total' -%}{{ v|count }}
+{%- else -%}{{ '%.1f' % v }}{%- endif -%}
+{%- endmacro %}
+{% macro dcell(metric, row) -%}
+{%- set a = row['values'][0] -%}{%- set b = row['values'][-1] -%}
+{%- if a is none or b is none -%}<span class="caption">—</span>
+{%- elif metric in ('pass_rate','mean_judge_score','pass_at_1','pass_at_k','passhat_k','mean_score') -%}
+  {%- set n = ((b - a) * 100)|round|int -%}
+  {%- set good = n > 0 -%}<span class="delta {{ 'up' if n > 0 else ('down' if n < 0 else 'flat') }}">{{ (b - a)|pts }}</span>
+{%- else -%}
+  {%- set d = b - a -%}
+  {%- if a and a != 0 -%}{%- set pc = (d / a * 100)|round|int -%}
+  <span class="delta {{ 'flat' if pc == 0 else ('up' if (pc < 0) else 'down') }}">{{ '+' if pc > 0 else ('−' if pc < 0 else '±') }}{{ pc|abs }}%</span>
+  {%- else -%}<span class="caption">—</span>{%- endif -%}
+{%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/admin/evals">Testing</a><span aria-hidden="true">›</span>
+  <a href="/admin/evals/runs">Runs</a><span aria-hidden="true">›</span>
+  <span>Compare</span>
+</nav>
+
+{# ---- Verdict ---- #}
+{% set nf = changes.fixed|length %}{% set nb = changes.broke|length %}{% set ns = changes.still|length %}
+{% set better = (score_delta or 0) > 0.0049 %}{% set worse = (score_delta or 0) < -0.0049 %}
+<section class="verdict-banner is-{{ 'ready' if better else ('needs_work' if worse else 'running') }}">
+  <div class="verdict-main">
+    <div class="verdict-figures">
+      <span class="big-number num">{{ base.score|pct }} → {{ last.score|pct }}</span>
+      {% if score_delta is not none %}<span class="verdict-delta">{{ delta(score_delta) }}</span>{% endif %}
+    </div>
+    <p class="verdict-sentence">
+      {% if score_delta is none %}These runs can't be scored against each other yet.
+      {% elif better %}<strong>The change helped</strong>: the score went up {{ score_delta|pts(signed=False) }}.
+      {% elif worse %}<strong>The change made things worse</strong>: the score went down {{ score_delta|pts(signed=False) }}.
+      {% else %}<strong>No real difference</strong> in the score.{% endif %}
+      {% if same_suite %}
+        {% set unit = 'step' if (is_voice is defined and is_voice) else 'case' %}
+        {{ nf }} {{ unit }}{{ 's' if nf != 1 else '' }} fixed, {{ nb }} broke, {{ ns }} still failing.
+      {% elif is_voice is defined and is_voice %}
+        The runs are of different voice checks, so their steps can't be matched one to one.
+      {% else %}
+        The runs used different test suites, so cases can't be matched one to one.
+      {% endif %}
+      {% if cost_change is not none %}Cost {{ 'went up' if cost_change > 0 else 'went down' }} {{ (cost_change * 100)|abs|round|int }}%.{% endif %}
+    </p>
+  </div>
+</section>
+
+{# ---- Which runs ---- #}
+<section class="section">
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th></th><th>Test suite</th><th>Agent</th><th>Variant / model</th><th>Result</th><th class="num">Score</th><th class="num">Cases passed</th><th>Finished</th></tr></thead>
+    <tbody>
+      {% for col in matrix.columns %}
+      <tr>
+        <td class="caption nowrap">{% if loop.first %}Baseline{% elif loop.last %}Change{% else %}Run {{ loop.index }}{% endif %}</td>
+        <td>{% if col.kind == 'voice' %}<span class="chip chip-info">Voice</span> {% endif %}<a href="/admin/evals/runs/{{ col.run_id }}">{{ col.suite_name|humanize }}</a></td>
+        <td>{{ col.agent }}</td>
+        <td class="caption">{{ col.label if col.label not in ('baseline',) else 'Current settings' }}{% if col.model and col.model != '—' %} · {{ col.model }}{% endif %}</td>
+        <td>{{ run_status(col.status) }}</td>
+        <td class="num nowrap">{{ col.score|pct }}{% if col.target is not none %} <span class="caption">/ {{ col.target|pct }}</span>{% endif %}</td>
+        <td class="num">{{ col.cases_passed }} / {{ col.cases_total }}{% if col.kind == 'voice' %} <span class="caption">steps</span>{% endif %}</td>
+        <td class="caption nowrap" title="{{ col.when|stamp }}">{{ col.when|when }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+{# ---- Case changes ---- #}
+{% if same_suite %}
+<section class="section">
+  <h2>What changed, {{ 'step by step' if (is_voice is defined and is_voice) else 'case by case' }}</h2>
+  <span class="caption">Baseline vs. {{ 'change' if runs|length > 1 else '' }}.</span>
+  <div class="change-groups mt-m">
+    {% for key, label, variant, empty in [
+        ('fixed', 'Fixed', 'ok', 'Nothing that failed before passes now.'),
+        ('broke', 'Broke', 'err', 'Nothing that passed before fails now.'),
+        ('still', 'Still failing', 'neutral', 'No case fails in both runs.')] %}
+    <div class="card change-group">
+      <h3><span class="chip chip-{{ variant }}">{{ label }}</span> <span class="num">{{ changes[key]|length }}</span></h3>
+      {% if changes[key] %}
+      <ul>
+        {% for c in changes[key][:12] %}
+        <li><a href="/admin/evals/runs/{{ last.run_id }}#cases">{{ c.scenario_id|humanize }}</a>
+          {% if c.reason %}<span class="caption" dir="auto" title="{{ c.reason }}">{{ c.reason }}</span>{% endif %}</li>
+        {% endfor %}
+        {% if changes[key]|length > 12 %}<li class="caption">and {{ changes[key]|length - 12 }} more</li>{% endif %}
+      </ul>
+      {% else %}<p class="caption mb-0">{{ empty }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# ---- Metrics ---- #}
+<section class="section">
+  <h2>Numbers side by side</h2>
+  <span class="caption">Best value per row in green.{% if runs|length > 1 %} “Difference” is the last run against the baseline.{% endif %}</span>
+  <div class="table-wrap mt-s">
+  <table class="table compare-matrix">
+    <thead><tr><th>Measure</th>
+      {% for col in matrix.columns %}<th class="num">{% if loop.first %}Baseline{% elif loop.last %}Change{% else %}Run {{ loop.index }}{% endif %}</th>{% endfor %}
+      <th class="num">Difference</th></tr></thead>
+    <tbody>
+      {% for suite in matrix.suites %}
+      {% if matrix.suites|length > 1 %}<tr><td colspan="{{ matrix.columns|length + 2 }}" class="eyebrow">{{ suite.name|humanize }}</td></tr>{% endif %}
+      {% for row in suite.rows if row.metric in PRIMARY and not (is_voice and row['values']|reject('none')|list|length == 0) %}
+      <tr><td>{% if is_voice and row.metric == 'pass_rate' %}Steps passed{% else %}{{ METRIC_LABELS.get(row.metric, row.metric) }}{% endif %}</td>
+        {% for v in row['values'] %}<td class="num {% if loop.index0 == row.best_index and row['values']|reject('none')|list|length > 1 and row['values']|select('equalto', v)|list|length == 1 %}metric-best{% endif %}">{{ fmt(row.metric, v) }}</td>{% endfor %}
+        <td class="num">{{ dcell(row.metric, row) }}</td></tr>
+      {% endfor %}
+      {% endfor %}
+      {% for row in matrix.global_rows if row.metric in PRIMARY_GLOBAL and not (is_voice and row['values']|reject('none')|list|length == 0) %}
+      <tr><td>{{ METRIC_LABELS.get(row.metric, row.metric) }}</td>
+        {% for v in row['values'] %}<td class="num {% if loop.index0 == row.best_index and row['values']|reject('none')|list|length > 1 and row['values']|select('equalto', v)|list|length == 1 %}metric-best{% endif %}">{{ fmt(row.metric, v) }}</td>{% endfor %}
+        <td class="num">{{ dcell(row.metric, row) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <details class="advanced mt-m">
+    <summary>Technical metrics</summary>
+    <div class="table-wrap mt-s">
+    <table class="table compare-matrix">
+      <thead><tr><th>Measure</th>{% for col in matrix.columns %}<th class="num">{% if loop.first %}Baseline{% elif loop.last %}Change{% else %}Run {{ loop.index }}{% endif %}</th>{% endfor %}<th class="num">Difference</th></tr></thead>
+      <tbody>
+        {% for suite in matrix.suites %}
+        {% for row in suite.rows if row.metric not in PRIMARY %}
+        <tr><td>{{ METRIC_LABELS.get(row.metric, row.metric) }}{% if matrix.suites|length > 1 %} <span class="caption">· {{ suite.name|humanize }}</span>{% endif %}</td>
+          {% for v in row['values'] %}<td class="num">{{ fmt(row.metric, v) }}</td>{% endfor %}
+          <td class="num">{{ dcell(row.metric, row) }}</td></tr>
+        {% endfor %}
+        {% endfor %}
+        {% for row in matrix.global_rows if row.metric not in PRIMARY_GLOBAL %}
+        <tr><td>{{ METRIC_LABELS.get(row.metric, row.metric) }}</td>
+          {% for v in row['values'] %}<td class="num">{{ fmt(row.metric, v) }}</td>{% endfor %}
+          <td class="num">{{ dcell(row.metric, row) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <div class="grid-2 mt-m">
+      <div class="chart-card"><figcaption>Cost by run (blank = not recorded)</figcaption><div style="position:relative;height:200px;flex:1;"><canvas id="cmp-cost"></canvas></div></div>
+      <div class="chart-card"><figcaption>Response time by run</figcaption><div style="position:relative;height:200px;flex:1;"><canvas id="cmp-latency"></canvas></div></div>
+    </div>
+    <script type="application/json" id="cmp-data">{{ matrix | tojson }}</script>
+    <p class="caption mt-s">“Reliable” only differs from “Cases passed” when a run repeats each case. Run ids:
+      {% for col in matrix.columns %}<code>{{ col.run_id[:8] }}</code>{{ ', ' if not loop.last }}{% endfor %}.</p>
+  </details>
+</section>
+<script>
+(function () {
+  var el = document.getElementById("cmp-data"); if (!el) return;
+  function go() {
+    var m = {}; try { m = JSON.parse(el.textContent || "{}"); } catch (e) { return; }
+    var labels = (m.columns || []).map(function (c, i, a) { return i === 0 ? "Baseline" : (i === a.length - 1 ? "Change" : "Run " + (i + 1)); });
+    function row(metric) {
+      var r = (m.global_rows || []).find(function (x) { return x.metric === metric; });
+      return r ? r.values : [];   // nulls stay gaps — an unrecorded cost is not $0
+    }
+    var cs = getComputedStyle(document.documentElement);
+    var accent = cs.getPropertyValue('--accent').trim() || '#0E8784';
+    var soft = cs.getPropertyValue('--accent-soft').trim() || '#E4F3F2';
+    var opts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } };
+    new Chart(document.getElementById("cmp-cost").getContext("2d"), { type: "bar",
+      data: { labels: labels, datasets: [{ data: row("cost_total"), backgroundColor: accent }] }, options: opts });
+    new Chart(document.getElementById("cmp-latency").getContext("2d"), { type: "bar",
+      data: { labels: labels, datasets: [{ label: "Time to first word", data: row("ttft_p50"), backgroundColor: accent },
+                                         { label: "Full answer", data: row("total_p50"), backgroundColor: soft }] },
+      options: Object.assign({}, opts, { plugins: { legend: { display: true, position: "bottom" } } }) });
+  }
+  var tries = 0, t = setInterval(function () { if (typeof Chart !== "undefined") { clearInterval(t); go(); } else if (tries++ > 100) clearInterval(t); }, 50);
+})();
+</script>
+{% endblock %}

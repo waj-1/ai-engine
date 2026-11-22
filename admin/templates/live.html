@@ -1,0 +1,424 @@
+{% extends "_base.html" %}
+{% from "_components/kpi.html" import kpi, stat_tile %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/sparkline.html" import sparkline %}
+{% from "_components/callout.html" import alert, hint_text %}
+{% block title %}Overview · {{ brand().title }}{% endblock %}
+{% block page_title %}Overview{% endblock %}
+{% block page_subtitle %}How your agents are doing, compared with the period before.{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/admin/static/uplot.min.css?v={{ asset_version }}">
+{% endblock %}
+{% block content %}
+{% set p = ov.period %}
+{% set env_label = 'production' if current_env == 'prod' else current_env %}
+
+<div class="page-head ov-head">
+  <div class="page-head-text">
+    <nav class="segmented" aria-label="Period">
+      {% for opt in ov.periods %}
+      <a href="/admin/live?period={{ opt.key }}" {% if opt.key == p.key %}aria-current="page" class="active"{% endif %}>{{ opt.label }}</a>
+      {% endfor %}
+    </nav>
+    <p class="caption">Compared with the {{ p.previous }} · {{ env_label|capitalize }}</p>
+  </div>
+  <div class="page-head-actions">
+    <a class="btn" href="/admin/observability?hours={{ p.hours }}">View conversations</a>
+  </div>
+</div>
+
+{# ---- Status strip: the ONE place the page says whether its numbers are live.
+   Replaces the four differently-worded outage alerts the old dashboard had. #}
+{% set st = ov.status %}
+<div class="status-strip status-{{ st.state }}" role="status">
+  <span class="status-dot" aria-hidden="true"></span>
+  <span class="status-text">{{ st.headline }}</span>
+  {% if st.detail and not portal_nav().partner %}
+  <details class="status-detail">
+    <summary>Details</summary>
+    <div class="status-detail-body">
+      <p class="technical">{{ st.detail }}</p>
+      <a href="/admin/lmnr/diagnose">Open the telemetry check &rarr;</a>
+    </div>
+  </details>
+  {% endif %}
+</div>
+
+<section class="stat-grid" aria-label="Headline numbers">
+  {% for t in ov.tiles %}{{ stat_tile(t) }}{% endfor %}
+</section>
+
+{% if ov.sources.outcomes and not ov.has_traffic %}
+<div class="empty-state mt-l">
+  <span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+  <p>No conversations in the {{ p.label|lower }} ({{ env_label }}).</p>
+  <a class="btn" href="/admin/agents">Test an agent &rarr;</a>
+</div>
+{% elif not ov.sources.outcomes %}
+{# Source down: the status strip above already says so — no empty boxes. #}
+{% else %}
+
+<section class="section mt-l">
+  <h2>How each agent is doing</h2>
+  <span class="caption">{{ p.label }} · open an agent to read its conversations</span>
+  {% if not ov.sources.outcomes %}
+  <div class="empty-state"><p>Per-agent numbers are unavailable right now.</p></div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="table ov-agents">
+      <thead><tr>
+        <th>Agent</th>
+        <th class="num">Conversations</th>
+        <th class="num">Needs attention</th>
+        <th class="num">Handed to a person</th>
+        <th class="num" title="From conversation insights — an estimate">Resolved</th>
+        <th class="num">Failed actions</th>
+        <th class="num">Avg response</th>
+        <th>Trend</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        {% for a in ov.agents %}
+        <tr>
+          <td><a href="{{ a.href }}" class="ov-agent-name">{{ a.name }}</a>
+              {% if a.kind %}<div class="technical">{{ a.kind }}</div>{% endif %}</td>
+          <td class="num">{{ '{:,}'.format(a.conversations) }}
+              {% if a.delta %}<span class="stat-delta tone-{{ a.delta.tone }}">{{ a.delta.text }}</span>{% endif %}</td>
+          <td class="num">{% if a.attention %}<a href="{{ a.href }}&outcome=attention">{{ a.attention }}</a>{% if a.attention_pct is not none %} <span class="caption">({{ a.attention_pct }}%)</span>{% endif %}{% else %}0{% endif %}</td>
+          <td class="num">{{ a.handoffs }}</td>
+          <td class="num">{% if a.resolved_text %}{{ a.resolved_text }} <span class="caption">of {{ a.insight_total }}</span>{% else %}<span class="caption">—</span>{% endif %}</td>
+          <td class="num">{% if a.failed_actions %}{{ a.failed_actions }} <span class="caption">of {{ a.actions }}</span>{% elif a.actions %}0 <span class="caption">of {{ a.actions }}</span>{% else %}<span class="caption">no actions</span>{% endif %}</td>
+          <td class="num">{{ a.avg_response }}</td>
+          <td>{{ sparkline(a.series, width=96, height=22) }}</td>
+          <td class="ov-row-link"><a href="{{ a.href }}">Conversations &rarr;</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="section" id="needs-attention">
+  <h2>Needs attention</h2>
+  <span class="caption">Problems in the {{ p.label|lower }}, grouped by cause</span>
+  {% if not ov.sources.attention %}
+  <div class="empty-state"><p>The list of problems could not be loaded, so it is unknown — not empty.</p></div>
+  {% elif ov.attention %}
+  {% macro attention_item(g) %}
+    <li class="attention-item">
+      <span class="attention-count num" title="{{ g.count }} failure{{ 's' if g.count != 1 }}">&times;{{ g.count }}</span>
+      <div class="attention-body">
+        <div class="attention-sentence">{{ g.sentence }}</div>
+        <div class="caption">
+          {{ g.conversations }} conversation{{ 's' if g.conversations != 1 }} · {{ g.agents|join(', ') }}
+          · last seen {{ (g.last_seen or '')[:16] }}
+        </div>
+        {% if not portal_nav().partner %}<div class="technical">{{ g.technical }}</div>{% endif %}
+      </div>
+      <a class="btn small" href="{{ g.href }}">Open latest &rarr;</a>
+    </li>
+  {% endmacro %}
+  <ul class="attention-list">
+    {% for g in ov.attention[:5] %}{{ attention_item(g) }}{% endfor %}
+  </ul>
+  {% if ov.attention|length > 5 %}
+  <details class="attention-more">
+    <summary>Show {{ ov.attention|length - 5 }} more</summary>
+    <ul class="attention-list">
+      {% for g in ov.attention[5:] %}{{ attention_item(g) }}{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+  {% else %}
+  <div class="empty-state">
+    <span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>
+    <p>No failed actions or errors in the {{ p.label|lower }}.</p>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{# ---- Conversation insights: outcome mix, topics, languages. Own source
+   (ai_conversation_insights via admin/screens/insights.py) — shown even when
+   telemetry is down, and never hidden: an empty table says it is collecting. #}
+{% set ins = ov.get('insights') or {'available': False} %}
+<section class="section mt-l" id="insights">
+  <h2>What happened in conversations</h2>
+  <span class="caption">{{ p.label }} · how conversations ended, what they were about and which language customers used</span>
+  {% if not ins.available %}
+  <div class="empty-state compact"><p>Conversation outcomes are unavailable right now — unknown, not zero.</p></div>
+  {% elif not ins.has_data %}
+  <div class="empty-state compact" data-testid="insights-collecting">
+    <span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+    <p>{{ ins.collecting_text }}</p>
+    <span class="caption">Each conversation is analysed about 30 minutes after it goes quiet.</span>
+  </div>
+  {% else %}
+  <div class="ins-grid">
+    <div class="card ins-card">
+      <div class="eyebrow">How conversations ended</div>
+      <div class="ins-stack" role="img" aria-label="{% for o in ins.outcomes %}{{ o.label }} {{ o.pct_text }}%{{ ', ' if not loop.last }}{% endfor %}">
+        {% for o in ins.outcomes %}{% if o.count %}<span class="ins-seg tone-{{ o.tone }}" style="width:{{ o.pct }}%" title="{{ o.label }} — {{ o.count }}"></span>{% endif %}{% endfor %}
+      </div>
+      <ul class="ins-list">
+        {% for o in ins.outcomes %}
+        <li>
+          <span class="ins-swatch tone-{{ o.tone }}" aria-hidden="true"></span>
+          <span class="ins-label" title="{{ o.meaning }}">{{ o.label }}</span>
+          <span class="num ins-count">{{ o.count }}</span>
+          <span class="num ins-pct">{{ o.pct_text }}%</span>
+          {% if o.delta %}<span class="stat-delta tone-{{ o.delta.tone }} num">{{ o.delta.text }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="caption">{{ '{:,}'.format(ins.total) }} conversation{{ 's' if ins.total != 1 }} analysed{% if ins.channels.voice %} · {{ ins.channels.voice }} by voice{% endif %}. An estimate — read from the conversation, not confirmed by the customer.</p>
+    </div>
+
+    <div class="card ins-card">
+      <div class="eyebrow">Top topics</div>
+      {% if ins.topics %}
+      <ul class="ins-bars">
+        {% for t in ins.topics %}
+        <li>
+          <div class="ins-bar-head"><span class="ins-label">{{ t.label }}</span><span class="num ins-pct">{{ t.count }} · {{ t.pct_text }}%</span></div>
+          <div class="meter" aria-hidden="true"><span style="width:{{ t.bar }}%"></span></div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if ins.topics_unclassified %}<p class="caption">{{ ins.topics_unclassified }} conversation{{ 's' if ins.topics_unclassified != 1 }} not yet given a topic.</p>{% endif %}
+      {% elif ins.classifier_enabled %}
+      <p class="caption ins-empty">{{ ins.collecting_text }}</p>
+      {% else %}
+      <p class="caption ins-empty">Topics need the AI classifier, which is not configured on this deployment. Outcomes and languages still work.</p>
+      {% endif %}
+    </div>
+
+    <div class="card ins-card">
+      <div class="eyebrow">Customer language</div>
+      <ul class="ins-bars">
+        {% for l in ins.languages %}
+        <li>
+          <div class="ins-bar-head"><span class="ins-label">{{ l.label }}</span><span class="num ins-pct">{{ l.count }} · {{ l.pct_text }}%</span></div>
+          <div class="meter" aria-hidden="true"><span style="width:{{ l.pct or 0 }}%"></span></div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  {% if ins.agents|length > 1 %}
+  <div class="table-wrap mt-m">
+    <table class="table ins-agents">
+      <thead><tr><th>Agent</th><th class="num">Analysed</th><th>Outcome mix</th><th class="num">Resolved</th><th>Top topic</th></tr></thead>
+      <tbody>
+        {% for a in ins.agents %}
+        <tr>
+          <td>{{ a.name }}</td>
+          <td class="num">{{ a.total }}</td>
+          <td><div class="ins-stack small" role="img" aria-label="{% for m in a.mix %}{{ m.label }} {{ m.count }}{{ ', ' if not loop.last }}{% endfor %}">{% for m in a.mix %}{% if m.count %}<span class="ins-seg tone-{{ m.tone }}" style="width:{{ m.pct }}%" title="{{ m.label }} — {{ m.count }}"></span>{% endif %}{% endfor %}</div></td>
+          <td class="num">{{ a.resolved_text }}%</td>
+          <td>{{ a.top_topic or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  <details class="ins-method"><summary class="caption">How is this worked out?</summary><p class="caption">{{ ins.method }}</p></details>
+  {% endif %}
+</section>
+
+{% if show_voice %}
+{% set vl = voice_live %}
+{% set vu = ov.voice_usage %}
+<section class="section">
+  <h2>Voice calls</h2>
+  <span class="caption">{{ p.label }}</span>
+  <div class="stat-grid">
+    <div class="card kpi stat-tile">
+      <div class="eyebrow">Calls</div>
+      <div class="kpi-value num">{{ vl.sessions if vl.ch_ok else '—' }}</div>
+      <div class="stat-foot"><span class="caption">{{ 'Voice conversations' if vl.ch_ok else 'Unavailable right now' }}</span></div>
+    </div>
+    <div class="card kpi stat-tile">
+      <div class="eyebrow">Minutes used</div>
+      <div class="kpi-value num">{{ vu.minutes if vu else '—' }}</div>
+      <div class="stat-foot">
+        {% if vu and vu.delta %}<span class="stat-delta tone-neutral num">{{ vu.delta.text }}</span>{% endif %}
+        <span class="caption">{% if vu %}All environments{% else %}Unavailable right now{% endif %}</span>
+      </div>
+    </div>
+    <div class="card kpi stat-tile">
+      <div class="eyebrow">Today vs daily allowance</div>
+      {% if vu and vu.today_allowance_minutes %}
+      <div class="kpi-value num">{{ vu.today_pct }}%</div>
+      <div class="stat-sub">{{ vu.today_minutes }} of {{ vu.today_allowance_minutes }} min</div>
+      <div class="meter" aria-hidden="true"><span style="width:{{ [vu.today_pct, 100]|min }}%"></span></div>
+      {% else %}
+      <div class="kpi-value num">{{ '0%' if vu else '—' }}</div>
+      <div class="stat-foot"><span class="caption">{{ 'No voice minutes used today' if vu else 'Unavailable right now' }}</span></div>
+      {% endif %}
+    </div>
+    <div class="card kpi stat-tile">
+      <div class="eyebrow">Time to first reply</div>
+      <div class="kpi-value num">{% if vl.ch_ok and vl.eot_first_audio.p50_ms is not none %}{{ '%.1f'|format(vl.eot_first_audio.p50_ms / 1000) }} s{% else %}—{% endif %}</div>
+      <div class="stat-foot"><span class="caption">Typical gap after the caller stops talking</span></div>
+    </div>
+    <div class="card kpi stat-tile">
+      <div class="eyebrow">Interruptions</div>
+      <div class="kpi-value num">{{ vl.barge_ins if vl.ch_ok else '—' }}</div>
+      <div class="stat-foot"><span class="caption">Caller talked over the agent</span></div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{# --------------------------------------------------------------------- #}
+{#  Technical details — every engineering number the dashboard had,       #}
+{#  collapsed by default (open state remembered per browser).             #}
+{# --------------------------------------------------------------------- #}
+<details class="advanced section" id="advanced">
+  <summary><span class="advanced-title">Technical details</span>
+    <span class="caption">Latency, tokens, cost, cache and charts for engineers</span></summary>
+
+  <div class="advanced-body stack-l">
+    <div>
+      <h3 class="advanced-h">Engineering KPIs · {{ p.label|lower }}</h3>
+      <section class="kpi-grid">
+        {{ kpi('Tool-call success %', kpis.tool_success_pct, target='≥ 95%') }}
+        {{ kpi('Latency P95', kpis.latency_p95_ms ~ ('ms' if kpis.latency_p95_ms != '—' else ''), target='≤ 1500ms', good_when='down') }}
+        {{ kpi('Token spend', '$' ~ kpis.token_spend_usd if kpis.token_spend_usd != '—' else '—') }}
+        {{ kpi('Time-to-first-token p50', kpis.ttft_p50_ms ~ ('ms' if kpis.ttft_p50_ms != '—' else ''), good_when='down') }}
+        {{ kpi('Time-to-last-token p50', kpis.ttlt_p50_ms ~ ('ms' if kpis.ttlt_p50_ms != '—' else ''), good_when='down') }}
+        {{ kpi('Cache hit rate', (kpis.cache_hit_rate_pct ~ '%') if kpis.cache_hit_rate_pct != '—' else '—') }}
+        {{ kpi('Cache savings', '$' ~ kpis.cache_saved_usd if kpis.cache_saved_usd != '—' else '—') }}
+        {{ kpi('Sessions', kpis.sessions_24h ~ (' (all envs)' if kpis.sessions_scope == 'all' and kpis.sessions_24h != '—' else '')) }}
+      </section>
+      {% if kpis.sessions_scope == 'all' %}{{ hint_text('Sessions: the live count is unavailable, so this is the trace index count across all environments.') }}{% endif %}
+    </div>
+
+    {% if show_voice and voice_live.ch_ok %}
+    {% set vl = voice_live %}
+    <div>
+      <h3 class="advanced-h">Duplex voice stage latencies</h3>
+      {{ hint_text('End-of-turn → first audio is responsiveness; answer latency is question → first spoken ask_agent result; delegated turn is the brain\'s wall time.') }}
+      <section class="kpi-grid">
+        {{ kpi('Voice sessions', vl.sessions) }}
+        {{ kpi('Assistant turns', vl.turns) }}
+        {{ kpi('EOT → first audio p50', (vl.eot_first_audio.p50_ms ~ 'ms') if vl.eot_first_audio.p50_ms is not none else '—', target='≤ 800ms', good_when='down') }}
+        {{ kpi('EOT → first audio p95', (vl.eot_first_audio.p95_ms ~ 'ms') if vl.eot_first_audio.p95_ms is not none else '—', target='≤ 1500ms', good_when='down') }}
+        {{ kpi('Answer latency p50 / p95', ((vl.answer.p50_ms ~ ' / ' ~ vl.answer.p95_ms ~ 'ms') if vl.answer.p95_ms is not none else (vl.answer.p50_ms ~ 'ms')) if vl.answer.p50_ms is not none else '—', good_when='down') }}
+        {{ kpi('Delegated turn p50 / p95', ((vl.delegate.p50_ms ~ ' / ' ~ vl.delegate.p95_ms ~ 'ms') if vl.delegate.p95_ms is not none else (vl.delegate.p50_ms ~ 'ms')) if vl.delegate.p50_ms is not none else '—', good_when='down') }}
+        {{ kpi('Brain LLM p50', (vl.brain_llm.p50_ms ~ 'ms') if vl.brain_llm is defined and vl.brain_llm.p50_ms is not none else '—', good_when='down') }}
+        {{ kpi('ask_agent calls', vl.tool_calls) }}
+        {{ kpi('Barge-ins', vl.barge_ins, good_when='down') }}
+      </section>
+    </div>
+    {% endif %}
+
+    <div>
+      <h3 class="advanced-h">Per-agent technical rollup</h3>
+      {% if per_agent_tech %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr>
+            <th>Agent</th><th class="num">Traces</th><th class="num">Error %</th>
+            <th class="num">Tokens in / out</th><th class="num">Cost</th>
+            <th class="num">p50</th><th class="num">p95</th>
+          </tr></thead>
+          <tbody>
+            {% for m in per_agent_tech %}
+            <tr>
+              <td>{{ m.name }} <span class="technical">{{ m.agent_kind }}</span></td>
+              <td class="num">{{ m.volume }}</td>
+              <td class="num">{{ chip(m.error_rate ~ '%', variant='err' if m.error_rate > 5 else 'ok', dot=True) }}</td>
+              <td class="num">{{ '{:,}'.format(m.tokens_in) }} / {{ '{:,}'.format(m.tokens_out) }}</td>
+              <td class="num">${{ '%.4f'|format(m.cost_usd) }}</td>
+              <td class="num">{{ (m.p50_ms|round|int ~ 'ms') if m.p50_ms is not none else '—' }}</td>
+              <td class="num">{{ (m.p95_ms|round|int ~ 'ms') if m.p95_ms is not none else '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="caption">{{ 'No traces in this period.' if analytics_ok else 'Unavailable right now.' }}</p>
+      {% endif %}
+    </div>
+
+    {# Analytics — filter bar + chart grid, sourced from ClickHouse via
+       GET /admin/live/analytics.json. live-charts.js fetches + re-renders on
+       every filter change. When the window is empty (or the source is down)
+       the 14 frames collapse into ONE empty state instead of 14 boxes. #}
+    <div id="analytics-section" data-env="{{ current_env }}">
+      <h3 class="advanced-h">Charts</h3>
+      <div class="filter-bar">
+        <label>Time range
+          <select id="filter-hours">
+            {% for h, label in [(1,'Last 1h'),(6,'Last 6h'),(24,'Last 24h'),(168,'Last 7d'),(720,'Last 30d')] %}
+            <option value="{{ h }}" {% if h == hours %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Agent
+          <select id="filter-agent_kind">
+            <option value="">All agents</option>
+            {% for k in agent_kinds %}<option value="{{ k }}">{{ agent_names.get(k) or k }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Channel
+          <select id="filter-channel">
+            <option value="">All channels</option>
+            {% for c in channels %}<option value="{{ c.slug }}">{{ c.name or c.slug }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Status
+          <select id="filter-status">
+            <option value="">All</option>
+            <option value="success">Success</option>
+            <option value="error">Error</option>
+          </select>
+        </label>
+        <button type="button" id="analytics-refresh" class="ghost small">Refresh</button>
+        <button type="button" class="ghost small" onclick="exportAnalyticsCsv()">Download CSV</button>
+      </div>
+      <p id="analytics-notice" class="caption mt-s" hidden></p>
+      <div id="charts-empty" class="empty-state mt-m" hidden><p>No chart data for these filters.</p></div>
+
+      <div class="chart-grid" id="chart-grid">
+        <div class="chart-card"><figcaption>Volume</figcaption><div id="chart-volume"></div></div>
+        <div class="chart-card"><figcaption>Tokens</figcaption><div id="chart-tokens"></div></div>
+        <div class="chart-card"><figcaption>Cost ($)</figcaption><div id="chart-cost"></div></div>
+        <div class="chart-card"><figcaption>Latency (ms)</figcaption><div id="chart-latency"></div></div>
+        <div class="chart-card"><figcaption>Error rate (%)</figcaption><div id="chart-errors"></div></div>
+        <div class="chart-card"><figcaption>Avg iterations</figcaption><div id="chart-iters"></div></div>
+        <div class="chart-card"><figcaption>Volume by agent</figcaption><div id="chart-by-agent"></div></div>
+        <div class="chart-card"><figcaption>Cost share</figcaption><div id="chart-cost-share"></div></div>
+        <div class="chart-card"><figcaption>Latency histogram</figcaption><div id="latency-stats" class="lat-stats"></div><div id="chart-latency-hist"></div></div>
+        <div class="chart-card"><figcaption>Top tools</figcaption><div id="chart-top-tools"></div></div>
+        <div class="chart-card"><figcaption>Time to first token (ms)</figcaption><div id="chart-ttft"></div></div>
+        <div class="chart-card"><figcaption>Time to last token (ms)</figcaption><div id="chart-ttlt"></div></div>
+        <div class="chart-card"><figcaption>Cache: cached vs uncached tokens</figcaption><div id="chart-cache-tokens"></div></div>
+        <div class="chart-card"><figcaption>Cache hit rate by agent (%)</figcaption><div id="chart-cache-hit-by-agent"></div></div>
+      </div>
+    </div>
+  </div>
+</details>
+
+<script>
+  // Remember whether Technical details was left open (per browser; best-effort).
+  (function () {
+    var d = document.getElementById("advanced");
+    if (!d) return;
+    try { if (localStorage.getItem("waj-ov-advanced") === "1") d.open = true; } catch (e) {}
+    d.addEventListener("toggle", function () {
+      try { localStorage.setItem("waj-ov-advanced", d.open ? "1" : "0"); } catch (e) {}
+      if (d.open) window.dispatchEvent(new Event("resize"));
+    });
+  })();
+</script>
+<script src="/admin/static/uplot.min.js?v={{ asset_version }}"></script>
+<script>window.WAJ_AGENT_COLORS = {{ agent_palette()|tojson }};</script>
+<script src="/admin/static/live-charts.js?v={{ asset_version }}" defer></script>
+{% endblock %}

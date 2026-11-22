@@ -1,0 +1,21 @@
+{# admin/templates/_components/tabs.html — screen-level tab strip for merged screens.
+   tabs(items, active) where items = [(key, label, href), ...]
+
+   Uses page-nav semantics: <nav> with aria-label, aria-current="page" on the
+   active link. No tablist/tab/aria-selected — those are for in-page JS tab panels,
+   not for navigation links that load different URLs.
+
+   Usage:
+       {% from "_components/tabs.html" import tabs %}
+       {% set my_tabs = [('overview','Overview','/admin/live'),('jobs','Jobs','/admin/live?tab=jobs')] %}
+       {{ tabs(my_tabs, 'overview') }}
+#}
+{% macro tabs(items, active) -%}
+<nav class="tab-strip" aria-label="Sections">
+  {% for key, label, href in items %}
+  <a class="tab {% if key == active %}active{% endif %}"
+     {% if key == active %}aria-current="page"{% endif %}
+     href="{{ href }}">{{ label }}</a>
+  {% endfor %}
+</nav>
+{%- endmacro %}

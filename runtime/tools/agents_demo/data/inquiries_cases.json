@@ -1,0 +1,532 @@
+{
+ "cases": [
+  {
+   "id": "I01",
+   "country": "AE",
+   "area_id": "dxb-jvc",
+   "expected_tools": [
+    "inquiry_list_plans",
+    "inquiry_check_coverage"
+   ],
+   "brief": "A family of 5 in JVC Dubai: two teenage gamers, parents working from home, 4K TV. Great agent: checks coverage, lists the home plans with prices from the catalog, recommends Home Fiber 1 Gig (449 dirhams, mesh included) with a one-line reason, never invents a price.",
+   "title_en": "Internet for a busy family of 5",
+   "title_ar": "إنترنت لعيلة من 5 أشخاص",
+   "headline_en": "Five people, a 4K TV, two gamers — one router?",
+   "headline_ar": "5 أشخاص، تلفزيون 4K، واتنين بيلعبوا أونلاين — وراوتر واحد؟",
+   "summary_en": "You're Hessa, a mum of three in JVC, Dubai, shopping for home internet. Two gamers, two parents on video calls and a 4K TV start an argument every evening.",
+   "summary_ar": "إنتِ حصة، أم لتلات ولاد بقرية جميرا الدائرية بدبي، وعم تدوري على إنترنت للبيت. اتنين بيلعبوا أونلاين، والأب والأم باجتماعات فيديو، وتلفزيون 4K — وكل مسا في مشكلة على الإنترنت.",
+   "who_en": "You're Hessa Rahman, a mum of three in JVC, Dubai, shopping for home internet.",
+   "who_ar": "إنتِ حصة رحمن، أم لتلات ولاد بقرية جميرا الدائرية بدبي، وعم تدوري على إنترنت للبيت.",
+   "happened_en": "Two teenage gamers, you and your husband on video calls all day, and a 4K TV nobody wants to share. Every evening the internet starts a family argument.",
+   "happened_ar": "ولادك المراهقين بيلعبوا أونلاين، وإنتِ وجوزك باجتماعات فيديو طول النهار، والتلفزيون 4K ما حدا بدو يتركه. كل مسا الإنترنت بيعمل مشكلة بالبيت.",
+   "goal_en": "Find the right plan and the real monthly price.",
+   "goal_ar": "تلاقي الباقة المناسبة وسعرها الشهري الحقيقي.",
+   "say_en": [
+    "Hi, we're a family of 5 in JVC — what home internet plans do you have?",
+    "Two teenagers game online and we both work from home. What do you recommend?",
+    "Is that price per month? Is it cheaper if we sign for longer?"
+   ],
+   "say_ar": [
+    "مرحبا، نحنا عيلة من 5 أشخاص بقرية جميرا الدائرية — شو عندكم باقات إنترنت للبيت؟",
+    "عندي اتنين مراهقين بيلعبوا أونلاين، وأنا وجوزي منشتغل من البيت. شو بتنصحني؟",
+    "هالسعر شهري؟ وبيصير أرخص إذا عملنا عقد أطول؟"
+   ],
+   "say_more_en": [
+    "Just pick for me!",
+    "Is that really the fastest you have?",
+    "Do we need mesh for a three-floor villa?",
+    "How long does installation take in JVC?",
+    "Can someone call me back tomorrow evening?"
+   ],
+   "say_more_ar": [
+    "اختاريلي إنتِ!",
+    "عن جد هي أسرع شي عندكن؟",
+    "منحتاج ميش لفيلا من تلات طوابق؟",
+    "قديش بياخد التركيب بقرية جميرا الدائرية؟",
+    "فيك حدا يتصل فيّي بكرا المسا؟"
+   ],
+   "twist_en": "Say \"just pick for me!\" — then challenge it: \"Is that really the fastest you have?\"",
+   "twist_ar": "قولي «اختار إنت عني!» — وبعدين تحدّيه: «متأكد إنو هي أسرع باقة عندكم؟»",
+   "great_en": "Checks JVC coverage (fiber available), lists the home plans with real prices and recommends Home Fiber 1 Gig at 449 dirhams a month (2 mesh units included) with a one-line reason. Never invents a price.",
+   "great_ar": "بيتأكد من التغطية بقرية جميرا الدائرية (الفايبر موجود)، وبيعرض باقات البيت بأسعارها الحقيقية، وبينصح بفايبر المنزل 1 جيجا بـ 449 درهم بالشهر (مع جهازين ميش) مع سبب بسطر واحد. وما بيخترع أي سعر.",
+   "facts": [
+    {
+     "label_en": "Your name",
+     "label_ar": "اسمك",
+     "value": "Hessa Rahman",
+     "value_ar": "حصة رحمن"
+    },
+    {
+     "label_en": "Area",
+     "label_ar": "المنطقة",
+     "value": "JVC, Dubai",
+     "value_ar": "قرية جميرا الدائرية، دبي"
+    },
+    {
+     "label_en": "Household",
+     "label_ar": "مين بالبيت",
+     "value": "5 people · 2 gamers · 4K TV",
+     "value_ar": "5 أشخاص · 2 بيلعبوا أونلاين · تلفزيون 4K"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "الجوال",
+     "value": "0507771234"
+    }
+   ]
+  },
+  {
+   "id": "I02",
+   "country": "SA",
+   "area_id": "ruh-narjis",
+   "expected_tools": [
+    "inquiry_check_coverage"
+   ],
+   "brief": "Moving into a new villa in Al Narjis, Riyadh. No fiber yet there (planned for the second quarter of 2027); Home 5G Wireless is available next working day, no contract. Great agent: honest about no fiber, offers 5G wireless and to note interest for fiber when it arrives.",
+   "title_en": "New villa in Al Narjis — fiber?",
+   "title_ar": "فيلا جديدة بالنرجس — في فايبر؟",
+   "headline_en": "New villa in Al Narjis — but where's the fiber?",
+   "headline_ar": "فيلا جديدة بالنرجس — بس وين الفايبر؟",
+   "summary_en": "You're Abdullah, moving into a new villa in Al Narjis, Riyadh, on Thursday. The kids want the Wi-Fi password, and nobody has told you if fiber even reaches your street.",
+   "summary_ar": "إنت عبدالله، رح تسكن بفيلا جديدة بحي النرجس بالرياض يوم الخميس. الولاد بدهم باسوورد الواي فاي، وما حدا قلك إذا الفايبر واصل لشارعكم أصلاً.",
+   "who_en": "You're Abdullah Al Shehri, moving into a brand-new villa in Al Narjis, Riyadh.",
+   "who_ar": "إنت عبدالله الشهري، رح تسكن بفيلا جديدة بحي النرجس بالرياض.",
+   "happened_en": "Keys in hand, furniture arriving Thursday, and the kids already asked for the Wi-Fi password. Nobody has told you if fiber even reaches your street.",
+   "happened_ar": "المفاتيح معك، والعفش بيوصل الخميس، والولاد من هلّق عم يسألوا عن باسوورد الواي فاي. وما حدا قلك إذا الفايبر واصل لشارعكم أصلاً.",
+   "goal_en": "Get internet in the new villa as soon as possible.",
+   "goal_ar": "توصّل الإنترنت للفيلا الجديدة بأسرع وقت.",
+   "say_en": [
+    "Salam, I'm moving into a new villa in Al Narjis — can I get fiber there?",
+    "If there's no fiber, what's the fastest option? I need it this week.",
+    "Can you let me know when fiber arrives? My number is 0558882345."
+   ],
+   "say_ar": [
+    "السلام عليكم، رح أسكن بفيلا جديدة بالنرجس — بقدر ركّب فايبر هناك؟",
+    "إذا ما في فايبر، شو أسرع حل؟ بحتاجه هالأسبوع.",
+    "فيكم تخبروني لما يوصل الفايبر؟ رقمي 0558882345."
+   ],
+   "twist_en": "Push back: \"My neighbour says he already has fiber — are you sure?\"",
+   "twist_ar": "عاند شوي: «جاري بيقول عنده فايبر من زمان — إنت متأكد؟»",
+   "great_en": "Is honest that Al Narjis has no fiber yet (planned for the second quarter of 2027), offers Home 5G Wireless — delivered the next working day, no contract — and offers to note your interest for fiber.",
+   "great_ar": "بيكون صريح إنو الفايبر لسا ما وصل على النرجس (مخطط له بالربع التاني من 2027)، وبيعرض الإنترنت المنزلي اللاسلكي 5G — بيوصل يوم الشغل اللي بعده وبلا عقد — وبيعرض يسجّل اهتمامك بالفايبر.",
+   "facts": [
+    {
+     "label_en": "Your name",
+     "label_ar": "اسمك",
+     "value": "Abdullah Al Shehri",
+     "value_ar": "عبدالله الشهري"
+    },
+    {
+     "label_en": "Area",
+     "label_ar": "المنطقة",
+     "value": "Al Narjis, Riyadh",
+     "value_ar": "النرجس، الرياض"
+    },
+    {
+     "label_en": "Move-in",
+     "label_ar": "يوم السكن",
+     "value": "Thursday",
+     "value_ar": "الخميس"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "الجوال",
+     "value": "0558882345"
+    }
+   ]
+  },
+  {
+   "id": "I03",
+   "country": "AE",
+   "area_id": "auh-reem",
+   "expected_tools": [
+    "inquiry_check_coverage",
+    "agents_kb_search"
+   ],
+   "brief": "Asks how long installation takes on Al Reem Island and whether someone must be home. Fiber install is 2–5 working days after order, technician visit needs an adult at home, free installation on 12/24-month contracts (200 one-time without contract). Great agent: answers from the KB, short and exact.",
+   "title_en": "How fast is installation on Reem?",
+   "title_ar": "قديش بياخد التركيب بجزيرة الريم؟",
+   "headline_en": "Maya wants fiber on Reem — but she's never home",
+   "headline_ar": "مايا بدها فايبر بالريم — بس ما بتكون بالبيت أبداً",
+   "summary_en": "You're Maya, a nurse on rotating shifts, renting on Al Reem Island, Abu Dhabi. Before signing up, you want to know how long installation takes, whether you must be home, and the cost.",
+   "summary_ar": "إنتِ مايا، ممرضة بدوامات متغيرة وساكنة بجزيرة الريم بأبوظبي. قبل ما تشتركي بدك تعرفي قديش بياخد التركيب، وإذا لازم تكوني بالبيت، وقديش بيكلّف.",
+   "who_en": "You're Maya Khoury, a nurse on rotating shifts, renting a flat on Al Reem Island, Abu Dhabi.",
+   "who_ar": "إنتِ مايا خوري، ممرضة بدوامات متغيرة، ساكنة بشقة إيجار بجزيرة الريم بأبوظبي.",
+   "happened_en": "Your hospital shifts change every week. Before signing up, you want to know how long installation takes, whether you must be home, and what it costs.",
+   "happened_ar": "دوامك بالمستشفى بيتغير كل أسبوع. وقبل ما تشتركي، بدك تعرفي قديش بياخد التركيب، وإذا لازم تكوني بالبيت، وقديش بيكلّف.",
+   "goal_en": "Get exact answers on timing, who must be home and the install cost.",
+   "goal_ar": "تاخدي أجوبة دقيقة عن المدة، ومين لازم يكون بالبيت، وكلفة التركيب.",
+   "say_en": [
+    "Hi, how long does fiber installation take on Al Reem Island?",
+    "Does someone have to be home for it? I work long shifts.",
+    "Is installation free, or do I pay something?"
+   ],
+   "say_ar": [
+    "مرحبا، قديش بياخد تركيب الفايبر بجزيرة الريم؟",
+    "لازم حدا يكون بالبيت وقت التركيب؟ دواماتي طويلة كتير.",
+    "التركيب مجاني ولا لازم إدفع شي؟"
+   ],
+   "twist_en": "Ask whether your 12-year-old nephew can let the technician in while you're at work.",
+   "twist_ar": "اسألي إذا ابن أختك اللي عمره 12 سنة بيقدر يفتح للفني وإنتِ بالدوام.",
+   "great_en": "Answers from the knowledge base, short and exact: fiber installs 2–5 working days after the order, an adult must be home for the visit, free installation on 12- or 24-month contracts (200 dirhams one-time without a contract).",
+   "great_ar": "بيجاوب من قاعدة المعرفة باختصار ودقة: التركيب بياخد 2–5 أيام شغل من الطلب، ولازم يكون شخص بالغ بالبيت وقت الزيارة، والتركيب مجاني مع عقد 12 أو 24 شهر (200 درهم مرة وحدة بلا عقد).",
+   "facts": [
+    {
+     "label_en": "Your name",
+     "label_ar": "اسمك",
+     "value": "Maya Khoury",
+     "value_ar": "مايا خوري"
+    },
+    {
+     "label_en": "Area",
+     "label_ar": "المنطقة",
+     "value": "Al Reem Island, Abu Dhabi",
+     "value_ar": "جزيرة الريم، أبوظبي"
+    },
+    {
+     "label_en": "Days off",
+     "label_ar": "أيام الإجازة",
+     "value": "Friday & Saturday",
+     "value_ar": "الجمعة والسبت"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "الجوال",
+     "value": "0524443321"
+    }
+   ]
+  },
+  {
+   "id": "I04",
+   "country": "SA",
+   "area_id": "jed-rawdah",
+   "expected_tools": [
+    "inquiry_list_plans",
+    "inquiry_check_coverage"
+   ],
+   "brief": "Owner of a café in Al Rawdah, Jeddah, 6 staff, card machines, wants internet + staff lines. Great agent: checks coverage, recommends the SME Business Bundle (1,149 riyals, 24 months: Business Fiber 500 + 5 lines + cloud number) and maybe 5G backup (95 riyals), captures the lead if interested.",
+   "title_en": "Internet + staff lines for a café",
+   "title_ar": "إنترنت وخطوط للموظفين لمقهى",
+   "headline_en": "Rakan's café needs Wi-Fi that never drops a latte",
+   "headline_ar": "مقهى راكان بدو إنترنت ما بيقطع أبداً",
+   "summary_en": "You're Rakan, owner of a busy café in Al Rawdah, Jeddah. During last Friday's rush the internet died and card payments stopped, so you need Wi-Fi that never drops.",
+   "summary_ar": "إنت راكان، صاحب مقهى عليه زحمة بحي الروضة بجدة. الجمعة الماضية وقت الزحمة قطع الإنترنت ووقف الدفع بالبطاقات — وبدك واي فاي ما بيقطع أبداً.",
+   "who_en": "You're Rakan Al Ghamdi, owner of a busy café in Al Rawdah, Jeddah.",
+   "who_ar": "إنت راكان الغامدي، صاحب مقهى عليه زحمة بحي الروضة بجدة.",
+   "happened_en": "6 staff, card machines on every counter, and customers who ask for the Wi-Fi before the menu. Last Friday rush the internet died and card payments stopped.",
+   "happened_ar": "عندك 6 موظفين، وأجهزة دفع على كل كاونتر، والزباين بيسألوا عن الواي فاي قبل المنيو. والجمعة الماضية وقت الزحمة قطع الإنترنت ووقف الدفع بالبطاقات.",
+   "goal_en": "Get reliable internet plus phone lines for the team, at one clear price.",
+   "goal_ar": "تاخد إنترنت ثابت وخطوط موبايل للفريق، بسعر واحد واضح.",
+   "say_en": [
+    "Hi, I own a café in Al Rawdah, Jeddah — I need internet and lines for my staff.",
+    "We have 6 staff and card machines. What if the internet cuts during rush hour?",
+    "Sounds good — can someone call me? I'm Rakan, 0541116789."
+   ],
+   "say_ar": [
+    "السلام عليكم، عندي مقهى بالروضة بجدة — بدي إنترنت وخطوط للموظفين.",
+    "عندي 6 موظفين وأجهزة دفع. شو الحل إذا قطع الإنترنت وقت الزحمة؟",
+    "تمام — حدا رح يتصل فيني؟ أنا راكان، 0541116789."
+   ],
+   "twist_en": "Ask it to squeeze 8 staff lines into the bundle instead of 5 — see if it stays honest about what's included.",
+   "twist_ar": "اطلب منه يحط 8 خطوط للموظفين بالباقة بدل 5 — وشوف إذا بيضل صادق باللي بتشمله الباقة.",
+   "great_en": "Checks Al Rawdah coverage, recommends the SME Business Bundle — 1,149 riyals a month on 24 months (Business Fiber 500 + 5 lines + cloud number) — maybe 5G backup (95 riyals) for card machines, and captures your details.",
+   "great_ar": "بيتأكد من التغطية بالروضة، وبينصح بباقة الأعمال الصغيرة والمتوسطة — 1,149 ريال بالشهر بعقد 24 شهر (فايبر الأعمال 500 + 5 خطوط + رقم سحابي) — وممكن خط 5G احتياطي (95 ريال) لأجهزة الدفع، وبيسجّل معلوماتك.",
+   "facts": [
+    {
+     "label_en": "Your name",
+     "label_ar": "اسمك",
+     "value": "Rakan Al Ghamdi",
+     "value_ar": "راكان الغامدي"
+    },
+    {
+     "label_en": "Area",
+     "label_ar": "المنطقة",
+     "value": "Al Rawdah, Jeddah",
+     "value_ar": "الروضة، جدة"
+    },
+    {
+     "label_en": "Team",
+     "label_ar": "الفريق",
+     "value": "6 staff · card machines",
+     "value_ar": "6 موظفين · أجهزة دفع"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "الجوال",
+     "value": "0541116789"
+    }
+   ]
+  },
+  {
+   "id": "I05",
+   "country": "AE",
+   "area_id": null,
+   "expected_tools": [
+    "agents_kb_search"
+   ],
+   "brief": "Careful reader asks about contract terms: 12 vs 24 months, what happens if they cancel early (half of the remaining monthly fees), and what if they move house. Great agent: answers from the KB, no pressure, no invented clauses.",
+   "title_en": "Contract terms: 12 vs 24 months",
+   "title_ar": "شروط العقد: 12 ولا 24 شهر",
+   "headline_en": "Yousef reads the fine print. All of it.",
+   "headline_ar": "يوسف بيقرا الشروط الصغيرة. كلها.",
+   "summary_en": "You're Yousef, an Abu Dhabi accountant who reads every contract twice. Before signing up, you want 12 vs 24 months, early cancellation and moving house explained.",
+   "summary_ar": "إنت يوسف، محاسب بأبوظبي بيقرا كل عقد مرتين. قبل ما تشترك بدك تفهم الفرق بين 12 و24 شهر، والإلغاء قبل الوقت، وشو بيصير إذا نقلت بيتك.",
+   "who_en": "You're Yousef Darwish, an accountant in Abu Dhabi who reads every contract twice.",
+   "who_ar": "إنت يوسف درويش، محاسب بأبوظبي بيقرا كل عقد مرتين.",
+   "happened_en": "You're about to sign up, but you've been burned by hidden clauses before. First you want 12 vs 24 months, early cancellation and moving house explained.",
+   "happened_ar": "إنت على وشك تشترك، بس قبل هيك وقعت ببنود مخفية. فقبل كل شي بدك تفهم الفرق بين 12 و24 شهر، والإلغاء قبل الوقت، وشو بيصير إذا نقلت بيتك.",
+   "goal_en": "Understand the contract terms clearly — no sales pitch.",
+   "goal_ar": "تفهم شروط العقد بوضوح — بلا أسلوب بيع.",
+   "say_en": [
+    "Before I sign anything: what's the difference between 12 and 24 months?",
+    "If I cancel early, what exactly do I pay?",
+    "And if I move house in the middle of the contract?"
+   ],
+   "say_ar": [
+    "قبل ما وقّع على أي شي: شو الفرق بين عقد 12 شهر و24 شهر؟",
+    "إذا لغيت بدري، قديش بدفع بالضبط؟",
+    "وإذا نقلت بيتي بنص العقد؟"
+   ],
+   "say_more_en": [
+    "So with 10 months left on a 349 plan, what would I pay to cancel?",
+    "Is there an installation fee?",
+    "Can I upgrade my plan in the middle of the contract?",
+    "What happens when the contract ends?",
+    "Can you send me the terms in writing?"
+   ],
+   "say_more_ar": [
+    "يعني إذا ضل 10 شهور على باقة 349، قديش بدفع لإلغي؟",
+    "في رسوم تركيب؟",
+    "فيني رقّي الباقة بنص العقد؟",
+    "شو بيصير لمّا يخلص العقد؟",
+    "فيك تبعتلي الشروط مكتوبة؟"
+   ],
+   "twist_en": "Test the maths: \"So with 10 months left on a 349 plan, what would I pay to cancel?\" (it's 1,745).",
+   "twist_ar": "جرّب الحساب: «يعني إذا باقي 10 شهور على باقة 349، قديش بدفع إذا لغيت؟» (الجواب 1,745).",
+   "great_en": "Answers from the knowledge base, no pressure: 24 months is 20 a month cheaper than 12; cancelling early costs half the remaining monthly fees; moving is one free relocation per contract year (3–5 working days). Invents no clauses.",
+   "great_ar": "بيجاوب من قاعدة المعرفة وبلا ضغط: عقد 24 شهر أرخص بـ 20 بالشهر من 12؛ الإلغاء قبل الوقت = نص الرسوم الشهرية الباقية؛ نقل البيت مجاني مرة وحدة بسنة العقد (3–5 أيام شغل). وما بيخترع أي بند.",
+   "facts": [
+    {
+     "label_en": "Your name",
+     "label_ar": "اسمك",
+     "value": "Yousef Darwish",
+     "value_ar": "يوسف درويش"
+    },
+    {
+     "label_en": "City",
+     "label_ar": "المدينة",
+     "value": "Abu Dhabi",
+     "value_ar": "أبوظبي"
+    },
+    {
+     "label_en": "Plan you like",
+     "label_ar": "الباقة اللي عاجبتك",
+     "value": "Home Fiber 500 · AED 349",
+     "value_ar": "فايبر المنزل 500 · 349 درهم"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "الجوال",
+     "value": "0563339876"
+    }
+   ]
+  },
+  {
+   "id": "I06",
+   "country": "AE",
+   "area_id": "dxb-marina",
+   "expected_tools": [
+    "inquiry_compare_plans"
+   ],
+   "brief": "Freelance video editor in Dubai Marina comparing Home Fiber 500 (349) vs Home Fiber 1 Gig (449): difference 100 a month; 1 Gig adds mesh units and double speed for big uploads. Great agent: uses the compare tool, gives the difference exactly, recommends based on their uploads.",
+   "title_en": "Fiber 500 vs 1 Gig for video work",
+   "title_ar": "فايبر 500 ولا 1 جيجا لشغل الفيديو",
+   "headline_en": "Dana's 4K uploads are eating her evenings",
+   "headline_ar": "رفع ملفات الـ 4K عم ياكل سهرات دانة",
+   "summary_en": "You're Dana, a freelance video editor in Dubai Marina. Every project ends with a 40 GB upload, and you're torn between Home Fiber 500 and 1 Gig.",
+   "summary_ar": "إنتِ دانة، مونتيرة فيديو بتشتغلي لحسابك بدبي مارينا. كل مشروع بيخلص برفع 40 جيجا، ومحتارة بين فايبر المنزل 500 و1 جيجا.",
+   "who_en": "You're Dana Aziz, a freelance video editor in Dubai Marina.",
+   "who_ar": "إنتِ دانة عزيز، مونتيرة فيديو بتشتغلي لحسابك بدبي مارينا.",
+   "happened_en": "Every project ends with a 40 GB upload to a client and a long stare at a progress bar. You're torn between Home Fiber 500 and 1 Gig.",
+   "happened_ar": "كل مشروع بيخلص برفع 40 جيجا للعميل وقعدة طويلة وإنتِ عم تتطلعي بشريط التحميل. ومحتارة بين فايبر المنزل 500 و1 جيجا.",
+   "goal_en": "Decide between the two plans with real numbers, not hype.",
+   "goal_ar": "تختاري بين الباقتين بأرقام حقيقية، مش بحكي دعايات.",
+   "say_en": [
+    "Hi, can you compare Home Fiber 500 and Home Fiber 1 Gig for me?",
+    "I upload huge video files almost every day — is 1 Gig worth the extra?",
+    "So what's the exact difference per month?"
+   ],
+   "say_ar": [
+    "مرحبا، فيك تقارنلي بين فايبر المنزل 500 وفايبر المنزل 1 جيجا؟",
+    "برفع ملفات فيديو كبيرة كتير كل يوم تقريباً — بتستاهل الـ 1 جيجا الزيادة؟",
+    "يعني قديش الفرق بالضبط بالشهر؟"
+   ],
+   "say_more_en": [
+    "يعني الفرق كم بالضبط؟",
+    "Is the upload speed the same as the download?",
+    "Does 1 Gig come with a better router?",
+    "Can I start with 500 and upgrade later?",
+    "Okay, I'll take the 1 Gig."
+   ],
+   "say_more_ar": [
+    "يعني الفرق قديش بالضبط؟",
+    "سرعة الرفع نفس سرعة التنزيل؟",
+    "الـ 1 جيجا بيجي معه راوتر أحسن؟",
+    "فيني ابلّش بالـ 500 ورقّي بعدين؟",
+    "تمام، باخد الـ 1 جيجا."
+   ],
+   "twist_en": "Mid-comparison, switch to Arabic — \"يعني الفرق كم بالضبط؟\" — and see if the agent switches with you.",
+   "twist_ar": "بنص المقارنة، احكي إنجليزي — «So what's the exact difference?» — وشوفي إذا الوكيل بيحكي إنجليزي معك.",
+   "great_en": "Uses the compare tool: Home Fiber 500 at 349 vs 1 Gig at 449 — exactly 100 dirhams more a month for double the speed plus 2 mesh units. Recommends 1 Gig for your daily big uploads, without overselling.",
+   "great_ar": "بيستعمل أداة المقارنة: فايبر المنزل 500 بـ 349 مقابل 1 جيجا بـ 449 — الفرق بالضبط 100 درهم بالشهر مقابل ضعف السرعة وجهازين ميش. وبينصح بالـ 1 جيجا لأنك بترفعي ملفات كبيرة كل يوم، بلا مبالغة.",
+   "facts": [
+    {
+     "label_en": "Your name",
+     "label_ar": "اسمك",
+     "value": "Dana Aziz",
+     "value_ar": "دانة عزيز"
+    },
+    {
+     "label_en": "Area",
+     "label_ar": "المنطقة",
+     "value": "Dubai Marina",
+     "value_ar": "دبي مارينا"
+    },
+    {
+     "label_en": "Uploads",
+     "label_ar": "حجم الرفع",
+     "value": "~40 GB per project",
+     "value_ar": "حوالي 40 جيجا لكل مشروع"
+    },
+    {
+     "label_en": "Comparing",
+     "label_ar": "المقارنة",
+     "value": "AED 349 vs AED 449",
+     "value_ar": "349 درهم مقابل 449 درهم"
+    }
+   ]
+  },
+  {
+   "id": "I07",
+   "country": "SA",
+   "area_id": "khb-ulaya",
+   "expected_tools": [
+    "inquiry_check_coverage",
+    "inquiry_capture_lead",
+    "inquiry_book_callback"
+   ],
+   "brief": "Dental clinic manager in Al Khobar wants business fiber and a call from sales. Great agent: checks coverage, captures name + mobile (reads the number back), books a callback for the day/time asked, gives the lead reference.",
+   "title_en": "Business fiber for a dental clinic",
+   "title_ar": "فايبر أعمال لعيادة أسنان",
+   "headline_en": "The clinic manager wants a callback — Sunday, 10 sharp",
+   "headline_ar": "مديرة العيادة بدها اتصال — الأحد الساعة 10 بالضبط",
+   "summary_en": "You're Lama, manager of a dental clinic in Al Khobar. The X-ray software crawls, bookings freeze, and the owner wants business fiber sorted this week through a proper sales call.",
+   "summary_ar": "إنتِ لمى، مديرة عيادة أسنان بالخبر. برنامج الأشعة بطيء ونظام المواعيد عم يعلّق، والمالك بدو موضوع فايبر الأعمال يخلص هالأسبوع — وبتفضّلي مكالمة مرتبة مع المبيعات.",
+   "who_en": "You're Lama Al Otaibi, manager of a dental clinic in Al Khobar.",
+   "who_ar": "إنتِ لمى العتيبي، مديرة عيادة أسنان بالخبر.",
+   "happened_en": "The X-ray software crawls, the booking system freezes and patients wait. The owner said: \"Sort out business fiber this week.\" You'd rather talk to sales properly.",
+   "happened_ar": "برنامج الأشعة بطيء، ونظام المواعيد عم يعلّق، والمرضى عم يستنّوا. والمالك قال: «خلّصي موضوع فايبر الأعمال هالأسبوع». وإنتِ بتفضّلي تحكي مع المبيعات بشكل مرتب.",
+   "goal_en": "Check coverage and book a callback from sales at your chosen time.",
+   "goal_ar": "تتأكدي من التغطية وتحجزي اتصال من المبيعات بالوقت اللي بيناسبك.",
+   "say_en": [
+    "Hi, I manage a dental clinic in Al Khobar — do you have business fiber there?",
+    "Please have sales call me: Lama Al Otaibi, 0596667788.",
+    "Sunday at 10 am works best for the callback."
+   ],
+   "say_ar": [
+    "السلام عليكم، أنا مديرة عيادة أسنان بالخبر — عندكم فايبر أعمال هناك؟",
+    "خلّوا المبيعات يتصلوا فيني: لمى العتيبي، 0596667788.",
+    "الأحد الساعة 10 الصبح بيناسبني أكتر شي للاتصال."
+   ],
+   "twist_en": "Give your number with two digits swapped (0596667878), then correct it when the agent reads it back.",
+   "twist_ar": "اعطيه الرقم مع رقمين مبدّلين (0596667878)، وصحّحيه لما الوكيل يعيده عليكِ.",
+   "great_en": "Checks Al Khobar coverage, captures your name and mobile and reads the number back, books the callback for Sunday 10 am (or whatever you ask) and gives you the lead reference.",
+   "great_ar": "بيتأكد من التغطية بالخبر، وبيسجّل اسمك ورقمك وبيعيد الرقم عليكِ ليتأكد، وبيحجز الاتصال يوم الأحد الساعة 10 الصبح (أو الوقت اللي بتطلبيه) وبيعطيكِ رقم مرجع الطلب.",
+   "facts": [
+    {
+     "label_en": "Your name",
+     "label_ar": "اسمك",
+     "value": "Lama Al Otaibi",
+     "value_ar": "لمى العتيبي"
+    },
+    {
+     "label_en": "Area",
+     "label_ar": "المنطقة",
+     "value": "Al Ulaya, Al Khobar",
+     "value_ar": "العليا، الخبر"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "الجوال",
+     "value": "0596667788"
+    },
+    {
+     "label_en": "Callback",
+     "label_ar": "موعد الاتصال",
+     "value": "Sunday, 10 am",
+     "value_ar": "الأحد، 10 الصبح"
+    }
+   ]
+  },
+  {
+   "id": "I08",
+   "country": "AE",
+   "area_id": null,
+   "expected_tools": [
+    "inquiry_list_plans"
+   ],
+   "brief": "Bargain hunter asks for a student discount and a TV channels package. Neither exists (not offered). Great agent: says plainly they are not offered, never invents a discount, points to the cheapest real options (Home 5G Wireless 249 / Mobile Essential 99) and the 24-month price (20 less per month) as a catalog fact.",
+   "title_en": "Student discount and TV channels?",
+   "title_ar": "خصم طلاب وباقة قنوات؟",
+   "headline_en": "Zaid wants a student discount and every sports channel",
+   "headline_ar": "زيد بدو خصم طلاب وكل القنوات الرياضية",
+   "summary_en": "You're Zaid, a university student in the UAE. Your flatmates sent you to find cheap internet plus football channels on a tight budget, and you think you're a great bargainer.",
+   "summary_ar": "إنت زيد، طالب جامعة بالإمارات. رفقاتك بالسكن بعتوك تدوّر على إنترنت رخيص مع قنوات الكورة بميزانية صغيرة — وشايف حالك بطل بالمفاصلة.",
+   "who_en": "You're Zaid Hamdan, a university student in the UAE hunting for the best deal.",
+   "who_ar": "إنت زيد حمدان، طالب جامعة بالإمارات وعم تدوّر على أحسن عرض.",
+   "happened_en": "Your flatmates picked you to find cheap internet \"plus some TV channels for the football\". The budget is tight, and your bargaining skills are — you believe — legendary.",
+   "happened_ar": "رفقاتك بالسكن اختاروك تدوّر على إنترنت رخيص «ومعه قنوات للكورة». الميزانية صغيرة، ومهارتك بالمفاصلة — حسب رأيك — ما في متلها.",
+   "goal_en": "Score a student discount and a TV package — or the cheapest real option.",
+   "goal_ar": "تطلع بخصم طلاب وباقة قنوات — أو بأرخص خيار حقيقي.",
+   "say_en": [
+    "Hi! Do you have a student discount? I'm at university.",
+    "And which TV channel packages do you have? We need sports.",
+    "OK, what's the absolute cheapest I can get?"
+   ],
+   "say_ar": [
+    "مرحبا! عندكم خصم للطلاب؟ أنا طالب جامعة.",
+    "شو عندكم باقات قنوات؟ بدنا الرياضة.",
+    "طيب، شو أرخص شي فيني آخده؟"
+   ],
+   "twist_en": "Claim confidently: \"Your colleague told me last week there's 30% off for students.\"",
+   "twist_ar": "قول بثقة: «زميلك قلي الأسبوع الماضي إنو في خصم 30% للطلاب».",
+   "great_en": "Says plainly there's no student discount and no TV packages — never invents one. Points to the cheapest real options: Home 5G Wireless at 249 or Mobile Essential at 99 dirhams a month, and that fiber is 20 less a month on 24 months.",
+   "great_ar": "بيقول بوضوح إنو ما في خصم طلاب ولا باقات قنوات — وما بيخترع أي خصم. وبيوجّهك لأرخص الخيارات الحقيقية: الإنترنت المنزلي اللاسلكي 5G بـ 249 أو جوال أساسي بـ 99 درهم بالشهر، وإنو الفايبر أرخص بـ 20 بالشهر مع عقد 24 شهر.",
+   "facts": [
+    {
+     "label_en": "Your name",
+     "label_ar": "اسمك",
+     "value": "Zaid Hamdan",
+     "value_ar": "زيد حمدان"
+    },
+    {
+     "label_en": "Budget",
+     "label_ar": "الميزانية",
+     "value": "~AED 250 / month",
+     "value_ar": "حوالي 250 درهم بالشهر"
+    },
+    {
+     "label_en": "Household",
+     "label_ar": "السكن",
+     "value": "3 flatmates",
+     "value_ar": "3 رفقات بالسكن"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "الجوال",
+     "value": "0509998877"
+    }
+   ]
+  }
+ ]
+}

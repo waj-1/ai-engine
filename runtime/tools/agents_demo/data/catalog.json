@@ -1,0 +1,202 @@
+{
+  "data_note": {
+    "en": "Fictional company, plans and prices — demo data only.",
+    "ar": "شركة وباقات وأسعار وهمية — بيانات تجريبية فقط."
+  },
+  "currencies": {
+    "AE": {"code": "AED", "word_en": "dirhams", "word_ar": "درهم", "country_en": "UAE", "country_ar": "الإمارات"},
+    "SA": {"code": "SAR", "word_en": "riyals", "word_ar": "ريال", "country_en": "Saudi Arabia", "country_ar": "السعودية"}
+  },
+  "products": {
+    "home_fiber_300": {
+      "category": "home",
+      "name_en": "Home Fiber 300", "name_ar": "فايبر المنزل 300",
+      "speed_mbps": 300,
+      "summary_en": "300 Mbps fiber, unlimited data, Wi-Fi 6 router included.",
+      "summary_ar": "فايبر بسرعة 300 ميغابت، بيانات غير محدودة، وراوتر واي فاي 6 مشمول.",
+      "best_for_en": "Couples and small households: streaming, video calls, a few devices.",
+      "best_for_ar": "الأزواج والعائلات الصغيرة: بث، مكالمات فيديو، وعدد قليل من الأجهزة.",
+      "price": {"AE": 289, "SA": 279},
+      "contract_months": [12, 24],
+      "price_24m_less": 20
+    },
+    "home_fiber_500": {
+      "category": "home",
+      "name_en": "Home Fiber 500", "name_ar": "فايبر المنزل 500",
+      "speed_mbps": 500,
+      "summary_en": "500 Mbps fiber, unlimited data, Wi-Fi 6 router included.",
+      "summary_ar": "فايبر بسرعة 500 ميغابت، بيانات غير محدودة، وراوتر واي فاي 6 مشمول.",
+      "best_for_en": "Families with several people streaming and working from home.",
+      "best_for_ar": "العائلات اللي فيها أكثر من شخص يبث أو يشتغل من البيت.",
+      "price": {"AE": 349, "SA": 339},
+      "contract_months": [12, 24],
+      "price_24m_less": 20
+    },
+    "home_fiber_1g": {
+      "category": "home",
+      "name_en": "Home Fiber 1 Gig", "name_ar": "فايبر المنزل 1 جيجا",
+      "speed_mbps": 1000,
+      "summary_en": "1 Gbps fiber, unlimited data, Wi-Fi 6 router plus 2 mesh units for full-home coverage.",
+      "summary_ar": "فايبر بسرعة 1 جيجابت، بيانات غير محدودة، راوتر واي فاي 6 مع جهازين ميش لتغطية البيت كامل.",
+      "best_for_en": "Big households, gamers, 4K streaming on many screens, home offices.",
+      "best_for_ar": "البيوت الكبيرة، محبي الألعاب، البث بدقة 4K على شاشات كثيرة، والمكاتب المنزلية.",
+      "price": {"AE": 449, "SA": 429},
+      "contract_months": [12, 24],
+      "price_24m_less": 20
+    },
+    "home_5g_wireless": {
+      "category": "home",
+      "name_en": "Home 5G Wireless", "name_ar": "الإنترنت المنزلي اللاسلكي 5G",
+      "speed_mbps": 250,
+      "summary_en": "Plug-and-play 5G home internet, typical speeds up to 250 Mbps, no installation visit, no contract.",
+      "summary_ar": "إنترنت منزلي 5G جاهز للتشغيل مباشرة، سرعات تصل عادة إلى 250 ميغابت، بدون زيارة تركيب وبدون عقد.",
+      "best_for_en": "Areas without fiber yet, renters, or anyone who wants internet the next day.",
+      "best_for_ar": "المناطق اللي ما وصلها الفايبر، المستأجرين، أو أي أحد يبي إنترنت من اليوم الثاني.",
+      "price": {"AE": 249, "SA": 239},
+      "contract_months": [0]
+    },
+    "mesh_wifi_addon": {
+      "category": "home_addon",
+      "name_en": "Mesh Wi-Fi add-on", "name_ar": "إضافة واي فاي ميش",
+      "summary_en": "One extra mesh unit to remove Wi-Fi dead spots, rented monthly.",
+      "summary_ar": "جهاز ميش إضافي يزيل مناطق ضعف الواي فاي، بإيجار شهري.",
+      "best_for_en": "Bigger homes or villas with weak Wi-Fi in some rooms.",
+      "best_for_ar": "البيوت الكبيرة أو الفلل اللي الواي فاي فيها ضعيف في بعض الغرف.",
+      "price": {"AE": 25, "SA": 25},
+      "contract_months": [0]
+    },
+    "mobile_essential": {
+      "category": "mobile",
+      "name_en": "Mobile Essential", "name_ar": "جوال أساسي",
+      "summary_en": "25 GB data and 500 local minutes a month.",
+      "summary_ar": "25 جيجابايت بيانات و500 دقيقة محلية شهرياً.",
+      "best_for_en": "Light users who mostly use Wi-Fi.",
+      "best_for_ar": "الاستخدام الخفيف لمن يعتمد غالباً على الواي فاي.",
+      "price": {"AE": 99, "SA": 89},
+      "contract_months": [0, 12]
+    },
+    "mobile_plus": {
+      "category": "mobile",
+      "name_en": "Mobile Plus", "name_ar": "جوال بلس",
+      "summary_en": "60 GB data, unlimited local calls, 2 GB GCC roaming a month.",
+      "summary_ar": "60 جيجابايت بيانات، مكالمات محلية غير محدودة، و2 جيجابايت تجوال خليجي شهرياً.",
+      "best_for_en": "Everyday users who stream and navigate on the go.",
+      "best_for_ar": "الاستخدام اليومي للبث والخرائط وأنت برا البيت.",
+      "price": {"AE": 179, "SA": 169},
+      "contract_months": [0, 12]
+    },
+    "mobile_unlimited": {
+      "category": "mobile",
+      "name_en": "Mobile Unlimited", "name_ar": "جوال غير محدود",
+      "summary_en": "Unlimited data (fair use 500 GB), unlimited local calls, 10 GB GCC roaming a month.",
+      "summary_ar": "بيانات غير محدودة (استخدام عادل 500 جيجابايت)، مكالمات محلية غير محدودة، و10 جيجابايت تجوال خليجي شهرياً.",
+      "best_for_en": "Heavy users, hotspot users and frequent GCC travellers.",
+      "best_for_ar": "الاستخدام الكثيف، مشاركة الإنترنت، وكثيري السفر في الخليج.",
+      "price": {"AE": 299, "SA": 289},
+      "contract_months": [0, 12]
+    },
+    "family_addon": {
+      "category": "mobile_addon",
+      "name_en": "Family line add-on", "name_ar": "إضافة خط عائلي",
+      "summary_en": "An extra mobile line on the same account with 20 GB data and unlimited local calls; up to 4 extra lines, one bill.",
+      "summary_ar": "خط جوال إضافي على نفس الحساب فيه 20 جيجابايت ومكالمات محلية غير محدودة؛ حتى 4 خطوط إضافية بفاتورة وحدة.",
+      "best_for_en": "Families who want every line on one bill.",
+      "best_for_ar": "العائلات اللي تبي كل الخطوط على فاتورة وحدة.",
+      "price": {"AE": 49, "SA": 45},
+      "price_unit_en": "per line per month", "price_unit_ar": "للخط شهرياً",
+      "max_lines": 4,
+      "contract_months": [0]
+    },
+    "biz_fiber_500": {
+      "category": "business",
+      "name_en": "Business Fiber 500", "name_ar": "فايبر الأعمال 500",
+      "speed_mbps": 500,
+      "summary_en": "500 Mbps business fiber, 1 static IP, 4-hour fault response, priority support.",
+      "summary_ar": "فايبر أعمال بسرعة 500 ميغابت، عنوان IP ثابت، استجابة للأعطال خلال 4 ساعات، ودعم بأولوية.",
+      "best_for_en": "Shops, clinics and offices up to about 15 people.",
+      "best_for_ar": "المحلات والعيادات والمكاتب لحد 15 شخص تقريباً.",
+      "price": {"AE": 499, "SA": 479},
+      "contract_months": [12, 24]
+    },
+    "biz_fiber_1g": {
+      "category": "business",
+      "name_en": "Business Fiber 1 Gig", "name_ar": "فايبر الأعمال 1 جيجا",
+      "speed_mbps": 1000,
+      "summary_en": "1 Gbps business fiber, 5 static IPs, 4-hour fault response, priority support.",
+      "summary_ar": "فايبر أعمال بسرعة 1 جيجابت، 5 عناوين IP ثابتة، استجابة للأعطال خلال 4 ساعات، ودعم بأولوية.",
+      "best_for_en": "Offices with 15 or more people, cloud-heavy teams, online shops.",
+      "best_for_ar": "المكاتب من 15 شخص وأكثر، الفرق اللي تعتمد على السحابة، والمتاجر الإلكترونية.",
+      "price": {"AE": 799, "SA": 769},
+      "contract_months": [12, 24]
+    },
+    "sme_bundle": {
+      "category": "business",
+      "name_en": "SME Business Bundle", "name_ar": "باقة الأعمال الصغيرة والمتوسطة",
+      "summary_en": "Business Fiber 500 plus 5 business mobile lines (30 GB each) and a cloud phone number for the shop, on one bill.",
+      "summary_ar": "فايبر الأعمال 500 مع 5 خطوط جوال للأعمال (30 جيجابايت لكل خط) ورقم هاتف سحابي للمنشأة، بفاتورة وحدة.",
+      "best_for_en": "Cafés, salons, clinics and small offices with a small team on the move.",
+      "best_for_ar": "المقاهي والصالونات والعيادات والمكاتب الصغيرة اللي فريقها يتنقل.",
+      "price": {"AE": 1199, "SA": 1149},
+      "contract_months": [24]
+    },
+    "biz_backup_5g": {
+      "category": "business_addon",
+      "name_en": "5G Backup for business", "name_ar": "خط 5G احتياطي للأعمال",
+      "summary_en": "Automatic 5G failover that keeps card machines and the till online if the fiber drops.",
+      "summary_ar": "تحويل تلقائي إلى 5G يخلي أجهزة الدفع والكاشير شغالة إذا انقطع الفايبر.",
+      "best_for_en": "Any business that cannot afford to go offline.",
+      "best_for_ar": "أي نشاط ما يتحمل ينقطع عنه الإنترنت.",
+      "price": {"AE": 99, "SA": 95},
+      "contract_months": [12]
+    },
+    "device_financing": {
+      "category": "device",
+      "name_en": "Phone financing", "name_ar": "تقسيط الجوالات",
+      "summary_en": "Any phone in the store over 12 or 24 months at 0% — for example the Nova X Pro (fictional model) at 3,600 (AED) or 3,480 (SAR) is 150 or 145 a month over 24 months.",
+      "summary_ar": "أي جوال في المتجر بالتقسيط على 12 أو 24 شهر بدون فوائد — مثلاً جوال نوفا إكس برو (طراز وهمي) بسعر 3,600 درهم أو 3,480 ريال يصير 150 درهم أو 145 ريال شهرياً على 24 شهر.",
+      "summary_en_AE": "Any phone in the store over 12 or 24 months at 0% — for example the Nova X Pro (fictional model) at 3,600 dirhams is 150 dirhams a month over 24 months.",
+      "summary_en_SA": "Any phone in the store over 12 or 24 months at 0% — for example the Nova X Pro (fictional model) at 3,480 riyals is 145 riyals a month over 24 months.",
+      "summary_ar_AE": "أي جوال في المتجر بالتقسيط على 12 أو 24 شهر بدون فوائد — مثلاً جوال نوفا إكس برو (طراز وهمي) بسعر 3,600 درهم يصير 150 درهم شهرياً على 24 شهر.",
+      "summary_ar_SA": "أي جوال في المتجر بالتقسيط على 12 أو 24 شهر بدون فوائد — مثلاً جوال نوفا إكس برو (طراز وهمي) بسعر 3,480 ريال يصير 145 ريال شهرياً على 24 شهر.",
+      "best_for_en": "Customers in good standing whose phone is getting old.",
+      "best_for_ar": "العملاء المنتظمين بالسداد اللي جوالهم صار قديم.",
+      "price": {"AE": 150, "SA": 145},
+      "price_unit_en": "per month for the example phone over 24 months", "price_unit_ar": "شهرياً للجوال المثال على 24 شهر",
+      "contract_months": [12, 24]
+    }
+  },
+  "not_offered": [
+    {"en": "TV / IPTV packages", "ar": "باقات التلفزيون والقنوات"},
+    {"en": "Landline-only phone service", "ar": "خدمة الهاتف الأرضي وحدها"},
+    {"en": "Student or senior discounts", "ar": "خصومات الطلاب أو كبار السن"},
+    {"en": "Satellite internet", "ar": "الإنترنت عبر الأقمار الصناعية"}
+  ],
+  "fees": {
+    "installation_no_contract": {"AE": 200, "SA": 200},
+    "technician_visit_customer_side": {"AE": 150, "SA": 150},
+    "late_fee": {"AE": 25, "SA": 25},
+    "reconnection_fee": {"AE": 50, "SA": 50},
+    "pause_fee_per_month": {"AE": 25, "SA": 25},
+    "sim_replacement_after_first": {"AE": 25, "SA": 25},
+    "early_termination_share_of_remaining": 0.5
+  },
+  "policies": {
+    "bill_due_days": 20,
+    "late_fee_after_due_days": 0,
+    "restriction_after_overdue_days": 30,
+    "suspension_after_overdue_days": 60,
+    "promise_to_pay_max_days": 7,
+    "payment_plan_min_balance": {"AE": 300, "SA": 300},
+    "payment_plan_max_instalments": 3,
+    "refund_working_days": "5 to 7",
+    "dispute_window_days": 60,
+    "pause_max_months_per_year": 3,
+    "relocation_free_per_contract_year": 1,
+    "fiber_install_working_days": "2 to 5",
+    "relocation_working_days": "3 to 5",
+    "relocation_notice_working_days": 5,
+    "wireless_delivery": "next working day",
+    "offer_followup_max_days": 14,
+    "equipment_return_days": 14
+  }
+}

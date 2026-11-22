@@ -1,0 +1,1015 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% block title %}Conversations · {{ brand().title }}{% endblock %}
+{% block page_title %}Conversations{% endblock %}
+{% block page_subtitle %}Read what customers and your agents said, and see what went wrong.{% endblock %}
+{% block content %}
+
+<style>
+  /* ---------------- layout: list + conversation (2 panes) ---------------- */
+  .cv-page { display: flex; flex-direction: column; gap: var(--space-sm); min-width: 0; }
+  .cv-filters { gap: var(--space-s) var(--space-sm); }
+  .cv-filters label { min-width: 0; }
+  .cv-filters select, .cv-filters input[type=text] { min-width: 140px; max-width: 220px; }
+  .cv-filters .cv-search input { min-width: 180px; }
+  .cv-filters .cv-spacer { flex: 1 1 auto; }
+  .cv-more { align-self: flex-end; }
+  .cv-more > summary { cursor: pointer; font-size: 12.5px; color: var(--fg-2); padding: var(--space-xxs) 0; }
+  .cv-more[open] { flex-basis: 100%; }
+  .cv-more-body { display: flex; flex-wrap: wrap; gap: var(--space-s) var(--space-ml); align-items: flex-end;
+    padding: var(--space-s) 0 0; }
+  .cv-check { display: inline-flex !important; flex-direction: row !important; align-items: center;
+    gap: var(--space-xs) !important; font-size: 12.5px !important; white-space: nowrap; cursor: pointer; }
+  .cv-check input { margin: 0; }
+
+  .cv-shell {
+    display: grid;
+    grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+    gap: var(--space-m);
+    height: calc(100vh - 56px - 2 * var(--space-ml) - 132px);
+    min-height: 520px;
+  }
+  .cv-pane { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
+    display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+  .cv-list-head { padding: var(--space-s) var(--space-sm); border-bottom: 1px solid var(--border);
+    font-size: 12.5px; color: var(--fg-2); display: flex; justify-content: space-between; gap: var(--space-s); }
+  .cv-list { flex: 1 1 auto; overflow-y: auto; }
+
+  /* ---------------- list rows ---------------- */
+  .cv-row { padding: var(--space-sm); border-bottom: 1px solid var(--border); cursor: pointer;
+    display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .cv-row:hover { background: var(--surface-sunken); }
+  .cv-row.is-selected { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+  .cv-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cv-row-top { display: flex; align-items: baseline; gap: var(--space-xs); min-width: 0; }
+  .cv-agent { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .cv-channel { font-size: 12px; color: var(--fg-2); white-space: nowrap; }
+  .cv-time { margin-left: auto; font-size: 11.5px; color: var(--fg-3); white-space: nowrap; }
+  .cv-business { font-size: 12px; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cv-snippet { font-size: 12.5px; color: var(--fg-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cv-snippet.is-muted { color: var(--fg-3); font-style: italic; }
+  .cv-row-meta { display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap; font-size: 11.5px; color: var(--fg-2); }
+  .cv-row-meta .chip { font-size: 10.5px; padding: 1px 6px; }
+  .cv-row .technical { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------------- conversation pane ---------------- */
+  .cv-view-head { display: flex; align-items: flex-start; gap: var(--space-sm); padding: var(--space-sm) var(--space-m);
+    border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .cv-head-main { flex: 1 1 260px; min-width: 0; }
+  .cv-head-main h2 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+  .cv-head-main .caption { display: block; margin-top: 2px; }
+  .cv-head-actions { display: flex; align-items: center; gap: var(--space-s); flex-wrap: wrap; }
+  .cv-back { display: none; }
+  .cv-tabbar { padding: var(--space-s) var(--space-m) 0; }
+  .cv-body { flex: 1 1 auto; overflow-y: auto; padding: var(--space-m); min-width: 0; }
+
+  /* failure summary + pinned audio */
+  .cv-failcard { border: 1px solid var(--error); background: var(--error-soft); border-radius: var(--radius-card);
+    padding: var(--space-sm) var(--space-m); margin-bottom: var(--space-m); }
+  .cv-failcard h3 { margin: 0 0 var(--space-xxs); font-size: 13.5px; color: var(--error); }
+  .cv-failcard ul { margin: var(--space-xxs) 0 0; padding-left: 18px; }
+  .cv-failcard li + li { margin-top: var(--space-xxs); }
+  .cv-failcard .cv-said { font-size: 12.5px; color: var(--fg-2); margin-top: 2px; }
+  .cv-audio-pin { position: sticky; top: calc(-1 * var(--space-m)); z-index: 3; background: var(--surface);
+    border-bottom: 1px solid var(--border); margin: calc(-1 * var(--space-m)) calc(-1 * var(--space-m)) var(--space-m);
+    padding: var(--space-s) var(--space-m); }
+  .cv-audio-pin audio { width: 100%; display: block; }
+  .cv-audio-pin .caption { display: block; margin-top: 2px; }
+  .cv-note { font-size: 12px; color: var(--fg-2); margin: 0 0 var(--space-m); }
+
+  /* bubbles */
+  .ox-turn { margin-bottom: var(--space-sm); display: flex; flex-direction: column; max-width: 82%; }
+  .ox-turn-role { font-size: 11px; color: var(--fg-3); margin-bottom: 3px; display: flex; gap: 6px; align-items: center; }
+  .ox-bubble { position: relative; padding: 8px 30px 8px 12px; border-radius: 12px; font-size: 13px;
+    word-break: break-word; border: 1px solid var(--border); background: var(--surface); color: var(--fg-1); }
+  .ox-bubble .markdown-body > :first-child { margin-top: 0; }
+  .ox-bubble .markdown-body > :last-child { margin-bottom: 0; }
+  .ox-bubble .markdown-body table { display: block; max-width: 100%; overflow-x: auto; }
+  .ox-bubble-content { white-space: normal; overflow-wrap: anywhere; }
+  .ox-bubble-content.is-plain { white-space: pre-wrap; }
+  .ox-turn.role-user { align-self: flex-end; align-items: flex-end; }
+  .ox-turn.role-user .ox-bubble { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+  .ox-turn.role-assistant { align-self: flex-start; }
+  .ox-turn.role-assistant .ox-bubble { background: var(--surface-raised); }
+  .ox-turn.is-flagged .ox-bubble { box-shadow: 0 0 0 2px var(--error-soft); }
+  .ox-copy { position: absolute; top: 6px; right: 6px; z-index: 2; font-size: 10px; line-height: 1; padding: 3px 7px;
+    cursor: pointer; background: var(--surface); color: var(--fg-2); border: 1px solid var(--border); border-radius: 4px;
+    opacity: 0; transition: opacity 0.12s ease; }
+  .ox-bubble:hover .ox-copy, .ox-jsonblock:hover .ox-copy, .ox-copy:focus { opacity: 1; }
+  .ox-jsonblock { position: relative; }
+  .ox-jsonblock .ox-copy { opacity: .55; }
+
+  /* action chips (collapsed by default) */
+  .cv-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin: 0 0 var(--space-s); max-width: 92%; }
+  .cv-action { border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface); font-size: 12px; }
+  .cv-action > summary { cursor: pointer; list-style: none; padding: 3px 10px; display: inline-flex; gap: 6px; align-items: center; }
+  .cv-action > summary::-webkit-details-marker { display: none; }
+  .cv-action .cv-mark { font-weight: 700; }
+  .cv-action.is-ok .cv-mark { color: var(--success); }
+  .cv-action.is-err { border-color: var(--error); background: var(--error-soft); }
+  .cv-action.is-err .cv-mark { color: var(--error); }
+  .cv-action.is-handoff { border-color: var(--info); background: var(--info-soft); }
+  .cv-action.is-handoff .cv-mark { color: var(--info); }
+  .cv-action[open] { flex-basis: 100%; border-radius: var(--radius-card); }
+  .cv-action-body { padding: var(--space-xs) var(--space-sm) var(--space-sm); font-size: 12.5px; }
+  .cv-action-body details { margin-top: var(--space-xs); }
+  .cv-action-body details > summary { cursor: pointer; color: var(--fg-2); font-size: 12px; }
+  .ox-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-sunken); color: var(--fg-1);
+    padding: var(--space-s); border-radius: 6px; max-height: 360px; overflow: auto; font-size: 11px; margin: 4px 0 0;
+    border: 1px solid var(--border); font-family: var(--font-mono); }
+
+  /* ---------------- technical view ---------------- */
+  .cv-tech-grid { display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); gap: var(--space-m); align-items: start; }
+  .cv-tech-col { min-width: 0; }
+  .ox-kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px 16px; margin: 6px 0 var(--space-m); }
+  .ox-kv-grid > div > .eyebrow { font-size: 10px; }
+  .ox-mini { width: 100%; border-collapse: collapse; margin: 4px 0 var(--space-m); font-size: 12px; }
+  .ox-mini th, .ox-mini td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  .ox-mini td.num { text-align: right; }
+  .ox-errs { margin: 4px 0 var(--space-m); padding-left: 18px; font-size: 12px; color: var(--error); }
+  .ox-span-row { padding: 5px 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; margin-bottom: 2px;
+    display: grid; grid-template-columns: minmax(0, 1fr) 72px; gap: var(--space-xs); align-items: center; }
+  .ox-span-row:hover { background: var(--surface-sunken); }
+  .ox-span-row.is-selected { background: var(--accent-soft); border-color: var(--accent); }
+  .ox-span-row-label { font-size: 12px; font-family: var(--font-mono); color: var(--fg-1); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .ox-span-row-track { position: relative; height: 10px; background: var(--surface-sunken); border-radius: 3px; overflow: hidden; margin-top: 3px; }
+  .ox-span-row-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 2px; background: var(--border-strong); }
+  .ox-span-row-bar.ox-bar-LLM { background: var(--accent); }
+  .ox-span-row-bar.ox-bar-error { background: var(--error); }
+  .ox-span-metrics { text-align: right; font-size: 11px; color: var(--fg-2); font-family: var(--font-mono); white-space: nowrap; }
+  .ox-span-tokens { font-size: 10px; color: var(--fg-3); }
+  .ox-detail-section { margin-top: var(--space-m); }
+  .ox-detail-section h4 { margin: 0 0 var(--space-xs); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-2); }
+  .ox-attrs-table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+  .ox-attrs-table td { padding: 4px 6px; vertical-align: top; border-bottom: 1px solid var(--border); word-break: break-all; }
+  .ox-attrs-table td:first-child { width: 38%; color: var(--fg-2); }
+  .ox-attr-toggle { margin-left: 6px; font-size: 10px; background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; text-decoration: underline; }
+  .ox-raw-turn { border-top: 1px solid var(--border); padding: var(--space-s) 0; }
+  .ox-audio-rec { border: 1px solid var(--border); border-radius: var(--radius-card); margin: 0 0 var(--space-s);
+    padding: var(--space-s) var(--space-sm); }
+  .ox-audio-rec-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+  .ox-audio-rec audio { width: 100%; display: block; }
+
+  .ox-skel { background: linear-gradient(90deg, var(--surface-sunken) 0%, var(--border) 50%, var(--surface-sunken) 100%);
+    background-size: 200% 100%; animation: ox-shimmer 1.2s linear infinite; border-radius: 4px; height: 12px; margin: 8px 0; }
+  @keyframes ox-shimmer { 0% { background-position: 0% 0%; } 100% { background-position: -200% 0%; } }
+
+  /* ---------------- below 1280px: list ⇄ conversation ---------------- */
+  @media (max-width: 1279px) {
+    .cv-shell { grid-template-columns: minmax(0, 1fr); }
+    .cv-shell.has-selection .cv-list-pane { display: none; }
+    .cv-shell:not(.has-selection) .cv-view-pane { display: none; }
+    .cv-back { display: inline-flex; }
+    .cv-tech-grid { grid-template-columns: minmax(0, 1fr); }
+    .ox-turn { max-width: 92%; }
+  }
+</style>
+
+<div class="cv-page">
+  <form class="filter-bar cv-filters" method="get" action="/admin/observability" id="cv-filters">
+    <label>Period
+      <select name="hours" onchange="this.form.submit()">
+        {% for h, label in hours_options %}
+        <option value="{{ h }}" {% if past_hours == h %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+        {% if past_hours not in hours_options|map('first')|list %}<option value="{{ past_hours }}" selected>Last {{ past_hours }} hours</option>{% endif %}
+      </select>
+    </label>
+    <label>Agent
+      <select name="agent_kind" onchange="this.form.submit()">
+        <option value="">All agents</option>
+        {% for o in agent_options %}
+        <option value="{{ o.kind }}" {% if agent_kind == o.kind %}selected{% endif %}>{{ o.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Channel
+      <select name="channel_slug" onchange="this.form.submit()">
+        <option value="">All channels</option>
+        {% for c in channels %}
+        <option value="{{ c.slug }}" {% if channel_slug == c.slug %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Outcome
+      <select name="outcome" onchange="this.form.submit()">
+        {% for v, label in outcome_options %}
+        <option value="{{ v }}" {% if outcome == v %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="cv-search">Search
+      <input type="text" name="search" value="{{ search }}" placeholder="Words, name or reference">
+    </label>
+    <button type="submit">Search</button>
+    <span class="cv-spacer"></span>
+    <button type="button" class="ghost" onclick="OX.exportCsv()">Export CSV</button>
+    <details class="cv-more" {% if more_filters_active %}open{% endif %}>
+      <summary>More filters</summary>
+      <div class="cv-more-body">
+        <label>Action used
+          <select name="tool" onchange="this.form.submit()">
+            <option value="">Any action</option>
+            {% for t in tool_names %}
+            <option value="{{ t }}" {% if tool == t %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Technical status
+          <select name="status" onchange="this.form.submit()">
+            <option value="">Any</option>
+            <option value="success" {% if status == 'success' %}selected{% endif %}>No errors recorded</option>
+            <option value="error" {% if status == 'error' %}selected{% endif %}>Errors recorded</option>
+          </select>
+        </label>
+        <input type="hidden" name="group" value="{{ 'session' if group_by_session else 'none' }}">
+        <label class="cv-check">
+          <input type="checkbox" {% if not group_by_session %}checked{% endif %}
+                 onchange="this.form.elements.group.value = this.checked ? 'none' : 'session'; this.form.submit()">
+          One row per agent reply
+        </label>
+        <input type="hidden" name="background" value="{{ '1' if show_background else '0' }}">
+        <label class="cv-check" title="Background work such as product recommendations is hidden so conversations stand out.">
+          <input type="checkbox" {% if show_background %}checked{% endif %}
+                 onchange="this.form.elements.background.value = this.checked ? '1' : '0'; this.form.submit()">
+          Include background activity
+        </label>
+      </div>
+    </details>
+  </form>
+
+  {% if list_unavailable %}
+  <div class="status-strip status-down" role="status">
+    <span class="status-dot" aria-hidden="true"></span>
+    <span class="status-text">Conversations are temporarily unavailable — they are still being recorded. Try again in a few minutes.</span>
+    {% if list_detail and not portal_nav().partner %}
+    <details class="status-detail"><summary>Details</summary>
+      <div class="status-detail-body"><p class="technical">{{ list_detail }}</p>
+        <a href="/admin/lmnr/diagnose">Open the telemetry check &rarr;</a></div>
+    </details>
+    {% endif %}
+  </div>
+  {% elif tool_filter_failed %}
+  <div class="status-strip status-partial" role="status">
+    <span class="status-dot" aria-hidden="true"></span>
+    <span class="status-text">The "Action used" filter could not be applied, so this list is not narrowed by it.</span>
+    {% if tool_filter_notice and not portal_nav().partner %}
+    <details class="status-detail"><summary>Details</summary>
+      <div class="status-detail-body"><p class="technical">{{ tool_filter_notice }}</p></div></details>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="cv-shell" id="cv-shell">
+    <aside class="cv-pane cv-list-pane" aria-label="Conversation list">
+      <div class="cv-list-head">
+        <span>{{ total }} conversation{{ 's' if total != 1 }}</span>
+        <span>{% for h, label in hours_options %}{% if h == past_hours %}{{ label }}{% endif %}{% endfor %}</span>
+      </div>
+      <div class="cv-list" id="ox-trace-list">
+        {% for g in groups %}
+        {% set conv = {
+          'agent': g.agent_name, 'channel': ('Voice call' if g.is_voice else g.channel_name),
+          'business': g.business_name, 'title': g.title, 'started': g.started.short if g.started else '',
+          'when': g.when.short, 'duration': g.duration, 'messages': g.message_count,
+          'outcome': g.outcome, 'outcome_label': g.outcome_label, 'outcome_variant': g.outcome_variant,
+          'first_message': g.first_message, 'failed_actions': g.failed_actions, 'actions': g.actions,
+          'simulated': g.simulated, 'session_id': g.session_id, 'trace_id': g.newest_trace_id } %}
+        <div class="cv-row" tabindex="0" role="button"
+             data-trace-id="{{ g.newest_trace_id }}"
+             data-trace-ids="{{ g.traces|map(attribute='id')|join(' ') }}"
+             data-conv="{{ conv|tojson|forceescape }}"
+             onclick="OX.selectTrace('{{ g.newest_trace_id }}')"
+             onkeydown="if(event.key==='Enter'){OX.selectTrace('{{ g.newest_trace_id }}')}">
+          <div class="cv-row-top">
+            <span class="cv-agent">{{ g.agent_name }}</span>
+            {% if g.is_voice %}<span class="cv-channel">· Voice call</span>{% elif g.channel_name %}<span class="cv-channel">· {{ g.channel_name }}</span>{% endif %}
+            <span class="cv-time" title="{{ g.when.iso }}">{{ g.when.short }}</span>
+          </div>
+          {% if g.business_name %}<div class="cv-business">{{ g.business_name }}</div>{% endif %}
+          {% if g.first_message %}
+          <div class="cv-snippet" dir="auto">“{{ g.first_message }}”</div>
+          {% elif g.title %}
+          <div class="cv-snippet" dir="auto">{{ g.title }}</div>
+          {% else %}
+          <div class="cv-snippet is-muted">No customer message recorded</div>
+          {% endif %}
+          <div class="cv-row-meta">
+            {% if g.message_count %}<span>{{ g.message_count }} message{{ 's' if g.message_count != 1 }}</span>{% else %}<span>{{ g.turns }} repl{{ 'ies' if g.turns != 1 else 'y' }}</span>{% endif %}
+            {% if g.failed_actions %}<span>· {{ g.failed_actions }} failed action{{ 's' if g.failed_actions != 1 }}</span>{% endif %}
+            {{ chip(g.outcome_label, variant=g.outcome_variant) }}
+            {% if g.is_voice and g.duration %}{{ chip('Voice ' ~ g.duration, variant='neutral') }}{% endif %}
+            {% if g.simulated %}{{ chip('Test call', variant='warn') }}{% endif %}
+          </div>
+          {% if not group_by_session %}<div class="technical">{{ (g.traces[0].topSpanName or '') }}</div>{% endif %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+          {% if list_unavailable %}
+          <p>The list is unavailable right now.</p>
+          {% else %}
+          <p>No conversations match these filters.</p>
+          {% if search or agent_kind or channel_slug or outcome or tool or status %}<a href="/admin/observability?hours={{ past_hours }}">Clear filters</a>{% endif %}
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </aside>
+
+    <section class="cv-pane cv-view-pane" id="cv-view" aria-label="Conversation">
+      <header class="cv-view-head">
+        <button type="button" class="ghost small cv-back" onclick="OX.back()">&larr; All conversations</button>
+        <div class="cv-head-main">
+          <h2 id="cv-title">Pick a conversation</h2>
+          <span class="caption" id="cv-subtitle">Choose one on the left to read it.</span>
+        </div>
+        <div class="cv-head-actions">
+          <span id="cv-outcome"></span>
+          <button type="button" class="ghost small" id="cv-copy-link" onclick="OX.copyLink(this)" hidden>Copy link</button>
+        </div>
+      </header>
+      <div class="cv-tabbar" id="cv-tabbar">
+        <div class="segmented" role="tablist" aria-label="Conversation views">
+          <button type="button" role="tab" id="ox-view-transcript" aria-selected="true" onclick="OX.setView('transcript')">Conversation</button>
+          <button type="button" role="tab" id="ox-view-audio" aria-selected="false" onclick="OX.setView('audio')">Call audio</button>
+          <button type="button" role="tab" id="ox-view-technical" aria-selected="false" onclick="OX.setView('technical')">Technical</button>
+        </div>
+      </div>
+      <div class="cv-body" id="ox-transcript">
+        <div class="empty-state"><p>Pick a conversation to read it.</p></div>
+      </div>
+      <div class="cv-body" id="ox-audio" hidden>
+        <div class="empty-state"><p>Pick a conversation to listen to its calls.</p></div>
+      </div>
+      <div class="cv-body" id="ox-technical" hidden>
+        <div id="ox-details"><div class="empty-state"><p>Pick a conversation to see its technical record.</p></div></div>
+        <div class="cv-tech-grid">
+          <div class="cv-tech-col">
+            <h4 class="advanced-h">Steps <span class="technical" id="ox-mid-trace-id"></span></h4>
+            <div id="ox-span-tree"></div>
+          </div>
+          <div class="cv-tech-col">
+            <h4 class="advanced-h">Step detail <span class="technical" id="ox-right-span-id"></span></h4>
+            <div id="ox-span-detail"><p class="caption">Pick a step to inspect it.</p></div>
+          </div>
+        </div>
+        <div id="ox-raw" class="mt-l"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  function makeLRU(limit) {
+    const map = new Map();
+    return {
+      get(k) { if (!map.has(k)) return null; const v = map.get(k); map.delete(k); map.set(k, v); return v; },
+      set(k, v) { if (map.has(k)) map.delete(k); map.set(k, v); if (map.size > limit) map.delete(map.keys().next().value); },
+    };
+  }
+  const traceCache = makeLRU(10), spanCache = makeLRU(10), transcriptCache = makeLRU(10),
+        overviewCache = makeLRU(10), audioCache = makeLRU(10);
+
+  // "transcript" (Conversation) | "audio" (Call audio) | "technical".
+  let currentView = "transcript";
+  let currentTrace = null, currentSpan = null;
+
+  // ---------------- hash routing: #trace=<id>&span=<id> ----------------
+  function readHash() {
+    const out = { trace: null, span: null, view: null };
+    (window.location.hash || "").replace(/^#/, "").split("&").forEach((pair) => {
+      const [k, v] = pair.split("=");
+      if (k && v) out[k] = decodeURIComponent(v);
+    });
+    return out;
+  }
+  function writeHash(trace, span) {
+    const parts = [];
+    if (trace) parts.push("trace=" + encodeURIComponent(trace));
+    if (span) parts.push("span=" + encodeURIComponent(span));
+    const next = parts.length ? "#" + parts.join("&") : "";
+    if (next !== window.location.hash) {
+      history.replaceState(null, "", window.location.pathname + window.location.search + next);
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function renderMd(raw) {
+    if (typeof marked === "undefined" || typeof DOMPurify === "undefined") return null;
+    try { return DOMPurify.sanitize(marked.parse(String(raw == null ? "" : raw), { breaks: true, gfm: true })); }
+    catch (e) { return null; }
+  }
+  function fmtCompactNum(n) {
+    n = Number(n || 0);
+    if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
+    return String(n);
+  }
+  function fmtSec(ms) {
+    if (ms == null) return "—";
+    ms = Number(ms);
+    if (ms < 1000) return ms + " ms";
+    return (ms / 1000).toFixed(ms >= 10000 ? 0 : 1) + " s";
+  }
+  // "2026-10-11T09:14:02.123Z" → "09:14" (UTC), with the date when not today.
+  function fmtClockTime(iso) {
+    if (!iso) return "";
+    const d = new Date(String(iso).replace(" ", "T").replace(/(\.\d{3})\d+/, "$1").replace(/\+00:00Z$/, "Z"));
+    if (isNaN(d)) return String(iso).slice(11, 16);
+    const hm = d.toISOString().slice(11, 16);
+    const today = new Date().toISOString().slice(0, 10);
+    const day = d.toISOString().slice(0, 10);
+    return day === today ? hm : (d.getUTCDate() + " " + d.toLocaleString("en", { month: "short", timeZone: "UTC" }) + " " + hm);
+  }
+  function skeleton(rows) {
+    let html = "";
+    for (let i = 0; i < rows; i++) html += '<div class="ox-skel" style="width:' + (55 + (i * 37) % 40) + '%;"></div>';
+    return html;
+  }
+  function emptyState(msg, extra) {
+    return '<div class="empty-state"><p>' + escapeHtml(msg) + '</p>' + (extra || "") + '</div>';
+  }
+  function looseUnescape(s) {
+    if (s.indexOf("\\") === -1) return s;
+    return s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n")
+      .replace(/\\t/g, "  ").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  }
+  function prettyJson(v) {
+    if (v == null) return "";
+    let candidate = String(v).trim();
+    if (!candidate) return "";
+    for (let i = 0; i < 4; i++) {
+      const c0 = candidate[0];
+      if (c0 !== "{" && c0 !== "[" && c0 !== '"') break;
+      try {
+        const parsed = JSON.parse(candidate);
+        if (typeof parsed === "string") { candidate = parsed.trim(); if (!candidate) return ""; continue; }
+        return JSON.stringify(parsed, null, 2);
+      } catch (_) {
+        const un = looseUnescape(candidate);
+        if (un !== candidate) { try { return JSON.stringify(JSON.parse(un), null, 2); } catch (__) {} return un; }
+        return candidate;
+      }
+    }
+    return looseUnescape(candidate);
+  }
+  function jsonBlock(raw) {
+    return '<div class="ox-jsonblock"><button type="button" class="ox-copy" data-label="Copy" ' +
+      'onclick="OX.copyBlock(this)">Copy</button><pre class="ox-pre">' + escapeHtml(prettyJson(raw)) + '</pre></div>';
+  }
+  function fallbackCopy(text) {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
+    } catch (_) {}
+  }
+  function copyText(text, btn, label) {
+    const done = function () { if (!btn) return; btn.textContent = "Copied"; setTimeout(function () { btn.textContent = label; }, 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () { fallbackCopy(text); done(); });
+    } else { fallbackCopy(text); done(); }
+  }
+
+  // ---------------- list selection + header ----------------
+  function rowFor(traceId) {
+    const rows = document.querySelectorAll("#ox-trace-list .cv-row");
+    for (const r of rows) {
+      const ids = (r.getAttribute("data-trace-ids") || "").split(" ");
+      if (r.getAttribute("data-trace-id") === traceId || ids.indexOf(traceId) !== -1) return r;
+    }
+    return null;
+  }
+  function markSelectedRow(traceId) {
+    document.querySelectorAll("#ox-trace-list .cv-row").forEach((r) => r.classList.remove("is-selected"));
+    const row = rowFor(traceId);
+    if (row) row.classList.add("is-selected");
+    return row;
+  }
+  function convFromRow(row) {
+    if (!row) return null;
+    try { return JSON.parse(row.getAttribute("data-conv") || "{}"); } catch (e) { return null; }
+  }
+  const OUTCOME_VARIANT = { attention: "err", handoff: "info", ok: "ok" };
+  function setHeader(conv) {
+    const title = document.getElementById("cv-title");
+    const sub = document.getElementById("cv-subtitle");
+    const out = document.getElementById("cv-outcome");
+    const copy = document.getElementById("cv-copy-link");
+    if (!conv) { return; }
+    if (conv.notFound) {
+      title.textContent = conv.notFound;
+      sub.textContent = "";
+      out.innerHTML = "";
+      copy.hidden = true;
+      return;
+    }
+    const fm = conv.first_message ? String(conv.first_message) : "";
+    title.textContent = conv.business || conv.title ||
+      (fm ? "“" + (fm.length > 70 ? fm.slice(0, 70) + "…" : fm) + "”" : "Conversation");
+    title.setAttribute("dir", "auto");
+    const bits = [];
+    if (conv.agent) bits.push(conv.agent);
+    if (conv.channel) bits.push(conv.channel);
+    if (conv.started) bits.push("Started " + conv.started);
+    if (conv.duration) bits.push(conv.duration);
+    if (conv.messages) bits.push(conv.messages + " messages");
+    sub.textContent = bits.join(" · ");
+    out.innerHTML = conv.outcome_label
+      ? '<span class="chip chip-' + escapeHtml(conv.outcome_variant || OUTCOME_VARIANT[conv.outcome] || "neutral") + '">' +
+        escapeHtml(conv.outcome_label) + '</span>' + (conv.simulated ? ' <span class="chip chip-warn">Test call</span>' : '')
+      : "";
+    copy.hidden = false;
+  }
+  function mergeSummary(conv, s) {
+    conv = Object.assign({}, conv || {});
+    if (!s) return conv;
+    conv.agent = conv.agent || s.agent_name;
+    conv.business = conv.business || s.business_name;
+    conv.title = conv.title || s.title;
+    conv.started = conv.started || fmtClockTime(s.started);
+    conv.messages = conv.messages || s.messages;
+    // The transcript knows the whole conversation's actions; it wins.
+    if (s.outcome_label) {
+      conv.outcome = s.outcome; conv.outcome_label = s.outcome_label; conv.outcome_variant = s.outcome_variant;
+    }
+    conv.simulated = conv.simulated || s.simulated;
+    return conv;
+  }
+
+  // ---------------- Conversation view ----------------
+  function actionChip(t) {
+    const kind = t.is_error ? "is-err" : (t.is_handoff ? "is-handoff" : "is-ok");
+    const mark = t.is_error ? "✕" : (t.is_handoff ? "→" : "✓");
+    const label = escapeHtml(t.label || t.name || "Action");
+    const plain = t.is_error
+      ? "This action failed — " + escapeHtml(t.reason || "something unexpected went wrong") + "."
+      : (t.is_handoff ? "The agent handed the conversation to a person." : "Completed.");
+    return '<details class="cv-action ' + kind + '">' +
+      '<summary><span class="cv-mark" aria-hidden="true">' + mark + '</span>' + label +
+        (t.is_error ? ' failed' : '') + '</summary>' +
+      '<div class="cv-action-body">' + plain +
+        '<details><summary>Show technical details</summary>' +
+          '<div class="technical">' + escapeHtml(t.name || "") + '</div>' +
+          (t.error ? '<div class="eyebrow mt-s">Error</div><pre class="ox-pre">' + escapeHtml(t.error) + '</pre>' : '') +
+          '<div class="eyebrow mt-s">Sent</div>' + jsonBlock(t.input || "—") +
+          '<div class="eyebrow mt-s">Received</div>' + jsonBlock(t.output || "—") +
+        '</details>' +
+      '</div></details>';
+  }
+
+  function failureCard(s) {
+    if (!s) return "";
+    const items = [];
+    (s.failures || []).forEach(function (f) {
+      items.push('<li>' + escapeHtml(f.sentence) + '.' +
+        (f.agent_reply ? '<div class="cv-said">What the agent said next: <bdi dir="auto">“' + escapeHtml(f.agent_reply) + '”</bdi></div>' : '') +
+        (f.turn_index === null || f.turn_index === undefined ? '' :
+          ' <a href="#" onclick="event.preventDefault();OX.jumpTo(' + Number(f.turn_index) + ')">Jump to message</a>') + '</li>');
+    });
+    if (!items.length && s.error_without_action) {
+      items.push('<li>The agent ran into a problem while answering. The Technical view has the details.</li>');
+    }
+    if (!items.length) return "";
+    return '<div class="cv-failcard" role="note"><h3>Something went wrong in this conversation</h3><ul>' +
+      items.join("") + '</ul></div>';
+  }
+
+  function audioPin(traceId) {
+    const a = audioCache.get(traceId);
+    const recs = (a && a.recordings) || [];
+    const rec = recs.find(function (r) { return r.status === "complete" && r.url; });
+    if (!rec) return "";
+    return '<div class="cv-audio-pin"><audio controls preload="none" src="' + escapeHtml(rec.url) + '"></audio>' +
+      '<span class="caption">Call recording' + (rec.duration_ms ? ' · ' + fmtSec(rec.duration_ms) : '') +
+      ' · left = caller, right = agent' + (recs.length > 1 ? ' · ' + recs.length + ' calls in Call audio' : '') + '</span></div>';
+  }
+
+  function renderTranscript(data) {
+    const root = document.getElementById("ox-transcript");
+    if (!data) { root.innerHTML = emptyState("Nothing to show."); return; }
+    if (data.found === false) {
+      root.innerHTML = emptyState(data.notice || "We couldn't find this conversation.",
+        '<a class="btn" href="' + escapeHtml(window.location.pathname + window.location.search) + '" onclick="OX.back()">Back to all conversations</a>');
+      return;
+    }
+    if (!data.turns || !data.turns.length) {
+      root.innerHTML = audioPin(currentTrace) + emptyState(data.notice || "No messages were captured for this conversation.");
+      return;
+    }
+    const s = data.summary || {};
+    let html = audioPin(currentTrace) + failureCard(s);
+    if (data.notice) html += '<p class="cv-note">' + escapeHtml(data.notice) + '</p>';
+    html += data.turns.map(function (turn, i) {
+      const role = (turn.role === "user") ? "user" : "assistant";
+      const who = role === "user" ? "Customer" : (s.agent_name || "Agent");
+      const flagged = role === "assistant" && (turn.tools || []).some(function (t) { return t.is_error; });
+      let content;
+      if (turn.content == null || turn.content === "") {
+        content = (role === "assistant" && turn.tools) ? '<span class="caption">(no message — actions only)</span>' : "—";
+      } else {
+        const md = renderMd(turn.content);
+        content = (md != null) ? '<div class="markdown-body" dir="auto">' + md + '</div>'
+                               : '<span class="is-plain" dir="auto">' + escapeHtml(turn.content) + '</span>';
+      }
+      const actions = (role === "assistant" && turn.tools && turn.tools.length)
+        ? '<div class="cv-actions">' + turn.tools.map(actionChip).join("") + '</div>' : "";
+      return actions +
+        '<div class="ox-turn role-' + role + (flagged ? ' is-flagged' : '') + '" data-turn="' + i + '">' +
+          '<div class="ox-turn-role">' + escapeHtml(who) +
+            (turn.ts ? ' <span class="num">' + escapeHtml(fmtClockTime(turn.ts)) + '</span>' : '') + '</div>' +
+          '<div class="ox-bubble"><button type="button" class="ox-copy" data-label="Copy" onclick="OX.copyBlock(this)">Copy</button>' +
+            '<div class="ox-bubble-content">' + content + '</div></div>' +
+        '</div>';
+    }).join("");
+    root.innerHTML = html;
+  }
+
+  // ---------------- Technical view ----------------
+  function _kv(k, v) {
+    return '<div><div class="eyebrow">' + escapeHtml(k) + '</div><div>' +
+      escapeHtml(v == null || v === "" ? "—" : String(v)) + '</div></div>';
+  }
+  function _fmtInt(n) { return (n == null) ? "—" : Number(n).toLocaleString(); }
+  function renderDetails(data) {
+    const root = document.getElementById("ox-details");
+    if (!data) { root.innerHTML = emptyState("No details."); return; }
+    if (data.found === false || !data.trace) {
+      root.innerHTML = emptyState(data.notice || "We couldn't find this conversation.");
+      return;
+    }
+    const t = data.trace, sess = data.session;
+    let h = '<h4 class="advanced-h">This reply (trace)</h4><div class="ox-kv-grid">' +
+      _kv("Errors recorded", t.status === "error" ? "Yes" : "No") +
+      _kv("Duration", fmtSec(t.duration_ms)) +
+      _kv("Tokens in", _fmtInt(t.input_tokens)) +
+      _kv("Tokens out", _fmtInt(t.output_tokens)) +
+      _kv("Cost", t.total_cost == null ? "—" : "$" + Number(t.total_cost).toFixed(4)) +
+      _kv("Cache read", _fmtInt(t.cache_read_tokens)) +
+      _kv("Cache write", _fmtInt(t.cache_creation_tokens)) +
+      _kv("Cache hit", (t.input_tokens ? Math.round(100 * (t.cache_read_tokens || 0) / t.input_tokens) + "%" : "—")) +
+      _kv("Actions", _fmtInt(data.tool_calls)) +
+      _kv("Trace id", t.id) +
+      '</div>';
+    if (sess) {
+      h += '<h4 class="advanced-h">Chat session</h4><div class="ox-kv-grid">' +
+        _kv("Agent kind", sess.agent_kind) + _kv("Business id", sess.business_id) +
+        _kv("Branch id", sess.branch_id) + _kv("Locale", sess.locale) +
+        _kv("Messages", _fmtInt(sess.message_count)) + _kv("Title", sess.title) +
+        _kv("Session id", sess.id) + '</div>';
+    } else {
+      h += '<p class="caption">No saved chat session is linked to this reply.</p>';
+    }
+    if (data.tools && data.tools.length) {
+      h += '<h4 class="advanced-h">Tools used in this reply</h4><table class="ox-mini"><tr><th>Tool</th><th>Calls</th><th>Errors</th></tr>' +
+        data.tools.map(function (x) {
+          return '<tr><td><code>' + escapeHtml(x.name) + '</code></td><td class="num">' + x.calls +
+            '</td><td class="num">' + x.errors + '</td></tr>';
+        }).join("") + '</table>';
+    }
+    if (data.errors && data.errors.length) {
+      h += '<h4 class="advanced-h">Steps with errors</h4><ul class="ox-errs">' +
+        data.errors.map(function (e) { return '<li><code>' + escapeHtml(e) + '</code></li>'; }).join("") + '</ul>';
+    }
+    root.innerHTML = h;
+  }
+
+  function flattenTree(nodes, depth, out) {
+    nodes.forEach((n) => { n.depth = depth; out.push(n); if (n.children && n.children.length) flattenTree(n.children, depth + 1, out); });
+    return out;
+  }
+  function renderSpanTree(data) {
+    const root = document.getElementById("ox-span-tree");
+    document.getElementById("ox-mid-trace-id").textContent = data.trace ? (data.trace.id || "").slice(0, 8) : "";
+    if (!data.trace || !data.tree || !data.tree.length) {
+      root.innerHTML = '<p class="caption">' + escapeHtml(data.notice || "No steps recorded.") + '</p>';
+      return;
+    }
+    const totalMs = Math.max(1, data.trace.duration_ms || 1);
+    root.innerHTML = flattenTree(data.tree, 0, []).map((s) => {
+      const offsetPct = Math.max(0, Math.min(100, ((s.start_offset_ms || 0) / totalMs) * 100));
+      const widthPct = Math.max(0.4, Math.min(100 - offsetPct, ((s.duration_ms || 0) / totalMs) * 100));
+      const barClass = s.status === "error" ? "ox-span-row-bar ox-bar-error" : "ox-span-row-bar ox-bar-" + (s.type || "DEFAULT");
+      const indent = "&nbsp;".repeat(Math.max(0, s.depth) * 2) + (s.depth > 0 ? "└ " : "");
+      const tin = Number(s.in_tokens || 0), tout = Number(s.out_tokens || 0);
+      return '<div class="ox-span-row" data-span-id="' + escapeHtml(s.span_id) + '" onclick="OX.selectSpan(\'' + escapeHtml(s.span_id) + '\')">' +
+        '<div><div class="ox-span-row-label"><span style="color:var(--fg-3);">' + indent + '</span>' + escapeHtml(s.name || "?") + '</div>' +
+        '<div class="ox-span-row-track"><div class="' + barClass + '" style="left:' + offsetPct + '%;width:' + widthPct + '%;"></div></div></div>' +
+        '<div class="ox-span-metrics">' + (s.duration_ms == null ? "—" : fmtSec(s.duration_ms)) +
+          ((tin || tout) ? '<div class="ox-span-tokens">↑' + fmtCompactNum(tin) + ' ↓' + fmtCompactNum(tout) + '</div>' : '') +
+        '</div></div>';
+    }).join("");
+    if (currentSpan) markSpan(currentSpan);
+  }
+  function markSpan(spanId) {
+    document.querySelectorAll("#ox-span-tree .ox-span-row").forEach((el) =>
+      el.classList.toggle("is-selected", el.getAttribute("data-span-id") === spanId));
+  }
+  function renderSpanDetail(data) {
+    const root = document.getElementById("ox-span-detail");
+    document.getElementById("ox-right-span-id").textContent = data.span ? (data.span.span_id || "").slice(-8) : "";
+    if (!data.span) { root.innerHTML = '<p class="caption">' + escapeHtml(data.notice || "Step not found.") + '</p>'; return; }
+    const s = data.span;
+    let html = '<h3 style="margin:0 0 4px;font-size:13px;"><code>' + escapeHtml(s.name) + '</code></h3>' +
+      '<div class="caption num">' + escapeHtml((s.start_time || "").slice(0, 19).replace("T", " ")) + ' · ' +
+      (s.duration_ms == null ? '—' : fmtSec(s.duration_ms)) +
+      (s.model ? ' · model <code>' + escapeHtml(s.model) + '</code>' : '') + '</div>';
+    const isTool = !!(s.tool_io && s.tool_io.name);
+    html += '<div class="ox-kv-grid">' + _kv("Type", s.type) + _kv("Errors", s.status === "error" ? "Yes" : "No");
+    if (!isTool) html += _kv("In tok", s.in_tokens || 0) + _kv("Out tok", s.out_tokens || 0) + _kv("Cache read", s.cache_read || 0);
+    html += '</div>';
+    if (isTool) {
+      html += '<div class="ox-detail-section"><h4>Tool · <code>' + escapeHtml(s.tool_io.name) + '</code></h4>';
+      if (s.tool_io.input != null) html += '<div class="eyebrow">Input</div>' + jsonBlock(s.tool_io.input);
+      if (s.tool_io.output != null) html += '<div class="eyebrow mt-s">Output</div>' + jsonBlock(s.tool_io.output);
+      if (s.tool_io.error) html += '<div class="eyebrow mt-s" style="color:var(--error);">Error</div>' + jsonBlock(s.tool_io.error);
+      html += '</div>';
+    }
+    if (s.llm_io && (s.llm_io.input || s.llm_io.output)) {
+      html += '<div class="ox-detail-section"><h4>Model input / output</h4>';
+      if (s.llm_io.input) html += '<details><summary class="eyebrow">Input</summary>' + jsonBlock(s.llm_io.input) + '</details>';
+      if (s.llm_io.output) html += '<details open><summary class="eyebrow">Output</summary>' + jsonBlock(s.llm_io.output) + '</details>';
+      html += '</div>';
+    }
+    if (s.events && s.events.length) {
+      html += '<div class="ox-detail-section"><h4>Events (' + s.events.length + ')</h4><ul style="margin:0;padding-left:18px;font-size:11px;">';
+      s.events.forEach(function (ev) {
+        const a = ev.attributes || {};
+        const msg = a["exception.message"] || a["exception.type"] || "";
+        html += '<li><code>' + escapeHtml(ev.name) + '</code> <span class="caption num">' +
+          escapeHtml((ev.timestamp || "").slice(0, 19)) + '</span>' + (msg ? '<div class="technical">' + escapeHtml(msg) + '</div>' : '') + '</li>';
+      });
+      html += '</ul></div>';
+    }
+    if (s.attributes && Object.keys(s.attributes).length) {
+      const groups = { tool: [], llm: [], lmnr: [], other: [] };
+      Object.keys(s.attributes).forEach(function (k) {
+        if (k.indexOf("gen_ai.tool") === 0) groups.tool.push(k);
+        else if (k.indexOf("gen_ai.") === 0) groups.llm.push(k);
+        else if (k.indexOf("lmnr.") === 0) groups.lmnr.push(k);
+        else groups.other.push(k);
+      });
+      html += '<div class="ox-detail-section"><h4>Attributes (' + Object.keys(s.attributes).length + ')</h4>';
+      [["tool", "Tool (gen_ai.tool.*)"], ["llm", "Model (gen_ai.*)"], ["lmnr", "Laminar (lmnr.*)"], ["other", "Other"]].forEach(function (entry) {
+        const g = entry[0];
+        if (!groups[g].length) return;
+        html += '<details ' + (g === "tool" ? "open" : "") + '><summary class="eyebrow">' + entry[1] + ' (' + groups[g].length + ')</summary>' +
+          '<table class="ox-attrs-table"><tbody>';
+        groups[g].sort().forEach(function (k) {
+          const raw = s.attributes[k] == null ? "" : String(s.attributes[k]);
+          const long = raw.length > 300;
+          html += '<tr><td><code>' + escapeHtml(k) + '</code></td><td><code>' + escapeHtml(long ? raw.slice(0, 300) + "…" : raw) + '</code>' +
+            (long ? '<button type="button" class="ox-attr-toggle" onclick="OX.toggleAttr(this, ' + JSON.stringify(raw).replace(/"/g, "&quot;") + ')">show full</button>' : '') +
+            '</td></tr>';
+        });
+        html += '</tbody></table></details>';
+      });
+      html += '</div>';
+    }
+    root.innerHTML = html;
+  }
+  // Token counts + raw model output per reply — engineering detail that used
+  // to sit in the reading flow (heat-coloured "6208 TOK", "Model output (raw)").
+  function renderRaw(data) {
+    const root = document.getElementById("ox-raw");
+    const turns = (data && data.turns) || [];
+    const rows = turns.filter(function (t) { return t.role === "assistant" && (t.tokens != null || t.reasoning || t.cache_read); });
+    if (!rows.length) { root.innerHTML = ""; return; }
+    root.innerHTML = '<h4 class="advanced-h">Per reply</h4>' + rows.map(function (t) {
+      return '<div class="ox-raw-turn"><div class="caption num">' + escapeHtml(fmtClockTime(t.ts)) +
+        (t.tokens != null ? ' · ' + Number(t.tokens).toLocaleString() + ' tokens' : '') +
+        (t.cache_read ? ' · ' + Number(t.cache_read).toLocaleString() + ' cached' : '') + '</div>' +
+        (t.reasoning ? '<details><summary class="caption">Model output (raw)</summary><pre class="ox-pre">' + escapeHtml(t.reasoning) + '</pre></details>' : '') +
+        '</div>';
+    }).join("");
+  }
+
+  // ---------------- Call audio ----------------
+  function renderAudio(data) {
+    const root = document.getElementById("ox-audio");
+    if (data && data.found === false) { root.innerHTML = emptyState(data.notice || "We couldn't find this conversation."); return; }
+    const recs = (data && data.recordings) || [];
+    if (!recs.length) { root.innerHTML = emptyState("No call recordings for this conversation."); return; }
+    root.innerHTML = recs.map(function (r) {
+      const badges = [];
+      if (r.is_current_trace) badges.push('<span class="chip chip-brand">This call</span>');
+      if (r.simulated) badges.push('<span class="chip chip-warn">Test call</span>');
+      const meta = [(r.started_at || "").replace("T", " ").slice(0, 16), r.duration_ms ? fmtSec(r.duration_ms) : ""].filter(Boolean).join(" · ");
+      let body;
+      if (r.status === "complete" && r.url) {
+        body = '<audio controls preload="none" src="' + escapeHtml(r.url) + '"></audio>' +
+          '<div class="caption">Left = caller · right = agent.' + (r.note ? ' ' + escapeHtml(r.note) + '.' : '') + '</div>';
+      } else if (r.status === "empty") {
+        body = '<div class="caption">' + (r.simulated ? "Text-only test run — no audio; the conversation tab is the record."
+                                                       : "No audible audio was captured for this call.") + '</div>';
+      } else if (r.status === "uploading") {
+        body = '<div class="caption">This recording is still being saved — check again in a moment.</div>';
+      } else {
+        body = '<div class="caption">This recording could not be saved.</div>';
+      }
+      return '<div class="ox-audio-rec"><div class="ox-audio-rec-head"><span class="caption num">' + escapeHtml(meta) + '</span>' +
+        badges.join(" ") + (r.provider ? ' <span class="caption">' + escapeHtml(r.provider) + '</span>' : '') + '</div>' + body + '</div>';
+    }).join("");
+  }
+
+  // ---------------- fetchers ----------------
+  async function getJson(url) {
+    const resp = await fetch(url, { credentials: "same-origin" });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    return resp.json();
+  }
+  const base = "/admin/observability/explorer";
+  async function loadTranscript(traceId) {
+    const root = document.getElementById("ox-transcript");
+    const cached = transcriptCache.get(traceId);
+    if (cached) { renderTranscript(cached); return cached; }
+    root.innerHTML = skeleton(6);
+    try {
+      const data = await getJson(base + "/trace/" + encodeURIComponent(traceId) + "/transcript.json");
+      if (data.found !== false && !data.unavailable) transcriptCache.set(traceId, data);
+      if (traceId === currentTrace) renderTranscript(data);
+      return data;
+    } catch (e) {
+      root.innerHTML = emptyState("Conversation details are temporarily unavailable — please try again.");
+      return null;
+    }
+  }
+  async function loadAudio(traceId, render) {
+    const cached = audioCache.get(traceId);
+    if (cached) { if (render) renderAudio(cached); return cached; }
+    if (render) document.getElementById("ox-audio").innerHTML = skeleton(3);
+    try {
+      const data = await getJson(base + "/trace/" + encodeURIComponent(traceId) + "/audio.json");
+      audioCache.set(traceId, data);
+      if (render && traceId === currentTrace) renderAudio(data);
+      return data;
+    } catch (e) {
+      if (render) document.getElementById("ox-audio").innerHTML = emptyState("Call audio is temporarily unavailable.");
+      return null;
+    }
+  }
+  async function loadTechnical(traceId) {
+    const det = document.getElementById("ox-details");
+    const tree = document.getElementById("ox-span-tree");
+    const ov = overviewCache.get(traceId);
+    if (ov) renderDetails(ov); else det.innerHTML = skeleton(4);
+    const tr = traceCache.get(traceId);
+    if (tr) renderSpanTree(tr); else tree.innerHTML = skeleton(6);
+    const tx = transcriptCache.get(traceId);
+    if (tx) renderRaw(tx);
+    try {
+      if (!ov) {
+        const data = await getJson(base + "/trace/" + encodeURIComponent(traceId) + "/overview.json");
+        if (data.found !== false) overviewCache.set(traceId, data);
+        if (traceId === currentTrace) renderDetails(data);
+      }
+    } catch (e) { det.innerHTML = emptyState("Technical details are temporarily unavailable."); }
+    try {
+      if (!tr) {
+        const data = await getJson(base + "/trace/" + encodeURIComponent(traceId) + "/spans.json");
+        if (data.found !== false) traceCache.set(traceId, data);
+        if (traceId === currentTrace) renderSpanTree(data);
+      }
+    } catch (e) { tree.innerHTML = '<p class="caption">Steps are temporarily unavailable.</p>'; }
+  }
+  async function loadSpan(traceId, spanId) {
+    const root = document.getElementById("ox-span-detail");
+    const key = traceId + "::" + spanId;
+    const cached = spanCache.get(key);
+    if (cached) { renderSpanDetail(cached); return; }
+    root.innerHTML = skeleton(8);
+    try {
+      const data = await getJson(base + "/span/" + encodeURIComponent(traceId) + "/" + encodeURIComponent(spanId) + ".json");
+      spanCache.set(key, data);
+      renderSpanDetail(data);
+    } catch (e) { root.innerHTML = '<p class="caption">This step is temporarily unavailable.</p>'; }
+  }
+
+  // ---------------- views ----------------
+  const VIEWS = { transcript: "ox-transcript", audio: "ox-audio", technical: "ox-technical" };
+  function applyView() {
+    Object.keys(VIEWS).forEach(function (v) {
+      document.getElementById(VIEWS[v]).hidden = (v !== currentView);
+      const btn = document.getElementById("ox-view-" + v);
+      btn.setAttribute("aria-selected", v === currentView ? "true" : "false");
+    });
+    if (!currentTrace) return;
+    if (currentView === "transcript") loadTranscript(currentTrace);
+    else if (currentView === "audio") loadAudio(currentTrace, true);
+    else loadTechnical(currentTrace);
+  }
+
+  async function openConversation(traceId) {
+    currentTrace = traceId;
+    document.getElementById("cv-shell").classList.add("has-selection");
+    const row = markSelectedRow(traceId);
+    const conv = convFromRow(row);
+    setHeader(conv || { agent: "", outcome_label: "" });
+    if (!conv) { document.getElementById("cv-title").textContent = "Conversation"; }
+    // Audio first (cheap) so a recording can be pinned above the transcript.
+    const audio = loadAudio(traceId, currentView === "audio");
+    applyView();
+    const tx = await loadTranscript(traceId);
+    if (traceId !== currentTrace) return;
+    document.getElementById("cv-tabbar").hidden = !!(tx && tx.found === false);
+    if (tx && tx.found === false) {
+      setHeader({ notFound: tx.unavailable ? "Conversation details are temporarily unavailable"
+                                           : "We couldn't find this conversation" });
+      return;
+    }
+    if (tx) {
+      const merged = mergeSummary(conv, tx.summary);
+      if (!merged.first_message) {
+        const u = (tx.turns || []).find(function (t) { return t.role === "user" && t.content; });
+        if (u) merged.first_message = String(u.content).replace(/\s+/g, " ");
+      }
+      setHeader(merged);
+    }
+    const a = await audio;
+    if (traceId === currentTrace && currentView === "transcript" && a && (a.recordings || []).length && tx) renderTranscript(tx);
+  }
+
+  // ---------------- CSV export of the visible list ----------------
+  function exportCsv() {
+    const rows = Array.from(document.querySelectorAll("#ox-trace-list .cv-row"));
+    if (!rows.length) return;
+    const header = ["started", "agent", "channel", "business", "first_message", "outcome", "messages", "failed_actions", "session_id", "trace_id"];
+    const lines = [header.join(",")];
+    rows.forEach(function (row) {
+      const c = convFromRow(row) || {};
+      lines.push([c.when, c.agent, c.channel, c.business, c.first_message, c.outcome_label, c.messages,
+                  c.failed_actions, c.session_id, c.trace_id].map(function (f) {
+        const s = String(f == null ? "" : f);
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }).join(","));
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "conversations.csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  window.OX = {
+    setView: function (view) { currentView = VIEWS[view] ? view : "transcript"; applyView(); },
+    exportCsv: exportCsv,
+    selectTrace: function (traceId) {
+      currentSpan = null;
+      writeHash(traceId, null);
+      document.getElementById("ox-span-detail").innerHTML = '<p class="caption">Pick a step to inspect it.</p>';
+      openConversation(traceId);
+    },
+    selectSpan: function (spanId) {
+      currentSpan = spanId;
+      writeHash(currentTrace, spanId);
+      markSpan(spanId);
+      loadSpan(currentTrace, spanId);
+    },
+    back: function () {
+      document.getElementById("cv-shell").classList.remove("has-selection");
+      currentTrace = null;
+      writeHash(null, null);
+    },
+    jumpTo: function (i) {
+      const el = document.querySelector('#ox-transcript .ox-turn[data-turn="' + i + '"]');
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    },
+    copyLink: function (btn) { copyText(window.location.href, btn, "Copy link"); },
+    copyBlock: function (btn) {
+      const node = btn.parentElement.querySelector("pre, .ox-bubble-content");
+      copyText(node ? (node.innerText || node.textContent || "") : "", btn, btn.getAttribute("data-label") || "Copy");
+    },
+    toggleAttr: function (btn, fullText) {
+      const code = btn.parentElement.querySelector("code");
+      const expanded = btn.dataset.expanded === "1";
+      code.textContent = expanded ? fullText.slice(0, 300) + "…" : fullText;
+      btn.textContent = expanded ? "show full" : "show less";
+      btn.dataset.expanded = expanded ? "0" : "1";
+    },
+  };
+
+  function bootstrap() {
+    const h = readHash();
+    if (!h.trace) return;
+    if (h.span) currentView = "technical";
+    else if (h.view && VIEWS[h.view]) currentView = h.view;
+    openConversation(h.trace).then(function () {
+      if (h.span) { currentSpan = h.span; loadSpan(h.trace, h.span); }
+    });
+  }
+  window.addEventListener("hashchange", function () {
+    const h = readHash();
+    if (h.trace && h.trace !== currentTrace) bootstrap();
+  });
+  bootstrap();
+})();
+</script>
+{% endblock %}

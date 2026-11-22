@@ -1,0 +1,111 @@
+{% extends "_base.html" %}
+{% from "_components/callout.html" import alert %}
+{% block title %}{{ skill.display_name }} · Skills · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ skill.display_name }}{% endblock %}
+{% block page_subtitle %}{{ agent_label(skill.agent_kind) }} &middot;
+  {% if skill.business_id %}one business{% else %}all businesses{% endif %}{% endblock %}
+{% block content %}
+<a class="back-link" href="/admin/skills">&larr; Skills</a>
+
+{% if error %}
+{% call alert('error') %}<strong>Could not save:</strong> {{ error }}{% endcall %}
+{% endif %}
+
+<div class="panel">
+  <h3>Details</h3>
+  <form method="post" action="/admin/skills/{{ skill.skill_id }}/update" class="form-stack">
+    <label class="field"><span class="field-label">Name</span>
+      <input name="display_name" required value="{{ skill.display_name }}"></label>
+    <label class="field"><span class="field-label">One-line description</span>
+      <input name="description" required value="{{ skill.description }}">
+      <span class="field-help">Shown to the agent in its list of skills. Don't use curly braces.</span></label>
+    <label class="field"><span class="field-label">Linked knowledge bases</span>
+      <select name="linked_data_source_ids" multiple size="4">
+        {% for ds in data_sources %}
+        <option value="{{ ds.source_id }}" {% if ds.source_id in (skill.linked_data_source_ids or []) %}selected{% endif %}>{{ ds.name }}</option>
+        {% endfor %}
+      </select></label>
+    <label class="field-check"><input type="checkbox" name="always_on" {% if skill.always_on %}checked{% endif %}>
+      <span>Always on <span class="field-help">Include these instructions in every conversation.</span></span></label>
+    <dl class="kv"><dt>Code name</dt><dd><span class="technical">{{ skill.slug }}</span></dd>
+      {% if skill.business_id %}<dt>Business</dt><dd><span class="technical">{{ skill.business_id }}</span></dd>{% endif %}</dl>
+    <div class="form-actions"><button class="primary" type="submit">Save</button></div>
+  </form>
+</div>
+
+<div class="panel">
+  <h3>Current instructions {% if latest %}<span class="muted">(v{{ latest.version_number }})</span>{% endif %}</h3>
+  {% if latest %}
+  <pre style="white-space: pre-wrap; max-height: 400px; overflow-y: auto;">{{ latest.content }}</pre>
+  {% else %}
+  <p class="muted">No versions yet.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h3>New version</h3>
+  <form method="post" action="/admin/skills/{{ skill.skill_id }}/versions/create" class="form-stack">
+    <label class="field"><span class="field-label">Instructions</span>
+      <textarea name="content" required style="min-height: 160px;">{% if latest %}{{ latest.content }}{% endif %}</textarea>
+      <span class="field-help">Markdown.</span></label>
+    <label class="field"><span class="field-label">What changed <span class="opt">(optional)</span></span><input name="notes" placeholder="what changed"></label>
+    <div class="form-actions"><button class="primary" type="submit">Publish v{{ (latest.version_number + 1) if latest else 1 }}</button></div>
+  </form>
+</div>
+
+{% if latest %}
+<div class="panel">
+  <h3>Reference files <span class="muted">(v{{ latest.version_number }})</span></h3>
+  <table data-tabulator>
+    <thead><tr><th>Filename</th><th>Type</th><th></th></tr></thead>
+    <tbody>
+      {% for r in resources %}
+      <tr>
+        <td><code>{{ r.filename }}</code></td>
+        <td class="muted">{{ r.content_type }}</td>
+        <td>
+          <form method="post" action="/admin/skills/{{ skill.skill_id }}/resources/{{ r.resource_id }}/delete" style="display:inline;">
+            <button type="submit" class="danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="muted">No bundled files. Reference files hold long material the agent reads on demand via <code>read_skill(slug, file)</code>.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/admin/skills/{{ skill.skill_id }}/versions/{{ latest.skill_version_id }}/resources/create" class="form-stack mt-m">
+    <div class="form-grid">
+      <label class="field"><span class="field-label">File name</span><input name="filename" required placeholder="examples.md"></label>
+      <label class="field"><span class="field-label">File type</span><input name="content_type" value="text/markdown"></label>
+    </div>
+    <label class="field"><span class="field-label">Content</span><textarea name="content" required style="min-height: 100px;"></textarea></label>
+    <div class="form-actions"><button type="submit">Add file</button></div>
+  </form>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h3>Version history</h3>
+  <table data-tabulator>
+    <thead><tr><th>Version</th><th>Notes</th><th>Created</th></tr></thead>
+    <tbody>
+      {% for v in versions %}
+      <tr>
+        <td>v{{ v.version_number }}</td>
+        <td>{{ v.notes or '' }}</td>
+        <td class="muted">{{ v.created_at or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel danger-zone">
+  <h2>Danger zone</h2>
+  <form method="post" action="/admin/skills/{{ skill.skill_id }}/archive">
+    <button type="submit" class="danger">Archive skill</button>
+    <span class="muted">Archiving deactivates the skill everywhere; attachments keep their history.</span>
+  </form>
+</div>
+{% endblock %}

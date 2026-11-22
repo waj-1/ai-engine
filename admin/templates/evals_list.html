@@ -1,0 +1,172 @@
+{% extends "_base.html" %}
+{% from "_components/status_chip.html" import run_status, score_chip, delta, verdict_chip %}
+{% block title %}Test suites · Testing · {{ brand().title }}{% endblock %}
+{% block page_title %}Test suites{% endblock %}
+{% block page_subtitle %}Prepared cases that check an agent before and after you change it.{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-text">
+    <p>Each suite is a set of cases for one agent. Open a suite to see its cases and run history.</p>
+  </div>
+  <div class="page-head-actions">
+    <button type="button" id="eval-create-suite-btn">Create test suite</button>
+    <button type="button" class="primary" data-open-run>Run tests</button>
+  </div>
+</div>
+
+<section class="section">
+  {% if suites %}
+  {# Plain table — not Tabulator: it would copy the cell HTML (chips, buttons)
+     into a virtual grid. #}
+  <div class="table-wrap">
+  <table class="table suites-table">
+    <thead><tr>
+      <th>Test suite</th><th>Agent</th><th class="num">Cases</th>
+      <th>Last result</th><th class="num">Score</th><th>Change</th><th>Schedule</th><th><span class="sr-only">Actions</span></th>
+    </tr></thead>
+    <tbody>
+      {% for s in suites %}
+      {% set lr = s._last_run %}
+      <tr>
+        <td>
+          <a href="/admin/evals/suites/{{ s.suite_id }}">{{ s.name|humanize }}</a>
+          {% if not s.is_active %}<span class="chip chip-neutral">Paused</span>{% endif %}
+          <div class="technical">{{ s.name }}</div>
+        </td>
+        <td>
+          {% if s.profile_id %}
+            {% if s._profile_missing %}
+              <span title="This suite is linked to an agent that doesn't exist in this environment, so it can't be run here.">{{ s._profile }}</span>
+              <span class="chip chip-warn">Missing here</span>
+            {% else %}
+              <a href="/admin/agents?profile_id={{ s.profile_id }}">{{ s._profile }}</a>
+            {% endif %}
+          {% else %}<span class="caption" title="Not linked to an agent — pick one on the suite page.">Not linked · {{ s.agent_kind|humanize }}</span>{% endif %}
+        </td>
+        <td class="num">{{ (s.scenarios or [])|length }}</td>
+        <td>
+          {% if lr %}
+          <a href="/admin/evals/runs/{{ lr.run_id }}" class="plain-link">{{ run_status(lr.status) }}</a>
+          <div class="caption" title="{{ (lr.finished_at or lr.created_at)|stamp }}">{{ (lr.finished_at or lr.created_at)|when }}</div>
+          {% else %}{{ run_status('never', dot=False) }}{% endif %}
+        </td>
+        <td class="num">
+          {% if lr %}{{ score_chip(lr.score, s._target) }}{% endif %}
+          <div class="caption">target {{ s._target|pct }}</div>
+        </td>
+        <td>{% if lr and lr._delta is not none %}{{ delta(lr._delta) }}{% else %}<span class="caption">—</span>{% endif %}</td>
+        <td>
+          {% if s._schedules %}
+            {% set sch = s._schedules[0] %}
+            <span class="caption">{{ sch.cadence|capitalize }}{% if not sch.is_enabled %} · off{% endif %}</span>
+          {% else %}<span class="caption">—</span>{% endif %}
+        </td>
+        <td><div class="row end nowrap">
+          {% if s._profile_missing %}
+          <button type="button" class="small" disabled title="The agent isn't in this environment">Run</button>
+          {% else %}
+          <button type="button" class="small" data-open-run data-profile="{{ s.profile_id or '' }}" data-suite="{{ s.suite_id }}">Run</button>
+          {% endif %}
+        </div></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><p>No test suites yet.</p><button type="button" class="primary" data-open-create-suite>Create test suite</button></div>
+  {% endif %}
+</section>
+
+{# Create-suite dialog. New suites start with zero cases; the operator adds
+   them on the suite page afterwards (CSV import or manual). agent_kind
+   options come from the client-aware `agent_kinds` context; validated
+   server-side by eval_handlers. Field names = the POST contract. #}
+<dialog id="eval-create-dialog" class="drawer" aria-labelledby="eval-create-title">
+  <form method="post" action="/admin/evals/suites" class="drawer-body stack-m">
+    <div class="row between">
+      <h2 id="eval-create-title" class="mb-0">Create test suite</h2>
+      <button type="button" class="ghost icon-btn" data-eval-create-close aria-label="Close">&times;</button>
+    </div>
+    <label class="field">Name
+      <input name="name" required placeholder="e.g. Booking questions">
+    </label>
+    <label class="field">Agent
+      <select name="profile_id" id="create-suite-profile"{% if not agent_kinds %} required{% endif %}>
+        {% if agent_kinds %}<option value="">Not linked yet (choose the agent type below)</option>
+        {% else %}<option value="" disabled selected>Choose an agent</option>{% endif %}
+        {% for p in profiles %}
+        <option value="{{ p.profile_id }}">{{ p.display_name }}{% if p.environment %} · {{ p.environment }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if not profiles and not agent_kinds %}
+    <p class="hint">No agent to test yet. Create one under <a href="/admin/agents">Agents</a> first.</p>
+    {% endif %}
+    {% if agent_kinds %}
+    <label class="field">Agent type
+      <select name="agent_kind" id="create-suite-agent-kind" required>
+        <option value="" disabled selected>Choose the agent type</option>
+        {% for kind in agent_kinds %}
+        <option value="{{ kind }}">{{ kind|humanize }}</option>
+        {% endfor %}
+      </select>
+      <span class="hint" id="create-suite-kind-caption" hidden>Taken from the agent.</span>
+    </label>
+    {% endif %}
+    <label class="field">Target score
+      <span class="input-suffix"><input type="number" step="1" min="0" max="100" value="70" data-pct-for="create-threshold"><span>%</span></span>
+      <input type="hidden" name="pass_threshold" id="create-threshold" value="0.7">
+      <span class="hint">A run passes when its score reaches this.</span>
+    </label>
+    <label class="field">Judge model (optional)
+      <select name="evaluator_model_id">
+        <option value="">None — check expected words only</option>
+        {% for m in models %}
+        <option value="{{ m.model_id }}">{{ m.name }}{% if not m.is_active %} (inactive){% endif %}</option>
+        {% endfor %}
+      </select>
+      <span class="hint">A judge model reads each answer and scores it against the expected answer.</span>
+    </label>
+    <label class="checkbox"><input type="checkbox" name="is_active" checked> Active</label>
+    <div class="row">
+      <button type="submit" class="primary">Create suite</button>
+      <button type="button" class="ghost" data-eval-create-close>Cancel</button>
+    </div>
+  </form>
+</dialog>
+{% include "_run_dialog.html" %}
+
+<script>
+(function () {
+  var createDialog = document.getElementById("eval-create-dialog");
+  function openCreate() { if (createDialog.showModal) createDialog.showModal(); else createDialog.setAttribute("open", ""); }
+  document.querySelectorAll("#eval-create-suite-btn, [data-open-create-suite]").forEach(function (b) {
+    b.addEventListener("click", openCreate);
+  });
+  createDialog.querySelectorAll("[data-eval-create-close]").forEach(function (b) {
+    b.addEventListener("click", function () { createDialog.close(); });
+  });
+  // Percent input -> the 0..1 pass_threshold the POST contract expects.
+  document.querySelectorAll("[data-pct-for]").forEach(function (inp) {
+    var target = document.getElementById(inp.getAttribute("data-pct-for"));
+    inp.addEventListener("input", function () {
+      var v = parseFloat(inp.value);
+      if (!isNaN(v)) target.value = Math.max(0, Math.min(100, v)) / 100;
+    });
+  });
+  // Choosing an agent derives the agent type server-side (_sync_agent_kind).
+  var profileSelect = document.getElementById("create-suite-profile");
+  var kindSelect = document.getElementById("create-suite-agent-kind");
+  var kindCaption = document.getElementById("create-suite-kind-caption");
+  function syncKind() {
+    if (!kindSelect) return;  // no agent types on this build: the agent is chosen directly
+    var derived = !!profileSelect.value;
+    kindSelect.disabled = derived;
+    kindCaption.hidden = !derived;
+  }
+  profileSelect.addEventListener("change", syncKind);
+  syncKind();
+})();
+</script>
+{% endblock %}

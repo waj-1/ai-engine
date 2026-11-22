@@ -1,0 +1,71 @@
+{# _tab_env_vars.html — Variables tab of /admin/env (?tab=variables).
+
+   The env-vars registry: per-env add form + table. Originally the standalone
+   /admin/env-vars screen, then a section embedded in env.html; now a proper
+   tab. CRUD POST routes + the per-var detail page live in
+   admin/env_vars_handlers.py. Context: env_vars = {"staging": [...], "prod": [...]}
+   with sensitive values masked — the secret flag, a *_KEY/*_SECRET/*_TOKEN/
+   *_PASSWORD name, or credentials inside a URL (env_vars_handlers._mask). #}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import alert, hint, hint_text, info, info_text %}
+<section class="card" id="env-vars">
+  <h2>Environment variables
+    {% call info() %}Resolution order: <code>os.environ[name]</code> → row in <code>agent_env_vars</code> for the active <code>ENVIRONMENT</code>. Local dev: edit <code>.env</code> (process env always wins). Staging / prod: <code>os.getenv</code> first (Azure Container App env vars / Key Vault secret refs keep working), then a DB row keyed by <code>(environment, name)</code>.{% endcall %}
+  </h2>
+  {{ hint_text('Process env always wins — DB rows only apply when the var isn\'t set on the service.') }}
+  {{ hint_text('Only source=\'db\' resolves today — secret_manager/vault rows are accepted but return None.') }}
+
+  {% for e in ['staging', 'prod'] %}
+  <div style="border-top:1px solid var(--border);padding-top:var(--space-s);margin-top:var(--space-s);">
+    <h3 style="margin-bottom:var(--space-xs);">{{ e|upper }}</h3>
+
+    <details class="card collapse-card" style="margin-bottom:var(--space-s);">
+      <summary>Add variable to {{ e|upper }}</summary>
+      <form method="post" action="/admin/env-vars" class="filter-bar" style="margin-bottom:0;">
+        <input type="hidden" name="environment" value="{{ e }}">
+        <label>Name<br><input name="name" required placeholder="OPENAI_API_KEY"></label>
+        <label style="flex:2;">Value<br><input name="value" placeholder="value (leave blank for non-db sources)"></label>
+        <label>Source<br>
+          <input name="source" value="db" placeholder="db | secret_manager:proj/secret | supabase_vault:key">
+        </label>
+        <label style="flex:2;">Description<br><input name="description" placeholder="What this var controls"></label>
+        <label style="display:flex;align-items:center;gap:var(--space-xs);align-self:flex-end;padding-bottom:2px;">
+          <input type="checkbox" name="is_secret"> Secret
+        </label>
+        <div style="align-self:flex-end;">
+          <button class="primary" type="submit">Add to {{ e|upper }}</button>
+        </div>
+      </form>
+    </details>
+
+    <table data-tabulator data-tabulator-page-size="50">
+      <thead><tr>
+        <th>Name</th><th>Value</th><th>Source</th><th>Secret</th><th>Updated</th><th>Description</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for r in (env_vars[e] if env_vars else []) %}
+        <tr>
+          <td><a href="/admin/env-vars/{{ r.var_id }}"><code>{{ r.name }}</code></a></td>
+          <td>
+            {% if r._masked %}
+              <code class="secret-value" title="Hidden — open the variable to reveal it">{{ r.value or '—' }}</code>
+            {% elif r.value %}
+              <code>{{ r.value }}</code>
+            {% else %}
+              <span class="caption">—</span>
+            {% endif %}
+          </td>
+          <td><span class="caption">{{ r.source }}</span></td>
+          <td>{% if r.is_secret %}{{ chip('secret', variant='warn', dot=True) }}{% elif r._masked %}{{ chip('hidden', variant='neutral') }}{% else %}—{% endif %}</td>
+          <td class="caption num">{{ (r.updated_at or '')[:19] }}</td>
+          <td class="caption">{{ r.description or '' }}</td>
+          <td><a class="caption" href="/admin/env-vars/{{ r.var_id }}">Edit</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="caption">No env vars configured for {{ e }}.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+</section>

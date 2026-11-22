@@ -1,0 +1,61 @@
+{# Sub-agents — "This agent can hand off to" (selected only + a searchable
+   picker, delegatable specialists first) and "Can other agents hand work to
+   this one?" (the delegatable switch). One form → POST /admin/profiles/{id}
+   with downstream_profile_ids (+ empty sentinel) and delegatable; no other
+   field is posted, so the handler leaves everything else alone. Replaces the
+   836px every-profile checkbox table. #}
+{% from "agents/_savebar.html" import savebar %}
+<div data-tab-root>
+<form method="post" action="/admin/profiles/{{ agent.id }}" id="form-subagents" data-tab-form data-form-label="Sub-agents">
+<input type="hidden" name="downstream_profile_ids" value="">
+<section class="section">
+  <div class="row between section-head">
+    <div>
+      <h2>Hands work to</h2>
+      <span class="caption">Specialists this agent can pass a question to. It reads each one's description to decide when.</span>
+    </div>
+    {% if not readonly %}
+    <div class="combobox" data-combobox="subagent" data-catalog="catalog-subagents">
+      <button type="button" class="btn" data-combobox-open aria-haspopup="listbox">+ Add sub-agent</button>
+      <div class="combobox-panel" hidden>
+        <input type="search" placeholder="Search agents" aria-label="Search agents" data-combobox-input>
+        <div class="combobox-list" role="listbox" data-combobox-list></div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  <div class="attached-list" data-attached-list="subagent">
+    {% for s in sub_selected %}
+    <div class="attached-row" data-row data-id="{{ s.id }}">
+      <input type="hidden" name="downstream_profile_ids" value="{{ s.id }}">
+      <div class="attached-main">
+        <a class="attached-title" href="/admin/agents?env={{ current_env }}&profile_id={{ s.id }}">{{ s.label }}</a>
+        <span class="chip chip-{{ s.status.variant }}">{{ s.status.label }}</span>
+        {% if s.delegatable %}<span class="chip chip-info" title="Exposed to parents as a hand-off tool">Specialist</span>{% endif %}
+        <p class="caption attached-desc">{{ s.description or 'No description.' }}</p>
+        {% if s.tool_name and s.delegatable %}<p class="caption m-0">Hand-off tool: <code>{{ s.tool_name }}</code> — the name to use in this agent's instructions.</p>{% endif %}
+      </div>
+      {% if not readonly %}<div class="row attached-actions"><button type="button" class="btn ghost small" data-remove-row aria-label="Remove {{ s.label }}">Remove</button></div>{% endif %}
+    </div>
+    {% endfor %}
+    <div class="empty-inline" data-empty {% if sub_selected %}hidden{% endif %}>This agent answers everything itself.</div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Can other agents hand work to this one?</h2>
+  <label class="switch-row mt-s">
+    <input type="checkbox" name="delegatable" {% if active_profile.delegatable %}checked{% endif %} {% if readonly %}disabled{% endif %}>
+    <span><strong>Yes — make it available as a specialist</strong><br>
+      <span class="caption">Parents see it as an <code>ask_&lt;slug&gt;</code> hand-off tool{% if own_handoff_tool %} (<code>{{ own_handoff_tool }}</code>){% endif %}, described by:</span></span>
+  </label>
+  <blockquote class="quote">{{ agent.description or 'No description yet.' }}</blockquote>
+  {% if not readonly %}<p class="caption"><a href="/admin/agents?env={{ current_env }}&profile_id={{ agent.id }}&tab=settings">Edit the description in Settings</a> — describe what this specialist handles so parents know when to ask it.</p>{% endif %}
+  {% if used_by %}
+  <p class="mt-s">Used by: {% for u in used_by %}<a href="/admin/agents?env={{ current_env }}&profile_id={{ u.id }}&tab=subagents">{{ u.label }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  {% endif %}
+</section>
+</form>
+{{ savebar('Save sub-agents', readonly) }}
+</div>
+<script type="application/json" id="catalog-subagents">{{ sub_catalog | tojson }}</script>

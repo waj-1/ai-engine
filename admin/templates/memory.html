@@ -1,0 +1,166 @@
+{# ai_agent/admin/templates/memory.html #}
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/tabs.html" import tabs %}
+{% from "_components/callout.html" import alert, hint_text %}
+{% block title %}Memory · {{ brand().title }}{% endblock %}
+{% block page_title %}Memory{% endblock %}
+{% block page_subtitle %}Facts agents remember about people, and what they recalled in a conversation &mdash; {{ current_env }}.{% endblock %}
+{% block content %}
+
+{# --- Agent picker + link to the agent's memory settings ------------------ #}
+<form method="get" action="/admin/memory" class="filter-row">
+  <input type="hidden" name="tab" value="{{ tab }}">
+  <input type="hidden" name="env" value="{{ current_env }}">
+  <label class="row" style="gap:var(--space-xs);">
+    <span class="caption">Agent</span>
+    <select name="agent_kind" onchange="this.form.submit()">
+      {% for kind in agent_kinds %}<option value="{{ kind }}" {% if kind == agent_kind %}selected{% endif %}>{{ agent_label(kind) }}</option>{% endfor %}
+    </select>
+  </label>
+  <noscript><button type="submit">Show</button></noscript>
+  <a class="btn small" href="/admin/agents/memory?agent_kind={{ agent_kind }}&env={{ current_env }}" style="margin-left:auto;">Memory settings for {{ agent_label(agent_kind) }} &rarr;</a>
+</form>
+
+{% set _tabs = [
+  ('memories', 'Memories', '/admin/memory?tab=memories&agent_kind=' ~ agent_kind ~ '&env=' ~ current_env),
+  ('inspector','Inspector','/admin/memory?tab=inspector&agent_kind=' ~ agent_kind ~ '&env=' ~ current_env),
+] %}
+{{ tabs(_tabs, tab) }}
+
+{% if tab == 'memories' %}
+  <section class="card" style="margin-top:var(--space-m);margin-bottom:var(--space-m);">
+    <form method="get" action="/admin/memory" style="display:flex;gap:var(--space-s);align-items:center;">
+      <input type="hidden" name="tab" value="memories">
+      <input type="hidden" name="env" value="{{ current_env }}">
+      <input type="hidden" name="agent_kind" value="{{ agent_kind }}">
+      <input type="text" name="user" value="{{ user_query }}" placeholder="user id (uuid) or email" style="flex:1;">
+      <button type="submit">Search</button>
+    </form>
+  </section>
+
+  {% if resolved_user_id %}
+    <p class="caption">User <code>{{ resolved_user_id }}</code> — {{ memories|length }} memories ({{ agent_kind }} agent).</p>
+
+    <section class="card" style="margin-bottom:var(--space-m);">
+      <table data-tabulator data-tabulator-page-size="50">
+        <thead>
+          <tr>
+            <th>Content</th>
+            <th>Imp.</th>
+            <th>Pinned</th>
+            <th>Source</th>
+            <th>Status</th>
+            <th>Last used</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for m in memories %}
+          <tr{% if m.status == 'archived' %} class="row-deprecated"{% endif %}>
+            <td>
+              <form method="post" action="/admin/memory/{{ m.id }}/edit?env={{ current_env }}" style="display:flex;gap:var(--space-xs);align-items:center;">
+                <input type="hidden" name="user" value="{{ resolved_user_id }}">
+                <input type="hidden" name="agent_kind" value="{{ agent_kind }}">
+                <input type="text" name="content" value="{{ m.content }}" style="flex:1;">
+                <button type="submit">save</button>
+              </form>
+            </td>
+            <td class="num">{{ '%.2f'|format(m.importance) }}</td>
+            <td>{{ chip('pinned' if m.pinned else 'no', 'brand' if m.pinned else 'ghost') }}</td>
+            <td>{{ chip(m.source, 'ghost') }}</td>
+            <td>{{ chip(m.status, 'ok' if m.status == 'active' else 'mauve') }}</td>
+            <td class="caption num">{{ (m.last_used_at or '—')[:19] }}</td>
+            <td style="display:flex;gap:var(--space-xs);align-items:center;">
+              <form method="post" action="/admin/memory/{{ m.id }}/pin?env={{ current_env }}" style="margin:0;">
+                <input type="hidden" name="pinned" value="{{ 'false' if m.pinned else 'true' }}">
+                <input type="hidden" name="user" value="{{ resolved_user_id }}">
+                <input type="hidden" name="agent_kind" value="{{ agent_kind }}">
+                <button type="submit">{{ 'unpin' if m.pinned else 'pin' }}</button>
+              </form>
+              {% if m.status != 'archived' %}
+              <form method="post" action="/admin/memory/{{ m.id }}/delete?env={{ current_env }}" style="margin:0;" onsubmit="return confirm('Archive this memory?')">
+                <input type="hidden" name="user" value="{{ resolved_user_id }}">
+                <input type="hidden" name="agent_kind" value="{{ agent_kind }}">
+                <button type="submit" class="danger">delete</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7"><div class="empty-state">No memories for this user yet.</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <details class="card collapse-card" style="margin-bottom:var(--space-m);">
+      <summary>Add a memory manually</summary>
+      <form method="post" action="/admin/memory/add?env={{ current_env }}" style="display:flex;flex-direction:column;gap:var(--space-s);">
+        <input type="hidden" name="user_id" value="{{ resolved_user_id }}">
+        <input type="hidden" name="agent_kind" value="{{ agent_kind }}">
+        <label>
+          <div class="caption">business_id</div>
+          <input type="text" name="business_id" required style="width:100%;">
+        </label>
+        <label>
+          <div class="caption">content</div>
+          <textarea name="content" required style="width:100%;min-height:80px;"></textarea>
+        </label>
+        <div>
+          <button type="submit" class="primary">Add memory</button>
+        </div>
+      </form>
+    </details>
+
+  {% elif user_query %}
+    {% call alert('warning') %}No user found for "{{ user_query }}".{% endcall %}
+  {% endif %}
+
+{% elif tab == 'inspector' %}
+  <section class="card" style="margin-top:var(--space-m);margin-bottom:var(--space-m);">
+    <form method="get" action="/admin/memory" style="display:flex;gap:var(--space-s);align-items:center;">
+      <input type="hidden" name="tab" value="inspector">
+      <input type="hidden" name="env" value="{{ current_env }}">
+      <input type="hidden" name="agent_kind" value="{{ agent_kind }}">
+      <input type="text" name="session_id" value="{{ session_id }}" placeholder="session id (uuid)" style="flex:1;">
+      <button type="submit">Load</button>
+    </form>
+  </section>
+
+  {% if session %}
+    <section class="card" style="margin-bottom:var(--space-m);">
+      <h3 style="margin-top:0;">{{ session.title or '(no title)' }}</h3>
+      <p class="caption">
+        Summary covers {{ session.summary_message_count or 0 }} messages
+        · updated {{ (session.summary_updated_at or '—')[:19] }}
+      </p>
+      <pre class="code-block" style="white-space:pre-wrap;">{{ session.running_summary or '(no summary yet)' }}</pre>
+    </section>
+
+    <h3>Per-turn retrieved memories</h3>
+    {% if turns %}
+      {% for t in turns %}
+        <section class="card" style="margin-bottom:var(--space-s);">
+          <p class="caption">{{ (t.created_at or '')[:19] }} — <em>{{ t.content_preview }}…</em>{% if t.summary_used %} · summary used{% endif %}</p>
+          {% if t.retrieved %}
+            <ul style="margin:0;padding-left:var(--space-m);">
+              {% for r in t.retrieved %}
+                <li class="caption">{{ r.content }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="caption">no memories retrieved</p>
+          {% endif %}
+        </section>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">No assistant turns with memory data found.</div>
+    {% endif %}
+
+  {% elif session_id %}
+    {% call alert('warning') %}No session found for id "{{ session_id }}".{% endcall %}
+  {% endif %}
+
+{% endif %}
+{% endblock %}

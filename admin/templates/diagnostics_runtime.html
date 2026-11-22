@@ -1,0 +1,64 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import alert %}
+{% block title %}Runtime environment · {{ brand().title }}{% endblock %}
+{% block page_title %}Diagnostics{% endblock %}
+{% block page_subtitle %}What this running engine is connected to.{% endblock %}
+{% block content %}
+{% set diag_tab = 'runtime' %}{% include "_diagnostics_tabs.html" %}
+{% set re = runtime_env %}
+
+<section class="section">
+  <h2>Runtime environment</h2>
+  <span class="caption">The portal and the agents run in one process, so this is what both read.
+    Admin edits follow the environment switcher; when cross-environment access isn't configured they
+    fall back to the database shown here.</span>
+  <dl class="kv mt-s">
+    <dt>Environment</dt>
+    <dd>{{ chip(re.resolved_environment|capitalize, variant='brand', dot=True) }}
+      <span class="technical">ENVIRONMENT={{ re.raw_environment }}</span></dd>
+    <dt>Main database</dt>
+    <dd><code>{{ re.supabase.url }}</code>
+      <div class="caption">service key {% if re.supabase.service_key_set %}{{ chip('set', variant='ok') }}{% else %}{{ chip('missing', variant='err') }}{% endif %}
+        · anon key {% if re.supabase.anon_key_set %}{{ chip('set', variant='ok') }}{% else %}{{ chip('missing', variant='neutral') }}{% endif %}</div></dd>
+    <dt>Tracing</dt>
+    <dd><code>{{ re.observability.lmnr_base_url }}</code>
+      <div class="caption">api key {% if re.observability.lmnr_api_key_set %}{{ chip('set', variant='ok') }}{% else %}{{ chip('unset', variant='neutral') }}{% endif %}
+        · reads from <code>{{ re.observability.lmnr_clickhouse_url }}</code></div></dd>
+    <dt>Portal deploys</dt>
+    <dd>{% if re.deploy.github_token_set %}{{ chip('enabled', variant='ok') }}{% else %}{{ chip('not set up', variant='neutral') }}{% endif %}
+      <span class="technical">GITHUB_DEPLOY_TOKEN</span></dd>
+  </dl>
+</section>
+
+<section class="section">
+  <h2>Cross-environment promote</h2>
+  {% if re.cross_env_targets %}
+  <dl class="kv mt-s">
+    {% for t in re.cross_env_targets %}
+    <dt>{{ t.environment|capitalize }}</dt>
+    <dd><code>{{ t.url }}</code> · service key {% if t.service_key_set %}{{ chip('set', variant='ok') }}{% else %}{{ chip('missing', variant='err') }}{% endif %}</dd>
+    {% endfor %}
+  </dl>
+  {% else %}
+  <span class="caption">Not configured: promote writes to the same database, keyed by each agent's environment.
+    <span class="technical">STAGING_AI_SUPABASE_URL / PROD_AI_SUPABASE_URL unset</span></span>
+  {% endif %}
+</section>
+
+<section class="section">
+  <h2>Runtime flags</h2>
+  <span class="caption">Container settings the code reads directly from the process (not from Environment variables).</span>
+  <div class="table-wrap mt-s">
+    <table class="table">
+      <thead><tr><th>Flag</th><th>Value</th></tr></thead>
+      <tbody>
+        {% for f in runtime_flags %}
+        <tr><td><code>{{ f.name }}</code></td>
+          <td>{% if f.value is none %}{{ chip('unset', variant='neutral') }}{% else %}<code>{{ f.value }}</code>{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

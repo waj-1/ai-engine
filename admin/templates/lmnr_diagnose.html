@@ -1,0 +1,163 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import alert, hint, hint_text, info %}
+{% block title %}Telemetry check · {{ brand().title }}{% endblock %}
+{% block page_title %}Telemetry check{% endblock %}
+{% block page_subtitle %}Use this when Overview or Conversations show no data: checks recording and reading end to end.{% endblock %}
+{% block content %}
+{% set diag_tab = 'telemetry' %}{% include "_diagnostics_tabs.html" %}
+
+<section class="section">
+  <h2>Bootstrap</h2>
+  <div style="display:flex;gap:var(--space-s);flex-wrap:wrap;align-items:center;">
+    {% if bootstrap_ok %}
+      {{ chip('Laminar.initialize() OK', variant='ok', dot=True) }}
+    {% else %}
+      {{ chip('Laminar.initialize() did not run', variant='err', dot=True) }}
+    {% endif %}
+    {% if api_key_set %}
+      {{ chip('API key set', variant='ok') }}
+    {% else %}
+      {{ chip('API key MISSING', variant='err') }}
+    {% endif %}
+  </div>
+  {% if bootstrap_error %}
+  <p class="caption" style="margin-top:var(--space-s);color:var(--error);">
+    <strong>Last error:</strong> <code>{{ bootstrap_error }}</code>
+  </p>
+  {% endif %}
+  <dl class="caption" style="margin-top:var(--space-s);display:grid;grid-template-columns:160px 1fr;gap:var(--space-xxs);">
+    <dt>SDK base URL</dt><dd class="num"><code>{{ sdk_base_url }}</code></dd>
+    <dt>Dashboard URL</dt><dd class="num"><code>{{ dashboard_url or '(unset)' }}</code></dd>
+  </dl>
+</section>
+
+<section class="section">
+  <h2>ClickHouse (read side)</h2>
+  <div style="display:flex;gap:var(--space-s);flex-wrap:wrap;align-items:center;">
+    {% if clickhouse_ok %}
+      {{ chip('ClickHouse reachable', variant='ok', dot=True) }}
+      {% if clickhouse_spans_24h is not none %}
+        {{ chip(clickhouse_spans_24h ~ ' spans / 24h', variant='ghost') }}
+      {% endif %}
+    {% else %}
+      {{ chip('ClickHouse UNREACHABLE', variant='err', dot=True) }}
+    {% endif %}
+  </div>
+  <dl class="caption" style="margin-top:var(--space-s);display:grid;grid-template-columns:160px 1fr;gap:var(--space-xxs);">
+    <dt>ClickHouse URL</dt><dd class="num"><code>{{ clickhouse_url }}</code></dd>
+  </dl>
+  {% if clickhouse_ok %}
+    {% call hint() %}
+      Every Operate screen &mdash; Overview and Conversations (list, transcript,
+      technical view) &mdash; reads this ClickHouse and nothing else, so a green
+      light here means the portal can show you conversations.
+    {% endcall %}
+  {% else %}
+    {% call alert('error') %}
+      <p style="margin:0 0 var(--space-xs);"><code>{{ clickhouse_error }}</code></p>
+      <p style="margin:0;">
+        Overview and Conversations (list, transcript, technical view) all read
+        ClickHouse, so they show &ldquo;temporarily unavailable&rdquo; until this
+        is fixed. Check
+        <code>LMNR_CLICKHOUSE_URL</code>, <code>LMNR_CLICKHOUSE_USER</code> /
+        <code>LMNR_CLICKHOUSE_PASSWORD</code> and <code>LMNR_CLICKHOUSE_DB</code>,
+        and that the host is reachable from this process (in a container,
+        <code>localhost</code> is the engine itself).
+      </p>
+    {% endcall %}
+  {% endif %}
+  {% if clickhouse_ok and clickhouse_spans_24h == 0 %}
+    {% call alert('warning') %}
+      ClickHouse answers but holds <strong>no spans from the last 24h</strong> &mdash;
+      that is a <em>write</em>-side problem (bootstrap / OTLP export), not a read one.
+      Check the Bootstrap section above and the test span below.
+    {% endcall %}
+  {% endif %}
+</section>
+
+<section class="section">
+  <h2>Content capture</h2>
+  <div style="display:flex;gap:var(--space-s);flex-wrap:wrap;align-items:center;">
+    {% if content_capture %}
+      {{ chip('Prompts / answers / tool I/O captured', variant='ok', dot=True) }}
+    {% else %}
+      {{ chip('Content capture OFF — only token counts traced', variant='warn', dot=True) }}
+    {% endif %}
+  </div>
+  {% if content_capture %}
+    {% call hint() %}Prompt/completion text and tool I/O are being captured into spans.{% endcall %}
+    {% call info() %}
+      The OpenLLMetry instrumentors are recording LLM prompt/completion text and
+      tool call args + results into spans via <code>TRACELOOP_TRACE_CONTENT=true</code>,
+      forced ON at import time by <code>core/_laminar_bootstrap.py</code>. These show
+      in the explorer&rsquo;s span detail and transcript views.
+    {% endcall %}
+  {% else %}
+    {% call alert('warning') %}
+      Spans carry token counts but NOT message content. Either bootstrap didn&rsquo;t run, or
+      <code>TRACELOOP_TRACE_CONTENT</code> / <code>LMNR_TRACE_CONTENT</code> is explicitly
+      set to <code>false</code> in the environment. Unset it (or set it to <code>true</code>)
+      and restart the agent to capture prompts, answers, and tool I/O.
+    {% endcall %}
+  {% endif %}
+</section>
+
+<section class="section">
+  <h2>Test span</h2>
+  {% if test_trace_id %}
+    {{ chip('Span emitted', variant='ok', dot=True) }}
+    {# The trace is excluded from the explorer's list unconditionally (it's never
+       real traffic), so this deep-link is the only way to see it. #}
+    <p class="caption" style="margin-top:var(--space-s);">
+      Trace id: <code class="num">{{ test_trace_id }}</code>
+    </p>
+    <div class="row mt-s">
+      {% if clickhouse_ok %}
+      <a class="btn primary" href="/admin/observability/explorer?hours=1#trace={{ test_trace_id }}&amp;view=technical">Open it in Conversations</a>
+      <span class="caption">It can take a few seconds to arrive; reload the conversation if it says &ldquo;not found&rdquo;.</span>
+      {% else %}
+      <button type="button" class="btn" disabled aria-disabled="true">Open it in Conversations</button>
+      <span class="caption">Unavailable while the read side (ClickHouse, above) is down &mdash; fix that first.</span>
+      {% endif %}
+    </div>
+  {% elif test_span_error %}
+    {{ chip('Span emit failed', variant='err', dot=True) }}
+    <p class="caption" style="margin-top:var(--space-s);color:var(--error);">
+      <code>{{ test_span_error }}</code>
+    </p>
+  {% else %}
+    {{ chip('Skipped (bootstrap not ready)', variant='ghost') }}
+  {% endif %}
+</section>
+
+<section class="section">
+  <h2>Where do I look at conversations?</h2>
+  {% call hint() %}
+    In <a href="/admin/observability">Conversations</a> (transcripts, actions and the
+    Technical view) and on the <a href="/admin/live">Overview</a>. Both read
+    ClickHouse directly &mdash; there is no second UI to check.
+  {% endcall %}
+</section>
+
+{% if not bootstrap_ok %}
+<section class="section">
+  <h2>How to fix bootstrap</h2>
+  {% call alert('error') %}
+    <ol style="padding-left:var(--space-m);margin:0;">
+      <li>Set <code>LMNR_PROJECT_API_KEY</code> in <code>.env</code> — the ingest
+        project key for your Laminar deployment{% if dashboard_signin %}, minted at
+        <a href="{{ dashboard_signin }}" target="_blank" rel="noopener">{{ dashboard_url }}</a>{% endif %}.</li>
+      <li>Make sure <code>LMNR_BASE_URL</code>, <code>LMNR_HTTP_PORT</code>, and
+        <code>LMNR_GRPC_PORT</code> point at a reachable app-server
+        (default: <code>http://localhost</code> + ports 8001 / 8002 against the
+        <code>docker compose -f docker-compose.dev.yml up lmnr-app-server</code> stack).</li>
+      <li>Restart the agent process. <code>core/_laminar_bootstrap.py</code> runs at
+        import time so a live-reload won&rsquo;t pick up a fresh API key —
+        kill and re-start <code>python main.py</code>.</li>
+    </ol>
+  {% endcall %}
+</section>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,120 @@
+{% extends "_base.html" %}
+{% from "_components/status_chip.html" import verdict_chip, delta %}
+{% from "_components/sparkline.html" import sparkline %}
+{% block title %}Testing · {{ brand().title }}{% endblock %}
+{% block page_title %}Testing{% endblock %}
+{% block page_subtitle %}Is each agent good enough? The latest test results, one card per agent.{% endblock %}
+{% block content %}
+{% set sm = summary %}
+<div class="page-head">
+  <div class="page-head-text testing-summary">
+    {% if sm.tested %}
+    <p><strong>{{ sm.ready }} of {{ sm.tested }}</strong> tested agent{{ 's' if sm.tested != 1 else '' }} meet{{ 's' if sm.tested == 1 else '' }} their target
+      {% if sm.failing_cases %} · <strong>{{ sm.failing_cases }}</strong> failing case{{ 's' if sm.failing_cases != 1 else '' }} in the latest runs{% endif %}
+      {% if sm.untested %} · {{ sm.untested }} not tested yet{% endif %}
+      {% if sm.last_run %} · last run {{ (sm.last_run.finished_at or sm.last_run.created_at)|when }}{% endif %}</p>
+    {% elif cards %}
+    <p>None of your agents has been tested yet. Run a test suite to see how they do.</p>
+    {% endif %}
+  </div>
+  <div class="page-head-actions">
+    <a class="btn" href="/admin/evals/suites">All test suites</a>
+    <a class="btn primary" href="/admin/evals/runs?run_profile=">Run tests</a>
+  </div>
+</div>
+
+{% if cards %}
+<div class="agent-health-grid">
+  {% for c in cards %}
+  {% set h = c.head %}
+  {% set f = c.focus %}
+  <article class="card agent-health {{ 'is-' ~ c.verdict }}">
+    <header class="row between top">
+      <div class="agent-health-name">
+        <h3>{{ c.name }}</h3>
+        <span class="caption">{{ c.agent_kind|humanize }}{% if c.environment %} · {{ c.environment }}{% endif %}</span>
+      </div>
+      {{ verdict_chip(c.verdict) }}
+    </header>
+
+    {% if c.missing %}
+    <p class="caption mt-s">These test suites are linked to an agent that doesn't exist in this environment, so they can't run here. Open a suite to link it to an agent that does.</p>
+    <ul class="agent-health-suites">
+      {% for x in c.suites %}<li><a href="/admin/evals/suites/{{ x.suite.suite_id }}">{{ x.suite.name|humanize }}</a></li>{% endfor %}
+    </ul>
+    {% elif h %}
+    <div class="agent-health-figure row top">
+      <div>
+        <div class="big-number num">{{ f.latest.score|pct }}</div>
+        <div class="caption">Target {{ f.target|pct }}</div>
+        {% if f.delta is not none %}<div>{{ delta(f.delta, ' since last run') }}</div>{% endif %}
+      </div>
+      <div class="agent-health-spark" title="Last {{ c.series|length }} run scores">
+        {{ sparkline(c.series, width=150, height=34) }}
+      </div>
+    </div>
+    <p class="caption mb-0">
+      {% if f.kind == 'voice' and not f.suite.suite_id %}{{ f.n_tested - (f.failing or 0) }} of {{ f.n_tested }} voice check{{ 's' if f.n_tested != 1 else '' }} passed their last call
+      {%- else %}{% if f.kind == 'voice' %}<span class="chip chip-info">Voice</span> {% endif %}{{ f.suite.name|humanize }}{% endif %} · {{ (f.latest.finished_at or f.latest.created_at)|when }}
+      {% if c.n_suites > 1 %}<br>{{ c.n_meeting }} of {{ c.n_tested }} tested suite{{ 's' if c.n_tested != 1 else '' }} meet the target{% if c.n_tested < c.n_suites %} · {{ c.n_suites - c.n_tested }} not run{% endif %}{% endif %}
+      {% if c.live %}<br>Real conversations: {{ c.live.score|pct }} ({{ (c.live.finished_at or c.live.created_at)|when }}){% endif %}
+    </p>
+    {% if c.n_suites > 1 or c.has_voice %}
+    {% macro suite_score_row(x) %}
+      <li class="{{ 'is-' ~ x.verdict }}">
+        <span class="suite-scores-name">
+          {% if x.kind == 'voice' %}<span class="chip chip-info">Voice</span>{% else %}<span class="chip chip-neutral">Text</span>{% endif %}
+          {% if x.suite.suite_id %}<a href="/admin/evals/suites/{{ x.suite.suite_id }}">{{ x.suite.name|humanize }}</a>
+          {% else %}<a href="/admin/evals/runs?kind=voice&amp;profile_id={{ c.profile_id }}" title="{{ x.n_tested }} of {{ x.n_checks }} voice check{{ 's' if x.n_checks != 1 else '' }} run">{{ x.suite.name }}</a>{% endif %}
+        </span>
+        <span class="num">{% if x.latest %}{{ x.latest.score|pct }}{% else %}<span class="caption">Not run</span>{% endif %} <span class="caption">/ {{ x.target|pct }}</span></span>
+      </li>
+    {% endmacro %}
+    {# Tested suites and anything failing first (c.suites is sorted that way);
+       a long tail of not-run suites folds away. #}
+    {% set shown = 5 if c.suites|length > 6 else 6 %}
+    <ul class="suite-scores" aria-label="Scores by test suite">
+      {% for x in c.suites[:shown] %}{{ suite_score_row(x) }}{% endfor %}
+    </ul>
+    {% if c.suites|length > shown %}
+    <details class="suite-scores-more">
+      <summary class="caption">{{ c.suites|length - shown }} more test suite{{ 's' if c.suites|length - shown != 1 else '' }}</summary>
+      <ul class="suite-scores">{% for x in c.suites[shown:] %}{{ suite_score_row(x) }}{% endfor %}</ul>
+    </details>
+    {% endif %}
+    {% endif %}
+    {% else %}
+    <p class="caption mt-s">{{ c.n_suites }} test suite{{ 's' if c.n_suites != 1 else '' }}{% if c.has_voice_checks %} (including voice checks){% endif %}, not run yet.</p>
+    {% endif %}
+
+    <footer class="row mt-m">
+      {% if c.missing %}
+      <a class="btn small" href="/admin/evals/suites">Open test suites</a>
+      {% else %}
+        {% if f and f.verdict == 'needs_work' %}
+        <a class="btn small primary" href="/admin/evals/runs/{{ f.latest.run_id }}?show=failed">See {{ f.failing or '' }} failure{{ 's' if (f.failing or 0) != 1 else '' }}</a>
+        {% elif h %}
+        <a class="btn small" href="/admin/evals/runs/{{ h.latest.run_id }}">Latest run</a>
+        {% endif %}
+        {% set text_suite = (f.suite if (f and f.suite.suite_id) else none) or ((c.suites|map(attribute='suite')|selectattr('suite_id')|list)|first) %}
+        {% if text_suite %}
+        <a class="btn small {{ '' if h else 'primary' }}" href="/admin/evals/runs?run_profile={{ c.profile_id }}&run_suite={{ text_suite.suite_id }}">Run tests</a>
+        {% endif %}
+        {% if c.has_voice_checks %}
+        <a class="btn small {{ '' if (h or text_suite) else 'primary' }}" href="/admin/voice-scenarios">Run voice checks</a>
+        {% endif %}
+      {% endif %}
+    </footer>
+  </article>
+  {% endfor %}
+</div>
+{% if sm.unlinked_suites %}
+<p class="caption mt-m">{{ sm.unlinked_suites }} test suite{{ 's are' if sm.unlinked_suites != 1 else ' is' }} not linked to an agent, so {{ 'they don’t' if sm.unlinked_suites != 1 else 'it doesn’t' }} appear here. <a href="/admin/evals/suites">Link them on Test suites</a>.</p>
+{% endif %}
+{% else %}
+<div class="empty-state">
+  <p>No agent has a test suite yet. A test suite is a set of questions with expected answers that checks an agent before you publish a change.</p>
+  <a class="btn primary" href="/admin/evals/suites">Create a test suite</a>
+</div>
+{% endif %}
+{% endblock %}

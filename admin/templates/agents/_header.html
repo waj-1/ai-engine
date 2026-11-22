@@ -1,0 +1,114 @@
+{# Agent detail header — shared by agent_detail.html and agent_voice.html
+   (the Voice tab), so the voice settings no longer feel like another app.
+
+   Context (admin/screens/agents_views.py): agent, switch_agents,
+   detail_tabs, detail_tab, current_env, promote_target, promote_counterpart,
+   compare_options. Promote lives in the overflow menu behind a confirm
+   dialog; it is no longer the strongest button on a page used for reading. #}
+{% from "_components/tabs.html" import tabs %}
+<div class="page-head agent-head">
+  <div class="page-head-text min-w-0">
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <a href="/admin/agents?env={{ current_env }}">Agents</a>
+      <span aria-hidden="true">/</span>
+      <details class="menu switcher" data-switcher>
+        <summary class="switcher-summary" aria-label="Switch agent">{{ agent.name }} <span aria-hidden="true">▾</span></summary>
+        <div class="menu-panel switcher-panel">
+          <input type="search" placeholder="Find an agent" aria-label="Find an agent" data-switcher-search>
+          <div class="switcher-list" role="listbox">
+            {% for a in switch_agents %}
+            <a role="option" class="switcher-item{% if a.active %} is-active{% endif %}" {% if a.active %}aria-selected="true"{% endif %}
+               style="padding-left:calc(var(--space-sm) + {{ a.depth * 16 }}px);"
+               href="/admin/agents?env={{ current_env }}&profile_id={{ a.profile_id }}{% if detail_tab and detail_tab != 'voice' %}&tab={{ detail_tab }}{% endif %}"
+               data-search="{{ a.name|lower }}">
+              {% if a.depth %}<span aria-hidden="true">↳ </span>{% endif %}{{ a.name }}
+              {% if a.status.key != 'active' %}<span class="chip chip-{{ a.status.variant }}">{{ a.status.label }}</span>{% endif %}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+      </details>
+    </nav>
+    <div class="row mt-xs agent-pills">
+      <span class="chip chip-{{ agent.status.variant }}"><span class="chip-dot"></span>{{ agent.status.label }}</span>
+      {% for c in agent.channels %}<span class="chip chip-neutral" title="{{ c.description }}">{{ c.label }}</span>{% endfor %}
+      {% if agent.parent %}<span class="caption">Sub-agent of <a href="/admin/agents?env={{ current_env }}&profile_id={{ agent.parent.id }}">{{ agent.parent.label }}</a></span>{% endif %}
+      {% if agent.updated_rel %}<span class="caption">· changed {{ agent.updated_rel }}{% if agent.updated_by_you %} by you{% endif %}</span>{% endif %}
+    </div>
+  </div>
+  <div class="page-head-actions">
+    {% set _tc_profile = (active_profile if active_profile is defined and active_profile else (header_profile if header_profile is defined else None)) %}
+    {% set _tc = test_chat_shape(_tc_profile) if _tc_profile else None %}
+    {% if _tc and _tc.supported and detail_tab == 'voice' %}
+    <a class="btn" href="/admin/agents?env={{ current_env }}&profile_id={{ agent.id }}&test=1">Test</a>
+    {% elif _tc and _tc.supported %}
+    <button type="button" data-test-chat-open>Test</button>
+    {% else %}
+    <button type="button" disabled title="{{ (_tc.reason if _tc else '') or 'This agent has no chat channel to test — it runs when another agent hands it work.' }}">Test</button>
+    {% endif %}
+    {% if not agent.is_template %}
+    <form method="post" action="/admin/agents/{{ agent.id }}/fork" class="m-0">
+      <button type="submit" title="Copy this agent into a new draft you can change safely">Make a draft copy</button>
+    </form>
+    {% endif %}
+    <details class="menu">
+      <summary class="btn" aria-label="More actions">More ▾</summary>
+      <div class="menu-panel menu-right" role="menu">
+        {% if promote_target %}
+        <button type="button" role="menuitem" data-open-dialog="dlg-promote">Promote to {{ promote_target.label }}…</button>
+        {% endif %}
+        <button type="button" role="menuitem" data-open-dialog="dlg-compare">Compare with another agent…</button>
+        <a role="menuitem" href="/admin/agents?env={{ current_env }}&profile_id={{ agent.id }}&tab=versions">Version history</a>
+        <button type="button" role="menuitem" data-copy="{{ agent.id }}">Copy agent ID</button>
+        <a role="menuitem" href="/admin/audit?entity_type=agent_profiles">View activity log</a>
+        <a role="menuitem" href="/admin/observability?agent_kind={{ agent.kind }}&hours=168">Recent conversations</a>
+      </div>
+    </details>
+  </div>
+</div>
+{{ tabs(detail_tabs, detail_tab) }}
+
+{% if promote_target %}
+<dialog id="dlg-promote" class="dialog" aria-labelledby="dlg-promote-title">
+  <form method="post" action="/admin/env/promote" class="stack-m" data-ajax-action data-reload>
+    <input type="hidden" name="profile_id" value="{{ agent.id }}">
+    <input type="hidden" name="target_env" value="{{ promote_target.env }}">
+    <h2 id="dlg-promote-title">Promote {{ agent.name }} to {{ promote_target.label }}?</h2>
+    <p>This copies the agent's current setup — instructions, tools, knowledge,
+      sub-agents, model and voice — to {{ promote_target.label }}. People using
+      {{ promote_target.label }} get it on their next conversation.</p>
+    {% if promote_counterpart %}
+    <p class="caption">It replaces <strong>{{ promote_counterpart.display_name }}</strong> in {{ promote_target.label }}.
+      <a href="/admin/agents/diff?a={{ promote_counterpart.profile_id }}&b={{ agent.id }}" target="_blank" rel="noopener">See what changes</a>.</p>
+    {% else %}
+    <p class="caption">{{ promote_target.label }} has no copy of this agent yet — this creates one.</p>
+    {% endif %}
+    <p class="caption">Promotion may be refused if the agent's latest test run did not pass.</p>
+    <div class="form-error" data-form-error hidden></div>
+    <div class="row end">
+      <button type="button" class="ghost" data-close-dialog>Cancel</button>
+      <button type="submit" class="primary">Promote to {{ promote_target.label }}</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+
+<dialog id="dlg-compare" class="dialog" aria-labelledby="dlg-compare-title">
+  <form method="get" action="/admin/agents/diff" class="stack-m">
+    <input type="hidden" name="a" value="{{ agent.id }}">
+    <h2 id="dlg-compare-title">Compare {{ agent.name }} with…</h2>
+    {% if compare_options %}
+    <label class="field">Other agent
+      <select name="b" required>
+        {% for o in compare_options %}<option value="{{ o.profile_id }}">{{ o.name }} · {{ o.status }}</option>{% endfor %}
+      </select>
+    </label>
+    {% else %}
+    <p class="caption">There are no other agents in this environment to compare with.</p>
+    {% endif %}
+    <div class="row end">
+      <button type="button" class="ghost" data-close-dialog>Cancel</button>
+      {% if compare_options %}<button type="submit" class="primary">Compare</button>{% endif %}
+    </div>
+  </form>
+</dialog>

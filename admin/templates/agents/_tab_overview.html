@@ -1,0 +1,114 @@
+{# Overview — read-only summary. No forms except "Run test now". #}
+{% set base = '/admin/agents?env=' ~ current_env ~ '&profile_id=' ~ agent.id %}
+<section class="section">
+  <h2>What this agent does</h2>
+  <dl class="kv overview-kv">
+    <dt>Purpose</dt>
+    <dd>{{ agent.description or 'No description yet.' }}
+      {% if not agent.description and not readonly %} <a href="{{ base }}&tab=settings">Add one</a>{% endif %}</dd>
+    <dt>Who talks to it</dt>
+    <dd>{% for c in agent.channels %}{{ c.description }}{% if not loop.last %}; {% endif %}{% endfor %}.
+      {% if voice_config_owner %}<br>Answers voice calls for <a href="/admin/agents?env={{ current_env }}&profile_id={{ voice_config_owner.profile_id }}">{{ voice_config_owner.display_name }}</a>.
+      Calls to this profile are configured on <a href="/admin/agents/{{ voice_config_owner.profile_id }}/voice?env={{ current_env }}">{{ voice_config_owner.display_name }}'s voice settings</a>.{% endif %}</dd>
+    <dt>Model</dt>
+    <dd>{% if main_model %}{{ main_model.name }} <span class="technical">{{ main_model.model_string }}</span>{% else %}<span class="muted">No model assigned</span>{% endif %}</dd>
+    {% if used_by %}
+    <dt>Used by</dt>
+    <dd>{% for u in used_by %}<a href="/admin/agents?env={{ current_env }}&profile_id={{ u.id }}">{{ u.label }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</dd>
+    {% endif %}
+  </dl>
+</section>
+
+<section class="section">
+  <h2>At a glance</h2>
+  <div class="tile-grid">
+    <a class="card tile" href="{{ base }}&tab=instructions">
+      <div class="tile-head"><span class="eyebrow">Instructions</span><span class="tile-meta">{% if system_prompt and system_prompt.version_number %}v{{ system_prompt.version_number }}{% endif %}</span></div>
+      <p class="tile-body">{{ system_prompt_preview or 'No instructions yet.' }}</p>
+      <span class="tile-link">Edit instructions →</span>
+    </a>
+    <a class="card tile" href="{{ base }}&tab=tools">
+      <div class="tile-head"><span class="eyebrow">Tools &amp; knowledge</span></div>
+      <p class="tile-stat"><strong>{{ bound_count }}</strong> action{{ '' if bound_count == 1 else 's' }}
+        in {{ toolsets|length }} toolset{{ '' if toolsets|length == 1 else 's' }}
+        · <strong>{{ knowledge_attached|length }}</strong> knowledge source{{ '' if knowledge_attached|length == 1 else 's' }}
+        {% if skill_attached %}· <strong>{{ skill_attached|length }}</strong> skill{{ '' if skill_attached|length == 1 else 's' }}{% endif %}</p>
+      <div class="chip-row">
+        {% for t in top_tool_chips %}<span class="chip chip-neutral">{{ t }}</span>{% endfor %}
+        {% if more_tool_chips %}<span class="chip">+{{ more_tool_chips }}</span>{% endif %}
+      </div>
+      <span class="tile-link">Manage tools →</span>
+    </a>
+    <a class="card tile" href="{{ base }}&tab=subagents">
+      <div class="tile-head"><span class="eyebrow">Sub-agents</span></div>
+      {% if sub_selected %}
+      <p class="tile-body">Hands work to {% for s in sub_selected[:4] %}<strong>{{ s.label }}</strong>{% if not loop.last %}, {% endif %}{% endfor %}{% if sub_selected|length > 4 %} and {{ sub_selected|length - 4 }} more{% endif %}.</p>
+      {% else %}
+      <p class="tile-body muted">Doesn't hand work to other agents.</p>
+      {% endif %}
+      <span class="tile-link">Manage sub-agents →</span>
+    </a>
+    {% if voice_summary %}
+    <a class="card tile" href="/admin/agents/{{ agent.id }}/voice?env={{ current_env }}">
+      <div class="tile-head"><span class="eyebrow">Voice</span>
+        <span class="tile-meta">{{ 'On' if voice_summary.enabled else 'Off' }}</span></div>
+      <p class="tile-body">Voice <strong>{{ voice_summary.voice }}</strong> · {{ voice_summary.language }}
+        {% if voice_summary.persona_served %}· callers hear persona v{{ voice_summary.persona_served }}{% endif %}
+        {% if voice_summary.owner_name %}<br><span class="caption">Configured on {{ voice_summary.owner_name }}</span>{% endif %}</p>
+      <span class="tile-link">Voice settings →</span>
+    </a>
+    {% else %}
+    <a class="card tile" href="{{ base }}&tab=versions">
+      <div class="tile-head"><span class="eyebrow">Versions</span>
+        <span class="tile-meta">{% if served_version %}Serving v{{ served_version.version_number }}{% else %}Latest{% endif %}</span></div>
+      <p class="tile-body">{% if latest_version %}Last checkpoint v{{ latest_version.version_number }}{% if latest_version.notes %} — {{ latest_version.notes|truncate(60) }}{% endif %}{% else %}No saved checkpoints yet.{% endif %}</p>
+      <span class="tile-link">Version history →</span>
+    </a>
+    {% endif %}
+  </div>
+</section>
+
+<section class="section">
+  <h2>Health</h2>
+  <div class="health-strip">
+    <div class="health-item">
+      <span class="eyebrow">Last test run</span>
+      {% if last_e2e %}
+        <a href="/admin/e2e/runs/{{ last_e2e.run_id }}" class="row">
+        {% if last_e2e.status == 'passed' %}<span class="chip chip-ok"><span class="chip-dot"></span>Passed</span>
+        {% elif last_e2e.status == 'failed' %}<span class="chip chip-err"><span class="chip-dot"></span>{{ last_e2e.fail_count or 0 }} failed</span>
+        {% elif last_e2e.status == 'errored' %}<span class="chip chip-err">Errored</span>
+        {% else %}<span class="chip chip-neutral">{{ last_e2e.status|capitalize }}</span>{% endif %}
+        <span class="caption">{{ (last_e2e.created_at or '')[:16]|replace('T', ' ') }}</span></a>
+      {% else %}
+        <span class="caption">Not run yet</span>
+      {% endif %}
+    </div>
+    <div class="health-item">
+      <span class="eyebrow">Conversations</span>
+      <a href="/admin/observability?agent_kind={{ agent.kind }}&hours=168">Last 7 days →</a>
+    </div>
+    <div class="health-item">
+      <span class="eyebrow">Serving</span>
+      <span>{% if served_version %}Version {{ served_version.version_number }} (pinned){% else %}Latest saved setup{% endif %}</span>
+    </div>
+    <div class="health-item health-action">
+      {% if active_profile.endpoint_path %}
+      <form method="post" action="/admin/agents/{{ agent.id }}/e2e/run?env={{ current_env }}" data-ajax-action>
+        <button type="submit" title="Run this agent's scenario checks against its channel">Run test now</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% if e2e_runs and e2e_runs|length > 1 %}
+  <details class="mt-s">
+    <summary class="caption">Earlier runs</summary>
+    <ul class="plain-list mt-xs">
+      {% for r in e2e_runs[1:5] %}{% if (r.environment or current_env) == current_env %}
+      <li><a href="/admin/e2e/runs/{{ r.run_id }}">{{ r.status|capitalize }}{% if r.status == 'failed' %} ({{ r.fail_count or 0 }}){% endif %}</a>
+        <span class="caption">{{ (r.created_at or '')[:16]|replace('T', ' ') }}</span></li>
+      {% endif %}{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</section>

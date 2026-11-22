@@ -1,0 +1,66 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import alert %}
+{% block title %}Channels · {{ brand().title }}{% endblock %}
+{% block page_title %}Channels{% endblock %}
+{% block page_subtitle %}Where your agents are available — apps, websites and APIs.{% endblock %}
+{% block content %}
+
+{% if cors_dirty %}
+<div data-cors-dirty-banner style="margin-bottom:var(--space-m);">
+  {% call alert('warning') %}
+    <strong>CORS allow-list is stale.</strong>
+    Channels were edited since the agent service last started. Restart the agent
+    process to pick up the new <code>allowed_origins</code> — until then,
+    browsers hitting the newly-added origins will be blocked by the static
+    <code>CORSMiddleware</code> snapshot taken at boot.
+    <form method="post" action="/admin/channels/cors-dirty/clear" style="margin:var(--space-xs) 0 0;">
+      <button type="submit" class="ghost">Mark as fixed</button>
+    </form>
+  {% endcall %}
+</div>
+{% endif %}
+
+<div class="page-head">
+  <form method="get" action="/admin/channels" class="filter-row mb-0">
+    <label class="row" style="gap:var(--space-xs);">
+      <span class="caption">Type</span>
+      <select name="kind" onchange="this.form.submit()">
+        <option value="">All types</option>
+        {% for k in channel_kinds %}<option value="{{ k }}" {% if kind_filter == k %}selected{% endif %}>{{ channel_kind_label(k) }}</option>{% endfor %}
+      </select>
+    </label>
+    <noscript><button type="submit">Filter</button></noscript>
+  </form>
+  <div class="page-head-actions"><a class="btn primary" href="/admin/channels/new">＋ New channel</a></div>
+</div>
+
+<section class="section">
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr>
+        <th>Name</th><th>Type</th><th>Answered by</th><th>Sign-in</th><th class="num">Websites</th><th>Status</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><div class="name-cell">
+            <a href="/admin/channels/{{ r.channel_id }}">{{ r.name }}</a>
+            <span class="technical">{{ r.slug }}</span></div></td>
+          <td>{{ channel_kind_label(r.kind) }}</td>
+          <td class="caption">{% if r.default_profile_id %}{{ profile_names.get(r.default_profile_id) or 'Unknown agent' }}{% else %}<span class="muted">Chosen per request</span>{% endif %}</td>
+          <td>{{ chip('Required' if r.auth_required else 'Open', variant='neutral' if r.auth_required else 'warn') }}</td>
+          <td class="num caption">{{ (r.allowed_origins or [])|length or '—' }}</td>
+          <td>{% if r.is_active %}{{ chip('Active', variant='ok', dot=True) }}{% else %}{{ chip('Off', variant='warn', dot=True) }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No channels{% if kind_filter %} of this type{% endif %} yet.</div>
+  {% endif %}
+</section>
+
+{% endblock %}

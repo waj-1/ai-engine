@@ -1,0 +1,91 @@
+{% extends "_base.html" %}
+{% block title %}Connect a server · {{ brand().title }}{% endblock %}
+{% block page_title %}Connect a server{% endblock %}
+{% block page_subtitle %}Let your agents use the tools of an external MCP server.{% endblock %}
+{% block head %}
+<script defer src="/admin/static/mcp-discover.js?v={{ asset_version }}"></script>
+{% endblock %}
+{% block content %}
+<a class="back-link" href="/admin/tools">&larr; Tools &amp; integrations</a>
+
+{% if error %}
+<div class="alert alert-warning mb-m">{{ error }}</div>
+{% endif %}
+
+{# One form, three steps. Discover (step 2) runs before Connect (step 3) so a
+   wrong address or token shows up before anything is saved. POST contract
+   unchanged: name, endpoint, transport, auth_env_var, tool_subset,
+   context_fields. #}
+<form method="post" action="/admin/mcp/connect" class="form-stack">
+
+  <section class="section">
+    <h2>1. Server address</h2>
+    <div class="form-stack">
+      <label class="field">
+        <span class="field-label">Name</span>
+        <input type="text" name="name" required placeholder="e.g. Order system" value="{{ form.name or '' }}">
+      </label>
+      <label class="field">
+        <span class="field-label">Server address (URL)</span>
+        <input type="text" name="endpoint" required placeholder="https://mcp.example.com/mcp" value="{{ form.endpoint or '' }}">
+        <span class="field-help">The full web address of the MCP server, starting with https://.</span>
+      </label>
+      <label class="field">
+        <span class="field-label">Access token <span class="opt">(optional)</span></span>
+        <input type="text" name="auth_env_var" placeholder="e.g. ORDERS_MCP_TOKEN" value="{{ form.auth_env_var or '' }}" autocomplete="off" spellcheck="false">
+        <span class="field-help">
+          If the server needs a token, don't paste the token here. Enter the <strong>name</strong> of the
+          secret that holds it on the engine; the engine sends its value with every call, and the token itself
+          is never stored in this page.
+          {% if partner_build() %}Ask your WAJ contact to add the secret for you.
+          {% else %}Add or check secrets in <a href="/admin/env?tab=vars">Settings › Environment variables</a>.{% endif %}
+          Leave blank if the server needs no token.
+        </span>
+      </label>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>2. Check the connection</h2>
+    <span class="caption">Asks the server for its list of tools. Nothing is saved yet.</span>
+    <div class="mt-s">
+      <button type="button" data-mcp-discover>Discover tools</button>
+    </div>
+    <div data-discover-result class="mt-s"></div>
+  </section>
+
+  <section class="section">
+    <h2>3. Choose tools and connect</h2>
+    <label class="field">
+      <span class="field-label">Tools to allow</span>
+      <input type="text" name="tool_subset" placeholder="Leave blank to allow every tool" value="{{ form.tool_subset or '' }}">
+      <span class="field-help">Filled in from step 2 — untick tools there, or type names separated by commas.</span>
+    </label>
+
+    <details class="advanced">
+      <summary>Advanced</summary>
+      <div class="form-stack">
+        <label class="field">
+          <span class="field-label">Connection type</span>
+          <select name="transport">
+            {% for opt in transport_options %}
+              <option value="{{ opt }}" {% if (form.transport or 'http') == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+          <span class="field-help">Leave on <code>http</code> unless the server's documentation says otherwise.</span>
+        </label>
+        <label class="field">
+          <span class="field-label">Context fields (JSON)</span>
+          <textarea name="context_fields" rows="4" class="code-block">{{ form.context_fields or '{}' }}</textarea>
+          <span class="field-help">Values the engine fills in on every call instead of the agent, e.g. <code>{"token": "$ctx.user_token"}</code>.</span>
+        </label>
+      </div>
+    </details>
+
+    <div class="form-actions">
+      <button type="submit" class="primary">Connect server</button>
+      <a class="btn ghost" href="/admin/tools">Cancel</a>
+    </div>
+  </section>
+</form>
+{% endblock %}

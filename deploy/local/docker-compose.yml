@@ -1,0 +1,100 @@
+# A generic local stack for the engine: one Postgres (with pgvector), the REST
+# layer the engine's data client speaks, the auth service the admin login uses,
+# and a gateway that puts them behind one URL. No client, no tenant.
+#
+#   python deploy/local/gen_env.py           # once: writes deploy/local/.env with fresh secrets
+#   docker compose -f deploy/local/docker-compose.yml up -d
+#   python deploy/local/init_db.py           # migrations, db-functions, admin user
+#   set -a; . deploy/local/.env; set +a; python main.py
+#
+# The engine reads BOTH its databases (SUPABASE_* and AI_SUPABASE_*) from this
+# one stack. Nothing here is committed as a secret: gen_env.py makes the JWT
+# secret, both tokens and the passwords on your machine.
+name: engine-local
+
+services:
+  db:
+    image: ghcr.io/supabase/postgres:15.8.1.060
+    ports:
+      - "127.0.0.1:${DB_PORT:-54432}:5432"
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PORT: "5432"
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXP: "3600"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    command: ["postgres", "-c", "listen_addresses=*"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -h 127.0.0.1"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  rest:
+    image: postgrest/postgrest:v12.2.3
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+
+  auth:
+    image: ghcr.io/supabase/gotrue:v2.158.1
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      API_EXTERNAL_URL: http://localhost:${GATEWAY_PORT:-54421}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres?search_path=auth
+      GOTRUE_SITE_URL: http://localhost:8000
+      GOTRUE_URI_ALLOW_LIST: "*"
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+
+  gateway:
+    image: kong:2.8.1
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-54421}:8000"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+    volumes:
+      - ./kong.yml:/home/kong/temp.yml:ro
+    entrypoint:
+      - bash
+      - -c
+      - >
+        sed -e "s|__ANON_KEY__|$$SUPABASE_ANON_KEY|g"
+        -e "s|__SERVICE_ROLE_KEY__|$$SUPABASE_SERVICE_KEY|g"
+        /home/kong/temp.yml > /home/kong/kong.yml
+        && exec /docker-entrypoint.sh kong docker-start
+    depends_on:
+      - rest
+      - auth
+
+volumes:
+  pg-data:

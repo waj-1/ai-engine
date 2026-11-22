@@ -1,0 +1,96 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/status_chip.html" import run_status %}
+{% block title %}E2E run · {{ brand().title }}{% endblock %}
+{% block page_title %}E2E run {{ run.run_id[:8] }}{% endblock %}
+{% block page_subtitle %}{{ run.environment|upper }} · {{ (run.created_at or '')[:19] }}{% endblock %}
+{% block content %}
+
+<div style="display:grid;grid-template-columns:1fr 320px;gap:var(--space-m);">
+
+  <div style="display:flex;flex-direction:column;gap:var(--space-m);">
+    <section class="card">
+      <div style="display:flex;gap:var(--space-s);flex-wrap:wrap;">
+        {{ run_status(run.status) }}
+        {{ chip((run.pass_count or 0) ~ ' passed', variant='ok') }}
+        {{ chip((run.fail_count or 0) ~ ' failed', variant='err' if (run.fail_count or 0) else 'neutral') }}
+        {% if run.score is not none %}{{ chip('score ' ~ run.score, variant='brand') }}{% endif %}
+      </div>
+      {% if run.error %}
+      <p style="color:var(--error);margin-top:var(--space-s);"><strong>Error:</strong> {{ run.error }}</p>
+      {% endif %}
+      {# Cancel control mirrors the eval-run page — only renders while
+         the run is still in flight and the GET handler resolved a
+         matching admin_jobs row. POSTs to the jobs cancel endpoint;
+         the E2E worker polls is_cancelled() between scenarios. #}
+      {% if run.status == 'running' and cancel_job_id %}
+      <form method="post" action="/admin/jobs/{{ cancel_job_id }}/cancel"
+            style="margin-top:var(--space-s);">
+        <button type="submit" class="danger"
+                onclick="return confirm('Cancel this E2E run? Already-completed scenarios are preserved.');">
+          Cancel run
+        </button>
+      </form>
+      {% endif %}
+    </section>
+
+    {% if run.results %}
+    <section class="card">
+      <h2>Scenario results ({{ run.results|length }})</h2>
+      {% for r in run.results %}
+      <details style="margin-bottom:var(--space-s);">
+        <summary>
+          {{ run_status('passed' if r.passed else 'failed', dot=False) }}
+          <code>{{ r.id or 'unnamed' }}</code>
+          <span class="caption num">· HTTP {{ r.http_status }} · {{ r.latency_ms }}ms</span>
+        </summary>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-s);margin-top:var(--space-xs);">
+          <div>
+            <div class="eyebrow">question</div>
+            <pre class="num" style="font-size:11px;background:var(--surface-sunken);padding:var(--space-s);border-radius:6px;overflow:auto;max-height:240px;">{{ r.question or '—' }}</pre>
+          </div>
+          <div>
+            <div class="eyebrow">response preview</div>
+            <pre class="num" style="font-size:11px;background:var(--surface-sunken);padding:var(--space-s);border-radius:6px;overflow:auto;max-height:240px;">{{ r.body_preview or '—' }}</pre>
+          </div>
+        </div>
+        {% if r.judge %}
+        <div style="margin-top:var(--space-s);padding:var(--space-s);background:var(--surface-sunken);border-radius:6px;">
+          <div class="eyebrow" style="display:flex;gap:var(--space-xs);align-items:center;">
+            judge verdict
+            {{ run_status('passed' if r.judge.pass else 'failed', dot=False) }}
+            <span class="num caption">score {{ r.judge.score }}</span>
+          </div>
+          <p class="caption" style="margin-top:var(--space-xs);">{{ r.judge.rationale or '—' }}</p>
+        </div>
+        {% endif %}
+      </details>
+      {% endfor %}
+    </section>
+    {% endif %}
+  </div>
+
+  <aside style="display:flex;flex-direction:column;gap:var(--space-m);">
+    <div class="card">
+      <div class="eyebrow">Profile</div>
+      <p class="num caption">{{ run.profile_id }}</p>
+    </div>
+    <div class="card">
+      <div class="eyebrow">Environment</div>
+      <p>{{ chip(run.environment, variant='brand') }}</p>
+    </div>
+    <div class="card">
+      <div class="eyebrow">Started</div>
+      <p class="num caption">{{ (run.started_at or '')[:19] }}</p>
+    </div>
+    <div class="card">
+      <div class="eyebrow">Finished</div>
+      <p class="num caption">{{ (run.finished_at or '')[:19] }}</p>
+    </div>
+    <div class="card">
+      <a href="/admin/agents?env={{ run.environment }}">← Back to Agents</a>
+    </div>
+  </aside>
+
+</div>
+{% endblock %}

@@ -1,0 +1,203 @@
+{% extends "_base.html" %}
+{% from "_components/business_picker.html" import business_picker %}
+{% from "_components/callout.html" import alert, hint, hint_text %}
+{% block title %}
+  {% if channel %}{{ channel.name }} · Channels{% else %}New channel · Channels{% endif %}
+{% endblock %}
+{% block page_title %}
+  {% if channel %}{{ channel.name }}{% else %}New channel{% endif %}
+{% endblock %}
+{% block page_subtitle %}
+  {% if channel %}{{ channel_kind_label(channel.kind) }}{% else %}Make an agent available in an app, website or API.{% endif %}
+{% endblock %}
+
+{% block content %}
+<a class="back-link" href="/admin/channels">&larr; Channels</a>
+
+{% if error %}
+{% call alert('error') %}<strong>Could not save:</strong> {{ error }}{% endcall %}
+{% endif %}
+
+<div class="{% if channel %}detail-layout{% endif %}">
+<div>
+<form method="post"
+      action="{% if channel %}/admin/channels/{{ channel.channel_id }}{% else %}/admin/channels{% endif %}"
+      class="form-stack">
+
+  <section class="section">
+    <h2>Basics</h2>
+    <div class="form-stack">
+      <div class="form-grid">
+        <label class="field">
+          <span class="field-label">Name</span>
+          <input type="text" name="name" required value="{{ form.name or '' }}" placeholder="WAJ App">
+        </label>
+        <label class="field">
+          <span class="field-label">Short code name</span>
+          <input type="text" name="slug" required pattern="^[a-z][a-z0-9_-]{1,62}$" value="{{ form.slug or '' }}" placeholder="waj_app">
+          <span class="field-help">Lowercase, 2–63 characters. Apps send this to say which channel they are.</span>
+        </label>
+      </div>
+      <fieldset class="field-set">
+        <legend>Type</legend>
+        <div class="check-grid">
+          {% for k in channel_kinds %}
+            <label class="field-check">
+              <input type="radio" name="kind" value="{{ k }}" {% if (form.kind or default_channel_kind) == k %}checked{% endif %} data-channel-kind-radio>
+              {{ channel_kind_label(k) }}
+            </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      <div id="business-field" class="field"
+           style="display: {% if (form.kind or '') in tenant_kinds %}flex{% else %}none{% endif %};">
+        <span class="field-label">Business</span>
+        {{ business_picker(
+            name="business_id",
+            businesses=businesses,
+            selected_id=form.business_id or "",
+            required=False,
+            placeholder="— select a business —",
+            id_attr="channel-business-picker",
+            style="width:100%"
+        ) }}
+        <span class="field-help">Required for a business website: the site belongs to this business.</span>
+      </div>
+      <label class="field">
+        <span class="field-label">Description <span class="opt">(optional)</span></span>
+        <textarea name="description" rows="2" placeholder="Marketing site. Only the support agent is available here.">{{ form.description or '' }}</textarea>
+      </label>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Answered by</h2>
+    <div class="form-stack">
+      <label class="field">
+        <span class="field-label">Agent</span>
+        <select name="default_profile_id">
+          <option value="" {% if not form.default_profile_id %}selected{% endif %}>Chosen by each request</option>
+          {% set _grouped = {} %}
+          {% for p in profiles %}
+            {% set _ = _grouped.setdefault(p.agent_kind, []).append(p) %}
+          {% endfor %}
+          {% for kind, plist in _grouped.items() %}
+            <optgroup label="{{ agent_label(kind) }}">
+              {% for p in plist %}
+                <option value="{{ p.profile_id }}" {% if form.default_profile_id == p.profile_id %}selected{% endif %}>
+                  {{ p.display_name or p.slug }} ({{ p.environment }}{% if not p.is_active %} · off{% endif %})
+                </option>
+              {% endfor %}
+            </optgroup>
+          {% endfor %}
+        </select>
+        <span class="field-help">The agent that answers when a request doesn't name one.</span>
+      </label>
+      <fieldset class="field-set">
+        <legend>Agents allowed on this channel</legend>
+        {% set _selected = (form.allowed_agent_kinds or []) %}
+        <div class="check-grid">
+          {% for k in agent_kinds %}
+            <label class="field-check">
+              <input type="checkbox" name="allowed_agent_kinds" value="{{ k }}" {% if k in _selected %}checked{% endif %}>
+              {{ agent_label(k) }}
+            </label>
+          {% endfor %}
+          {% for k in _selected %}{% if k not in agent_kinds %}
+            <label class="field-check"><input type="checkbox" name="allowed_agent_kinds" value="{{ k }}" checked> {{ agent_label(k) }}</label>
+          {% endif %}{% endfor %}
+        </div>
+        <span class="field-help">Leave all unticked to allow every agent.</span>
+      </fieldset>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Access</h2>
+    <div class="form-stack">
+      <label class="field">
+        <span class="field-label">Allowed websites</span>
+        <textarea name="allowed_origins" rows="3" placeholder="https://app.company.example&#10;https://staging.app.company.example" style="font-family:var(--font-mono);">{% if form.allowed_origins is iterable and form.allowed_origins is not string %}{{ form.allowed_origins|join('\n') }}{% else %}{{ form.allowed_origins or '' }}{% endif %}</textarea>
+        <span class="field-help">One website address per line, like <code>https://app.example.com</code> (no trailing slash). Leave empty for server-to-server use.</span>
+      </label>
+      <label class="field-check">
+        <input type="checkbox" name="auth_required" {% if form.auth_required or form.auth_required is not defined %}checked{% endif %}>
+        <span>Require sign-in <span class="field-help">Reject requests from people who aren't signed in.</span></span>
+      </label>
+      <label class="field">
+        <span class="field-label">Requests per minute</span>
+        <input type="number" name="rate_limit_rpm" min="1" max="3600" step="1" value="{{ form.rate_limit_rpm or 60 }}" style="max-width:200px;">
+        <span class="field-help">Between 1 and 3,600.</span>
+      </label>
+      <label class="field-check">
+        <input type="checkbox" name="is_active" {% if form.is_active or form.is_active is not defined %}checked{% endif %}>
+        <span>Active <span class="field-help">Turn off to stop this channel accepting requests.</span></span>
+      </label>
+    </div>
+  </section>
+
+  <details class="advanced">
+    <summary>Advanced</summary>
+    <label class="field">
+      <span class="field-label">Configuration (JSON)</span>
+      <textarea name="config" rows="6" class="code-block"
+                placeholder='{ "branding": { "primary": "#0ea5a5", "logo_url": "https://..." } }'
+      >{% if form.config %}{% if form.config is mapping %}{{ form.config | pretty_json }}{% else %}{{ form.config }}{% endif %}{% endif %}</textarea>
+      <span class="field-help">Branding, feature flags and other settings, as a JSON object.</span>
+    </label>
+  </details>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">{% if channel %}Save changes{% else %}Create channel{% endif %}</button>
+    <a href="/admin/channels" class="btn ghost">Cancel</a>
+  </div>
+</form>
+
+{% if channel %}
+<section class="section danger-zone">
+  <h2>Danger zone</h2>
+  <p class="caption">Turns the channel off for good. Its history is kept, because conversation records refer to it.</p>
+  <form method="post" action="/admin/channels/{{ channel.channel_id }}/delete"
+        onsubmit="return confirm('Remove channel {{ channel.name|e }}? It will stop accepting requests; its history is kept.');">
+    <button type="submit" class="btn danger">Remove this channel</button>
+  </form>
+</section>
+{% endif %}
+</div>
+
+{% if channel %}
+<aside class="card">
+  <h2>Details</h2>
+  <dl class="kv">
+    <dt>Status</dt><dd>{% if channel.is_active %}<span class="chip chip-ok">Active</span>{% else %}<span class="chip chip-warn">Off</span>{% endif %}</dd>
+    <dt>Type</dt><dd>{{ channel_kind_label(channel.kind) }}</dd>
+    <dt>Sign-in</dt><dd>{{ 'Required' if channel.auth_required else 'Not required' }}</dd>
+    <dt>Websites</dt><dd class="num">{{ (channel.allowed_origins or [])|length }}</dd>
+    {% if channel.updated_at %}<dt>Updated</dt><dd class="num">{{ channel.updated_at[:10] }}</dd>{% endif %}
+    <dt>Code name</dt><dd><span class="technical">{{ channel.slug }}</span></dd>
+    <dt>ID</dt><dd><span class="technical">{{ channel.channel_id }}</span></dd>
+  </dl>
+</aside>
+{% endif %}
+</div>
+
+<script>
+  // Hide / show the business picker as the channel kind changes. Inline because
+  // this is the only screen that uses the toggle and the rest of the portal is
+  // server-rendered Jinja + tiny vanilla helpers like this.
+  (function () {
+    const TENANT_KINDS = {{ tenant_kinds | tojson }};
+    const businessField = document.getElementById("business-field");
+    const radios = document.querySelectorAll("input[data-channel-kind-radio]");
+    function sync() {
+      const checked = Array.from(radios).find(r => r.checked);
+      const kind = checked ? checked.value : null;
+      if (!businessField) return;
+      businessField.style.display = TENANT_KINDS.includes(kind) ? "flex" : "none";
+    }
+    radios.forEach(r => r.addEventListener("change", sync));
+    sync();
+  })();
+</script>
+
+{% endblock %}

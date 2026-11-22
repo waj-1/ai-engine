@@ -1,0 +1,1762 @@
+{
+ "data_note": {
+  "en": "Every person, account, number and amount here is fictional test data.",
+  "ar": "كل الأشخاص والحسابات والأرقام والمبالغ هنا بيانات تجريبية وهمية."
+ },
+ "customers": {
+  "41203317": {
+   "account_number": "41203317",
+   "name_en": "Layla Haddad",
+   "name_ar": "ليلى حداد",
+   "first_en": "Layla",
+   "first_ar": "ليلى",
+   "gender": "f",
+   "country": "AE",
+   "area_id": "dxb-jvc",
+   "mobile": "0501240317",
+   "email_masked": "l•••@mail.example",
+   "dob": "1991-03-14",
+   "id_last4": "5521",
+   "status": "active",
+   "authorized_users": [],
+   "contract": {
+    "plan": "home_fiber_500",
+    "months": 24,
+    "started": "2025-06-01",
+    "remaining_months": 20
+   },
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_500",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    },
+    {
+     "type": "mobile",
+     "plan": "mobile_plus",
+     "number": "0501240317",
+     "sim": "physical"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-08",
+     "amount": 528,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 349
+      },
+      {
+       "label_en": "Mobile Plus monthly fee",
+       "label_ar": "رسوم جوال بلس الشهرية",
+       "amount": 179
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-51007",
+       "amount": 528,
+       "date": "2026-08-19",
+       "method_en": "card ending 4410",
+       "method_ar": "البطاقة المنتهية بـ 4410"
+      }
+     ]
+    },
+    {
+     "month": "2026-09",
+     "amount": 528,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 349
+      },
+      {
+       "label_en": "Mobile Plus monthly fee",
+       "label_ar": "رسوم جوال بلس الشهرية",
+       "amount": 179
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-53318",
+       "amount": 528,
+       "date": "2026-09-18",
+       "method_en": "card ending 4410",
+       "method_ar": "البطاقة المنتهية بـ 4410"
+      }
+     ]
+    }
+   ],
+   "diagnostics": {
+    "verdict": "wifi_congestion",
+    "line_en": "Fiber line healthy — 500 Mbps reaching the router.",
+    "line_ar": "خط الفايبر سليم — 500 ميغابت توصل للراوتر.",
+    "wifi_en": "23 devices connected, most on the crowded 2.4 GHz band; router has not restarted in 64 days; living-room devices get about 35 Mbps.",
+    "wifi_ar": "23 جهاز متصل وأغلبها على نطاق 2.4 غيغاهيرتز المزدحم؛ الراوتر ما انعاد تشغيله من 64 يوم؛ أجهزة الصالة توصلها حوالي 35 ميغابت.",
+    "fix_en": "Restart the router, move streaming devices to the 5 GHz network, and keep the router out of cabinets; a mesh unit helps if far rooms stay weak.",
+    "fix_ar": "إعادة تشغيل الراوتر، نقل أجهزة البث لشبكة 5 غيغاهيرتز، وإبعاد الراوتر عن الخزائن؛ وجهاز ميش يساعد إذا ظلت الغرف البعيدة ضعيفة.",
+    "needs_technician": false
+   },
+   "tickets": []
+  },
+  "41207749": {
+   "account_number": "41207749",
+   "name_en": "Omar Al Mansoori",
+   "name_ar": "عمر المنصوري",
+   "first_en": "Omar",
+   "first_ar": "عمر",
+   "gender": "m",
+   "country": "AE",
+   "area_id": "dxb-barsha",
+   "mobile": "0502207749",
+   "email_masked": "o•••@mail.example",
+   "dob": "1985-11-02",
+   "id_last4": "7310",
+   "status": "active",
+   "authorized_users": [],
+   "contract": {
+    "plan": "home_fiber_300",
+    "months": 12,
+    "started": "2026-01-01",
+    "remaining_months": 3
+   },
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_300",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 289,
+     "items": [
+      {
+       "label_en": "Home Fiber 300 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 300 الشهرية",
+       "amount": 289
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-53402",
+       "amount": 289,
+       "date": "2026-09-12",
+       "method_en": "app — card ending 1187",
+       "method_ar": "التطبيق — البطاقة المنتهية بـ 1187"
+      }
+     ]
+    }
+   ],
+   "diagnostics": {
+    "verdict": "outage",
+    "outage_id": "OUT-4471",
+    "line_en": "No fiber signal — this line is inside the Al Barsha outage area.",
+    "line_ar": "ما فيه إشارة فايبر — الخط داخل منطقة انقطاع البرشاء.",
+    "needs_technician": false
+   },
+   "tickets": []
+  },
+  "71304412": {
+   "account_number": "71304412",
+   "name_en": "Nora Al Qahtani",
+   "name_ar": "نورة القحطاني",
+   "first_en": "Nora",
+   "first_ar": "نورة",
+   "gender": "f",
+   "country": "SA",
+   "area_id": "ruh-malqa",
+   "mobile": "0553304412",
+   "email_masked": "n•••@mail.example",
+   "dob": "1993-07-21",
+   "id_last4": "1187",
+   "status": "active",
+   "authorized_users": [],
+   "contract": {
+    "plan": "home_fiber_500",
+    "months": 24,
+    "started": "2025-03-01",
+    "remaining_months": 17
+   },
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_500",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    },
+    {
+     "type": "mobile",
+     "plan": "mobile_plus",
+     "number": "0553304412",
+     "sim": "physical"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-08",
+     "amount": 508,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 339
+      },
+      {
+       "label_en": "Mobile Plus monthly fee",
+       "label_ar": "رسوم جوال بلس الشهرية",
+       "amount": 169
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-71880",
+       "amount": 508,
+       "date": "2026-08-20",
+       "method_en": "card ending 6120",
+       "method_ar": "البطاقة المنتهية بـ 6120"
+      }
+     ]
+    },
+    {
+     "month": "2026-09",
+     "amount": 583,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 339
+      },
+      {
+       "label_en": "Mobile Plus monthly fee",
+       "label_ar": "رسوم جوال بلس الشهرية",
+       "amount": 169
+      },
+      {
+       "label_en": "Roaming day pass — Bahrain, 3 days (25 each)",
+       "label_ar": "باقة تجوال يومية — البحرين، 3 أيام (25 لكل يوم)",
+       "amount": 75
+      }
+     ],
+     "status": "issued",
+     "payments": [],
+     "due_date": "2026-10-20"
+    }
+   ],
+   "diagnostics": {
+    "verdict": "ok",
+    "line_en": "Line healthy.",
+    "line_ar": "الخط سليم.",
+    "needs_technician": false
+   },
+   "tickets": []
+  },
+  "41209908": {
+   "account_number": "41209908",
+   "name_en": "Khalid Bakr",
+   "name_ar": "خالد بكر",
+   "first_en": "Khalid",
+   "first_ar": "خالد",
+   "gender": "m",
+   "country": "AE",
+   "area_id": "shj-nahda",
+   "mobile": "0509909908",
+   "email_masked": "k•••@mail.example",
+   "dob": "1979-05-30",
+   "id_last4": "2290",
+   "status": "active",
+   "authorized_users": [],
+   "contract": {
+    "plan": "home_fiber_500",
+    "months": 12,
+    "started": "2026-04-01",
+    "remaining_months": 6
+   },
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_500",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-08",
+     "amount": 349,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 349
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-50121",
+       "amount": 349,
+       "date": "2026-08-15",
+       "method_en": "card ending 7731",
+       "method_ar": "البطاقة المنتهية بـ 7731"
+      }
+     ]
+    },
+    {
+     "month": "2026-09",
+     "amount": 349,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 349
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-55120",
+       "amount": 349,
+       "date": "2026-09-15",
+       "method_en": "card ending 7731",
+       "method_ar": "البطاقة المنتهية بـ 7731"
+      },
+      {
+       "ref": "PAY-55121",
+       "amount": 349,
+       "date": "2026-09-15",
+       "method_en": "card ending 7731",
+       "method_ar": "البطاقة المنتهية بـ 7731"
+      }
+     ]
+    }
+   ],
+   "diagnostics": {
+    "verdict": "ok",
+    "line_en": "Line healthy.",
+    "line_ar": "الخط سليم.",
+    "needs_technician": false
+   },
+   "tickets": [],
+   "duplicate_payment": {
+    "bill_month": "2026-09",
+    "amount": 349,
+    "refs": [
+     "PAY-55120",
+     "PAY-55121"
+    ]
+   }
+  },
+  "41211560": {
+   "account_number": "41211560",
+   "name_en": "Sara Youssef",
+   "name_ar": "سارة يوسف",
+   "first_en": "Sara",
+   "first_ar": "سارة",
+   "gender": "f",
+   "country": "AE",
+   "area_id": "auh-khalifa",
+   "mobile": "0521156060",
+   "email_masked": "s•••@mail.example",
+   "dob": "1995-01-09",
+   "id_last4": "6402",
+   "status": "active",
+   "authorized_users": [],
+   "contract": {
+    "plan": "home_fiber_1g",
+    "months": 12,
+    "started": "2026-02-01",
+    "remaining_months": 4,
+    "relocations_used_this_year": 0
+   },
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_1g",
+     "router_en": "Wi-Fi 6 router with 2 mesh units",
+     "router_ar": "راوتر واي فاي 6 مع جهازين ميش"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 449,
+     "items": [
+      {
+       "label_en": "Home Fiber 1 Gig monthly fee",
+       "label_ar": "رسوم فايبر المنزل 1 جيجا الشهرية",
+       "amount": 449
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-53990",
+       "amount": 449,
+       "date": "2026-09-10",
+       "method_en": "card ending 0932",
+       "method_ar": "البطاقة المنتهية بـ 0932"
+      }
+     ]
+    }
+   ],
+   "diagnostics": {
+    "verdict": "ok",
+    "line_en": "Line healthy.",
+    "line_ar": "الخط سليم.",
+    "needs_technician": false
+   },
+   "tickets": []
+  },
+  "71308821": {
+   "account_number": "71308821",
+   "name_en": "Ahmed Al Harbi",
+   "name_ar": "أحمد الحربي",
+   "first_en": "Ahmed",
+   "first_ar": "أحمد",
+   "gender": "m",
+   "country": "SA",
+   "area_id": "jed-rawdah",
+   "mobile": "0558821308",
+   "email_masked": "a•••@mail.example",
+   "dob": "1988-09-17",
+   "id_last4": "4459",
+   "status": "active",
+   "authorized_users": [],
+   "contract": {
+    "plan": "home_fiber_300",
+    "months": 24,
+    "started": "2025-10-01",
+    "remaining_months": 12
+   },
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_300",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 279,
+     "items": [
+      {
+       "label_en": "Home Fiber 300 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 300 الشهرية",
+       "amount": 279
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-72210",
+       "amount": 279,
+       "date": "2026-09-16",
+       "method_en": "bank transfer",
+       "method_ar": "تحويل بنكي"
+      }
+     ]
+    }
+   ],
+   "diagnostics": {
+    "verdict": "no_sync",
+    "line_en": "Fiber signal lost at the home fiber box (red LOS light); the network side of the line is healthy, so the fault is between the street and the home box.",
+    "line_ar": "إشارة الفايبر مفقودة عند صندوق الفايبر في البيت (لمبة LOS حمراء)؛ جهة الشبكة سليمة، فالعطل بين الشارع وصندوق البيت.",
+    "needs_technician": true,
+    "visit_charge": false
+   },
+   "tickets": []
+  },
+  "41215532": {
+   "account_number": "41215532",
+   "name_en": "Mariam Saleh",
+   "name_ar": "مريم صالح",
+   "first_en": "Mariam",
+   "first_ar": "مريم",
+   "gender": "f",
+   "country": "AE",
+   "area_id": "dxb-marina",
+   "mobile": "0505532155",
+   "email_masked": "m•••@mail.example",
+   "dob": "1998-12-03",
+   "id_last4": "9034",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "mobile",
+     "plan": "mobile_unlimited",
+     "number": "0505532155",
+     "sim": "physical",
+     "phone_en": "new phone bought this week",
+     "phone_ar": "جوال جديد اشترته هالأسبوع"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 299,
+     "items": [
+      {
+       "label_en": "Mobile Unlimited monthly fee",
+       "label_ar": "رسوم جوال غير محدود الشهرية",
+       "amount": 299
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-54471",
+       "amount": 299,
+       "date": "2026-09-21",
+       "method_en": "card ending 2218",
+       "method_ar": "البطاقة المنتهية بـ 2218"
+      }
+     ]
+    }
+   ],
+   "diagnostics": {
+    "verdict": "ok",
+    "line_en": "Mobile line active, physical SIM.",
+    "line_ar": "خط الجوال فعّال، شريحة عادية.",
+    "needs_technician": false
+   },
+   "tickets": [],
+   "sim_changes_this_year": 0
+  },
+  "71312075": {
+   "account_number": "71312075",
+   "name_en": "Faisal Al Dosari",
+   "name_ar": "فيصل الدوسري",
+   "first_en": "Faisal",
+   "first_ar": "فيصل",
+   "gender": "m",
+   "country": "SA",
+   "area_id": "ruh-olaya",
+   "mobile": "0551207531",
+   "email_masked": "f•••@mail.example",
+   "dob": "1983-04-26",
+   "id_last4": "3378",
+   "status": "active",
+   "authorized_users": [],
+   "contract": {
+    "plan": "home_fiber_500",
+    "months": 24,
+    "started": "2025-05-01",
+    "remaining_months": 7,
+    "pauses_used_this_year": 0
+   },
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_500",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 339,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 339
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-72877",
+       "amount": 339,
+       "date": "2026-09-11",
+       "method_en": "card ending 5003",
+       "method_ar": "البطاقة المنتهية بـ 5003"
+      }
+     ]
+    }
+   ],
+   "diagnostics": {
+    "verdict": "ok",
+    "line_en": "Line healthy.",
+    "line_ar": "الخط سليم.",
+    "needs_technician": false
+   },
+   "tickets": []
+  },
+  "41218840": {
+   "account_number": "41218840",
+   "name_en": "Huda Karim",
+   "name_ar": "هدى كريم",
+   "first_en": "Huda",
+   "first_ar": "هدى",
+   "gender": "f",
+   "country": "AE",
+   "area_id": "dxb-mirdif",
+   "mobile": "0508840218",
+   "email_masked": "h•••@mail.example",
+   "dob": "1987-06-11",
+   "id_last4": "5506",
+   "status": "active",
+   "authorized_users": [],
+   "contract": {
+    "plan": "home_fiber_1g",
+    "months": 24,
+    "started": "2025-08-01",
+    "remaining_months": 10
+   },
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_1g",
+     "router_en": "Wi-Fi 6 router (replaced 29 September) with 2 mesh units",
+     "router_ar": "راوتر واي فاي 6 (تم استبداله في 29 سبتمبر) مع جهازين ميش"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 449,
+     "items": [
+      {
+       "label_en": "Home Fiber 1 Gig monthly fee",
+       "label_ar": "رسوم فايبر المنزل 1 جيجا الشهرية",
+       "amount": 449
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-54012",
+       "amount": 449,
+       "date": "2026-09-09",
+       "method_en": "card ending 8820",
+       "method_ar": "البطاقة المنتهية بـ 8820"
+      }
+     ]
+    }
+   ],
+   "diagnostics": {
+    "verdict": "intermittent",
+    "line_en": "Line dropped 9 times in the last 7 days; the fiber signal level is fluctuating, which points to a cable or connector fault rather than the router.",
+    "line_ar": "الخط انقطع 9 مرات خلال آخر 7 أيام؛ مستوى إشارة الفايبر متذبذب، وهذا يدل على عطل في الكيبل أو الوصلة مو في الراوتر.",
+    "needs_technician": true,
+    "visit_charge": false
+   },
+   "tickets": [
+    {
+     "ref": "TCK-30211",
+     "date": "2026-09-29",
+     "summary_en": "Connection drops — router replaced.",
+     "summary_ar": "انقطاعات متكررة — تم استبدال الراوتر.",
+     "status": "closed"
+    },
+    {
+     "ref": "TCK-30388",
+     "date": "2026-10-03",
+     "summary_en": "Drops again — remote line reset.",
+     "summary_ar": "رجعت الانقطاعات — إعادة ضبط الخط عن بعد.",
+     "status": "closed"
+    }
+   ]
+  },
+  "71316604": {
+   "account_number": "71316604",
+   "name_en": "Mona Nasser",
+   "name_ar": "منى ناصر",
+   "first_en": "Mona",
+   "first_ar": "منى",
+   "gender": "f",
+   "country": "SA",
+   "area_id": "dmm-faisaliyah",
+   "mobile": "0556604316",
+   "email_masked": "m•••@mail.example",
+   "dob": "1956-02-28",
+   "id_last4": "8102",
+   "status": "active",
+   "authorized_users": [],
+   "contract": {
+    "plan": "home_fiber_300",
+    "months": 12,
+    "started": "2026-03-01",
+    "remaining_months": 5
+   },
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_300",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 279,
+     "items": [
+      {
+       "label_en": "Home Fiber 300 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 300 الشهرية",
+       "amount": 279
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-73015",
+       "amount": 279,
+       "date": "2026-09-14",
+       "method_en": "bank transfer",
+       "method_ar": "تحويل بنكي"
+      }
+     ]
+    }
+   ],
+   "diagnostics": {
+    "verdict": "ok",
+    "line_en": "Line healthy.",
+    "line_ar": "الخط سليم.",
+    "needs_technician": false
+   },
+   "tickets": []
+  },
+  "41220014": {
+   "account_number": "41220014",
+   "name_en": "Yousef Al Amiri",
+   "name_ar": "يوسف العامري",
+   "first_en": "Yousef",
+   "first_ar": "يوسف",
+   "gender": "m",
+   "country": "AE",
+   "area_id": "auh-khalifa",
+   "mobile": "0502001441",
+   "email_masked": "y•••@mail.example",
+   "dob": "1984-08-08",
+   "id_last4": "1450",
+   "status": "restricted",
+   "authorized_users": [],
+   "contract": {
+    "plan": "home_fiber_500",
+    "months": 24,
+    "started": "2025-09-01",
+    "remaining_months": 11
+   },
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_500",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-08",
+     "amount": 349,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 349
+      }
+     ],
+     "status": "unpaid",
+     "payments": [],
+     "due_date": "2026-08-21"
+    },
+    {
+     "month": "2026-09",
+     "amount": 374,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 349
+      },
+      {
+       "label_en": "Late payment fee",
+       "label_ar": "رسوم تأخير السداد",
+       "amount": 25
+      }
+     ],
+     "status": "unpaid",
+     "payments": [],
+     "due_date": "2026-09-21"
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "71320290": {
+   "account_number": "71320290",
+   "name_en": "Rana Haddad",
+   "name_ar": "رنا حداد",
+   "first_en": "Rana",
+   "first_ar": "رنا",
+   "gender": "f",
+   "country": "SA",
+   "area_id": "ruh-malqa",
+   "mobile": "0552029032",
+   "email_masked": "r•••@mail.example",
+   "dob": "1990-10-19",
+   "id_last4": "7765",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "mobile",
+     "plan": "mobile_unlimited",
+     "number": "0552029032",
+     "sim": "physical"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-08",
+     "amount": 289,
+     "items": [
+      {
+       "label_en": "Mobile Unlimited monthly fee",
+       "label_ar": "رسوم جوال غير محدود الشهرية",
+       "amount": 289
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-74410",
+       "amount": 289,
+       "date": "2026-09-28",
+       "method_en": "app — card ending 3321",
+       "method_ar": "التطبيق — البطاقة المنتهية بـ 3321"
+      }
+     ],
+     "due_date": "2026-08-21"
+    },
+    {
+     "month": "2026-09",
+     "amount": 314,
+     "items": [
+      {
+       "label_en": "Mobile Unlimited monthly fee",
+       "label_ar": "رسوم جوال غير محدود الشهرية",
+       "amount": 289
+      },
+      {
+       "label_en": "Late payment fee",
+       "label_ar": "رسوم تأخير السداد",
+       "amount": 25
+      }
+     ],
+     "status": "partial",
+     "payments": [
+      {
+       "ref": "PAY-74410",
+       "amount": 11,
+       "date": "2026-09-28",
+       "method_en": "app — card ending 3321",
+       "method_ar": "التطبيق — البطاقة المنتهية بـ 3321"
+      }
+     ],
+     "due_date": "2026-09-21"
+    }
+   ],
+   "diagnostics": null,
+   "tickets": [],
+   "payments_total_note": "One payment of 300 on 2026-09-28 (PAY-74410) split across the two bills."
+  },
+  "71322217": {
+   "account_number": "71322217",
+   "name_en": "Majed Al Shehri",
+   "name_ar": "ماجد الشهري",
+   "first_en": "Majed",
+   "first_ar": "ماجد",
+   "gender": "m",
+   "country": "SA",
+   "area_id": "jed-rawdah",
+   "mobile": "0552221707",
+   "email_masked": "m•••@mail.example",
+   "dob": "1981-01-25",
+   "id_last4": "3091",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_300",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 304,
+     "items": [
+      {
+       "label_en": "Home Fiber 300 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 300 الشهرية",
+       "amount": 279
+      },
+      {
+       "label_en": "Late payment fee",
+       "label_ar": "رسوم تأخير السداد",
+       "amount": 25
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-77812",
+       "amount": 304,
+       "date": "2026-10-05",
+       "method_en": "app — digital wallet",
+       "method_ar": "التطبيق — محفظة رقمية"
+      }
+     ],
+     "due_date": "2026-09-21"
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "41224458": {
+   "account_number": "41224458",
+   "name_en": "Dina Farouk",
+   "name_ar": "دينا فاروق",
+   "first_en": "Dina",
+   "first_ar": "دينا",
+   "gender": "f",
+   "country": "AE",
+   "area_id": "auh-reem",
+   "mobile": "0504458224",
+   "email_masked": "d•••@mail.example",
+   "dob": "1992-05-02",
+   "id_last4": "6618",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_1g",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 474,
+     "items": [
+      {
+       "label_en": "Home Fiber 1 Gig monthly fee",
+       "label_ar": "رسوم فايبر المنزل 1 جيجا الشهرية",
+       "amount": 449
+      },
+      {
+       "label_en": "Late payment fee",
+       "label_ar": "رسوم تأخير السداد",
+       "amount": 25
+      }
+     ],
+     "status": "unpaid",
+     "payments": [],
+     "due_date": "2026-09-21"
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "41226603": {
+   "account_number": "41226603",
+   "name_en": "Hassan Qureshi",
+   "name_ar": "حسن قريشي",
+   "first_en": "Hassan",
+   "first_ar": "حسن",
+   "gender": "m",
+   "country": "AE",
+   "area_id": "shj-nahda",
+   "mobile": "0506603226",
+   "email_masked": "h•••@mail.example",
+   "dob": "1986-03-30",
+   "id_last4": "2207",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "mobile",
+     "plan": "mobile_plus",
+     "number": "0506603226",
+     "sim": "physical"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 588,
+     "items": [
+      {
+       "label_en": "Mobile Plus monthly fee",
+       "label_ar": "رسوم جوال بلس الشهرية",
+       "amount": 179
+      },
+      {
+       "label_en": "Roaming data outside bundle — Oman, 4 to 9 September",
+       "label_ar": "بيانات تجوال خارج الباقة — عُمان، من 4 إلى 9 سبتمبر",
+       "amount": 384
+      },
+      {
+       "label_en": "Late payment fee",
+       "label_ar": "رسوم تأخير السداد",
+       "amount": 25
+      }
+     ],
+     "status": "unpaid",
+     "payments": [],
+     "due_date": "2026-09-21"
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "71328871": {
+   "account_number": "71328871",
+   "name_en": "Amal Al Zahrani",
+   "name_ar": "أمل الزهراني",
+   "first_en": "Amal",
+   "first_ar": "أمل",
+   "gender": "f",
+   "country": "SA",
+   "area_id": "dmm-faisaliyah",
+   "mobile": "0558871328",
+   "email_masked": "a•••@mail.example",
+   "dob": "1989-12-12",
+   "id_last4": "4420",
+   "status": "restricted",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_500",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    },
+    {
+     "type": "mobile",
+     "plan": "mobile_essential",
+     "number": "0558871328",
+     "sim": "physical"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-08",
+     "amount": 453,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 339
+      },
+      {
+       "label_en": "Mobile Essential monthly fee",
+       "label_ar": "رسوم جوال أساسي الشهرية",
+       "amount": 89
+      },
+      {
+       "label_en": "Late payment fee",
+       "label_ar": "رسوم تأخير السداد",
+       "amount": 25
+      }
+     ],
+     "status": "unpaid",
+     "payments": [],
+     "due_date": "2026-08-21"
+    },
+    {
+     "month": "2026-09",
+     "amount": 453,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 339
+      },
+      {
+       "label_en": "Mobile Essential monthly fee",
+       "label_ar": "رسوم جوال أساسي الشهرية",
+       "amount": 89
+      },
+      {
+       "label_en": "Late payment fee",
+       "label_ar": "رسوم تأخير السداد",
+       "amount": 25
+      }
+     ],
+     "status": "unpaid",
+     "payments": [],
+     "due_date": "2026-09-21"
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "41230076": {
+   "account_number": "41230076",
+   "name_en": "Bilal Rahman",
+   "name_ar": "بلال رحمن",
+   "first_en": "Bilal",
+   "first_ar": "بلال",
+   "gender": "m",
+   "country": "AE",
+   "area_id": "dxb-barsha",
+   "mobile": "0500076230",
+   "email_masked": "b•••@mail.example",
+   "dob": "1980-07-07",
+   "id_last4": "9981",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_500",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 374,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 349
+      },
+      {
+       "label_en": "Late payment fee",
+       "label_ar": "رسوم تأخير السداد",
+       "amount": 25
+      }
+     ],
+     "status": "unpaid",
+     "payments": [],
+     "due_date": "2026-09-21"
+    }
+   ],
+   "diagnostics": null,
+   "tickets": [],
+   "household_en": "Shares the home with his wife, Sana.",
+   "household_ar": "يسكن مع زوجته سناء."
+  },
+  "41232219": {
+   "account_number": "41232219",
+   "name_en": "Saeed Al Ketbi",
+   "name_ar": "سعيد الكتبي",
+   "first_en": "Saeed",
+   "first_ar": "سعيد",
+   "gender": "m",
+   "country": "AE",
+   "area_id": "dxb-mirdif",
+   "mobile": "0503221923",
+   "email_masked": "s•••@mail.example",
+   "dob": "1977-09-15",
+   "id_last4": "5150",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "mobile",
+     "plan": "mobile_unlimited",
+     "number": "0503221923",
+     "sim": "physical"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 324,
+     "items": [
+      {
+       "label_en": "Mobile Unlimited monthly fee",
+       "label_ar": "رسوم جوال غير محدود الشهرية",
+       "amount": 299
+      },
+      {
+       "label_en": "Late payment fee",
+       "label_ar": "رسوم تأخير السداد",
+       "amount": 25
+      }
+     ],
+     "status": "unpaid",
+     "payments": [],
+     "due_date": "2026-09-21"
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "71334450": {
+   "account_number": "71334450",
+   "name_en": "Lubna Al Otaibi",
+   "name_ar": "لبنى العتيبي",
+   "first_en": "Lubna",
+   "first_ar": "لبنى",
+   "gender": "f",
+   "country": "SA",
+   "area_id": "ruh-narjis",
+   "mobile": "0553445034",
+   "email_masked": "l•••@mail.example",
+   "dob": "1994-04-04",
+   "id_last4": "8811",
+   "status": "restricted",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_5g_wireless",
+     "router_en": "5G home router",
+     "router_ar": "راوتر 5G منزلي"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-08",
+     "amount": 239,
+     "items": [
+      {
+       "label_en": "Home 5G Wireless monthly fee",
+       "label_ar": "رسوم الإنترنت المنزلي اللاسلكي 5G الشهرية",
+       "amount": 239
+      }
+     ],
+     "status": "unpaid",
+     "payments": [],
+     "due_date": "2026-08-21"
+    },
+    {
+     "month": "2026-09",
+     "amount": 264,
+     "items": [
+      {
+       "label_en": "Home 5G Wireless monthly fee",
+       "label_ar": "رسوم الإنترنت المنزلي اللاسلكي 5G الشهرية",
+       "amount": 239
+      },
+      {
+       "label_en": "Late payment fee",
+       "label_ar": "رسوم تأخير السداد",
+       "amount": 25
+      }
+     ],
+     "status": "unpaid",
+     "payments": [],
+     "due_date": "2026-09-21"
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "41240031": {
+   "account_number": "41240031",
+   "name_en": "Karim Mansour",
+   "name_ar": "كريم منصور",
+   "first_en": "Karim",
+   "first_ar": "كريم",
+   "gender": "m",
+   "country": "AE",
+   "area_id": "dxb-marina",
+   "mobile": "0504003124",
+   "email_masked": "k•••@mail.example",
+   "dob": "1990-02-17",
+   "id_last4": "3349",
+   "status": "active",
+   "authorized_users": [],
+   "contract": {
+    "plan": "home_fiber_300",
+    "months": 12,
+    "started": "2025-10-01",
+    "remaining_months": 0
+   },
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_300",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 289,
+     "items": [
+      {
+       "label_en": "Home Fiber 300 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 300 الشهرية",
+       "amount": 289
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-55900",
+       "amount": 289,
+       "date": "2026-09-08",
+       "method_en": "card ending 6610",
+       "method_ar": "البطاقة المنتهية بـ 6610"
+      }
+     ]
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "41242287": {
+   "account_number": "41242287",
+   "name_en": "Fatima Al Suwaidi",
+   "name_ar": "فاطمة السويدي",
+   "first_en": "Fatima",
+   "first_ar": "فاطمة",
+   "gender": "f",
+   "country": "AE",
+   "area_id": "auh-khalifa",
+   "mobile": "0504228742",
+   "email_masked": "f•••@mail.example",
+   "dob": "1986-06-23",
+   "id_last4": "7712",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_500",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    },
+    {
+     "type": "mobile",
+     "plan": "mobile_plus",
+     "number": "0504228742",
+     "sim": "physical"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 528,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 349
+      },
+      {
+       "label_en": "Mobile Plus monthly fee",
+       "label_ar": "رسوم جوال بلس الشهرية",
+       "amount": 179
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-55933",
+       "amount": 528,
+       "date": "2026-09-07",
+       "method_en": "card ending 1902",
+       "method_ar": "البطاقة المنتهية بـ 1902"
+      }
+     ]
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "71344410": {
+   "account_number": "71344410",
+   "name_en": "Waleed Haddad",
+   "name_ar": "وليد حداد",
+   "first_en": "Waleed",
+   "first_ar": "وليد",
+   "gender": "m",
+   "country": "SA",
+   "area_id": "ruh-malqa",
+   "mobile": "0554441034",
+   "email_masked": "w•••@mail.example",
+   "dob": "1985-11-29",
+   "id_last4": "6050",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_500",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 339,
+     "items": [
+      {
+       "label_en": "Home Fiber 500 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 500 الشهرية",
+       "amount": 339
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-75102",
+       "amount": 339,
+       "date": "2026-09-05",
+       "method_en": "bank transfer",
+       "method_ar": "تحويل بنكي"
+      }
+     ]
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "71346623": {
+   "account_number": "71346623",
+   "name_en": "Reem Al Harthy",
+   "name_ar": "ريم الحارثي",
+   "first_en": "Reem",
+   "first_ar": "ريم",
+   "gender": "f",
+   "country": "SA",
+   "area_id": "jed-rawdah",
+   "mobile": "0554662346",
+   "email_masked": "r•••@mail.example",
+   "dob": "1993-08-01",
+   "id_last4": "2276",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "mobile",
+     "plan": "mobile_unlimited",
+     "number": "0554662346",
+     "sim": "physical",
+     "phone_en": "a 2021 phone",
+     "phone_ar": "جوال موديل 2021"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 289,
+     "items": [
+      {
+       "label_en": "Mobile Unlimited monthly fee",
+       "label_ar": "رسوم جوال غير محدود الشهرية",
+       "amount": 289
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-75230",
+       "amount": 289,
+       "date": "2026-09-03",
+       "method_en": "card ending 4471",
+       "method_ar": "البطاقة المنتهية بـ 4471"
+      }
+     ]
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "41248850": {
+   "account_number": "41248850",
+   "name_en": "Ziad Khoury",
+   "name_ar": "زياد خوري",
+   "first_en": "Ziad",
+   "first_ar": "زياد",
+   "gender": "m",
+   "country": "AE",
+   "area_id": "shj-nahda",
+   "mobile": "0504885048",
+   "email_masked": "z•••@mail.example",
+   "dob": "1975-12-20",
+   "id_last4": "1309",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_5g_wireless",
+     "router_en": "5G home router",
+     "router_ar": "راوتر 5G منزلي"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 249,
+     "items": [
+      {
+       "label_en": "Home 5G Wireless monthly fee",
+       "label_ar": "رسوم الإنترنت المنزلي اللاسلكي 5G الشهرية",
+       "amount": 249
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-56011",
+       "amount": 249,
+       "date": "2026-09-02",
+       "method_en": "card ending 0045",
+       "method_ar": "البطاقة المنتهية بـ 0045"
+      }
+     ]
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "71350078": {
+   "account_number": "71350078",
+   "name_en": "Noura Al Mutairi",
+   "name_ar": "نورة المطيري",
+   "first_en": "Noura",
+   "first_ar": "نورة",
+   "gender": "f",
+   "country": "SA",
+   "area_id": "dmm-faisaliyah",
+   "mobile": "0555007850",
+   "email_masked": "n•••@mail.example",
+   "dob": "1991-05-14",
+   "id_last4": "4903",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "mobile",
+     "plan": "mobile_essential",
+     "number": "0555007850",
+     "sim": "physical"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 164,
+     "items": [
+      {
+       "label_en": "Mobile Essential monthly fee",
+       "label_ar": "رسوم جوال أساسي الشهرية",
+       "amount": 89
+      },
+      {
+       "label_en": "Extra data top-ups, 3 times (10 GB each)",
+       "label_ar": "إضافات بيانات، 3 مرات (10 جيجابايت لكل مرة)",
+       "amount": 75
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-75388",
+       "amount": 164,
+       "date": "2026-09-19",
+       "method_en": "app — card ending 7730",
+       "method_ar": "التطبيق — البطاقة المنتهية بـ 7730"
+      }
+     ]
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "41252204": {
+   "account_number": "41252204",
+   "name_en": "Adel Hamdan",
+   "name_ar": "عادل حمدان",
+   "first_en": "Adel",
+   "first_ar": "عادل",
+   "gender": "m",
+   "country": "AE",
+   "area_id": "dxb-south",
+   "mobile": "0505220452",
+   "email_masked": "a•••@mail.example",
+   "dob": "1982-03-03",
+   "id_last4": "6677",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_5g_wireless",
+     "router_en": "5G home router",
+     "router_ar": "راوتر 5G منزلي"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 249,
+     "items": [
+      {
+       "label_en": "Home 5G Wireless monthly fee",
+       "label_ar": "رسوم الإنترنت المنزلي اللاسلكي 5G الشهرية",
+       "amount": 249
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-56120",
+       "amount": 249,
+       "date": "2026-09-04",
+       "method_en": "card ending 3398",
+       "method_ar": "البطاقة المنتهية بـ 3398"
+      }
+     ]
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "41254419": {
+   "account_number": "41254419",
+   "name_en": "Samira Aziz",
+   "name_ar": "سميرة عزيز",
+   "first_en": "Samira",
+   "first_ar": "سميرة",
+   "gender": "f",
+   "country": "AE",
+   "area_id": "auh-reem",
+   "mobile": "0505441954",
+   "email_masked": "s•••@mail.example",
+   "dob": "1989-09-09",
+   "id_last4": "2830",
+   "status": "active",
+   "authorized_users": [],
+   "contract": null,
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_1g",
+     "router_en": "Wi-Fi 6 router with 2 mesh units",
+     "router_ar": "راوتر واي فاي 6 مع جهازين ميش"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 449,
+     "items": [
+      {
+       "label_en": "Home Fiber 1 Gig monthly fee",
+       "label_ar": "رسوم فايبر المنزل 1 جيجا الشهرية",
+       "amount": 449
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-56177",
+       "amount": 449,
+       "date": "2026-09-06",
+       "method_en": "card ending 5560",
+       "method_ar": "البطاقة المنتهية بـ 5560"
+      }
+     ]
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  },
+  "71356632": {
+   "account_number": "71356632",
+   "name_en": "Bader Al Shammari",
+   "name_ar": "بدر الشمري",
+   "first_en": "Bader",
+   "first_ar": "بدر",
+   "gender": "m",
+   "country": "SA",
+   "area_id": "ruh-olaya",
+   "mobile": "0555663256",
+   "email_masked": "b•••@mail.example",
+   "dob": "1987-01-31",
+   "id_last4": "5594",
+   "status": "active",
+   "authorized_users": [],
+   "contract": {
+    "plan": "home_fiber_300",
+    "months": 12,
+    "started": "2025-11-01",
+    "remaining_months": 1
+   },
+   "services": [
+    {
+     "type": "home",
+     "plan": "home_fiber_300",
+     "router_en": "Wi-Fi 6 router",
+     "router_ar": "راوتر واي فاي 6"
+    }
+   ],
+   "bills": [
+    {
+     "month": "2026-09",
+     "amount": 279,
+     "items": [
+      {
+       "label_en": "Home Fiber 300 monthly fee",
+       "label_ar": "رسوم فايبر المنزل 300 الشهرية",
+       "amount": 279
+      }
+     ],
+     "status": "paid",
+     "payments": [
+      {
+       "ref": "PAY-75500",
+       "amount": 279,
+       "date": "2026-09-09",
+       "method_en": "card ending 9014",
+       "method_ar": "البطاقة المنتهية بـ 9014"
+      }
+     ]
+    }
+   ],
+   "diagnostics": null,
+   "tickets": []
+  }
+ }
+}

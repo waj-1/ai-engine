@@ -1,0 +1,118 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import alert %}
+{% block title %}Voice budgets · {{ brand().title }}{% endblock %}
+{% block page_title %}Voice budgets{% endblock %}
+{% block page_subtitle %}How much voice-call time each business can use per day.{% endblock %}
+{% block content %}
+{% set _next = '/admin/voice-budgets' %}
+{% set _default = voice_budget_default_seconds or 0 %}
+
+{% if error %}
+{% call alert('error') %}<strong>Could not save:</strong> {{ error }}{% endcall %}
+{% endif %}
+{% if load_error %}
+{% call alert('error') %}Couldn't load the voice budgets: {{ load_error }}{% endcall %}
+{% endif %}
+
+<section class="section">
+  <p style="max-width:760px;margin:0;">
+    A budget belongs to a <strong>business</strong>, not to a voice model: it covers all of that business's voice calls,
+    whichever realtime model a call runs on. Businesses without their own budget get the default of
+    <strong>{{ (_default / 60)|round(1) }} minutes</strong> ({{ _default }} seconds) a day.
+  </p>
+</section>
+
+<section class="section">
+  <h2>Budgets</h2>
+  {% if voice_budget_rows %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Business</th><th class="num">Daily limit</th><th class="num">Used today</th><th>Note</th><th></th></tr></thead>
+      <tbody>
+        {% for r in voice_budget_rows %}
+        <tr>
+          <td><span class="technical">{{ r.business_id }}</span></td>
+          <td class="num">{{ (r.daily_seconds / 60)|round(1) }} min <span class="caption">({{ r.daily_seconds }}s)</span></td>
+          <td class="num">{{ (r.used_today / 60)|round(1) }} min
+            {% if r.daily_seconds and r.used_today >= r.daily_seconds %}{{ chip('Used up', variant='warn') }}{% endif %}</td>
+          <td class="caption">{{ r.note or '' }}</td>
+          <td>
+            <form method="post" action="/admin/voice-budgets/{{ r.business_id }}/delete"
+                  onsubmit="return confirm('Remove this budget? The business goes back to the default.');" style="margin:0;">
+              <input type="hidden" name="next" value="{{ _next }}">
+              <button type="submit" class="ghost small">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No business has its own budget yet &mdash; they all use the default.</div>
+  {% endif %}
+</section>
+
+<section class="section">
+  <h2>Set a budget</h2>
+  <form method="post" action="/admin/voice-budgets" class="form-stack">
+    <input type="hidden" name="next" value="{{ _next }}">
+    <div class="form-grid">
+      <label class="field">
+        <span class="field-label">Business ID</span>
+        <input type="text" name="business_id" required placeholder="Business UUID or tenant ID">
+        <span class="field-help">A tenant ID works too &mdash; it maps to the same business the voice service charges.</span>
+      </label>
+      <label class="field">
+        <span class="field-label">Daily limit (seconds)</span>
+        <input type="number" name="daily_seconds" min="0" step="1" required placeholder="{{ _default }}" id="vb-seconds">
+        <span class="field-help" id="vb-minutes">e.g. 3600 = 60 minutes.</span>
+      </label>
+    </div>
+    <label class="field">
+      <span class="field-label">Note <span class="opt">(optional)</span></span>
+      <input type="text" name="note" placeholder="e.g. Pilot tenant, extra minutes until June">
+    </label>
+    <div class="form-actions"><button type="submit" class="primary">Save budget</button></div>
+  </form>
+</section>
+
+{% if voice_budget_unbudgeted %}
+<section class="section">
+  <h2>Using the default today</h2>
+  <span class="caption mb-s" style="display:block;">Businesses that made voice calls today without a budget of their own.</span>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Business</th><th class="num">Used today</th></tr></thead>
+      <tbody>
+        {% for r in voice_budget_unbudgeted %}
+        <tr><td><span class="technical">{{ r.business_id }}</span></td>
+            <td class="num">{{ (r.used_today / 60)|round(1) }} of {{ (_default / 60)|round(1) }} min</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<details class="advanced">
+  <summary>How budgets are applied</summary>
+  <ul class="caption stack-xs" style="max-width:760px;padding-left:var(--space-m);">
+    <li>Budgets are per tenant, not per model: moving a business to another realtime model does not change, reset or duplicate its budget.</li>
+    <li>The default comes from <code>VOICE_LIVE_DAILY_SECONDS</code>, read when the engine starts &mdash; changing it needs an engine restart. Budgets on this page apply as soon as you save.</li>
+    <li>If the usage database can't be reached, calls are allowed (the budget controls spend, not availability).</li>
+  </ul>
+</details>
+
+<script>
+(function () {
+  const s = document.getElementById('vb-seconds'), m = document.getElementById('vb-minutes');
+  if (!s || !m) return;
+  s.addEventListener('input', function () {
+    const v = parseInt(s.value, 10);
+    m.textContent = isNaN(v) ? 'e.g. 3600 = 60 minutes.' : '= ' + (Math.round(v / 6) / 10) + ' minutes a day.';
+  });
+})();
+</script>
+{% endblock %}

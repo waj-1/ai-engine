@@ -1,0 +1,62 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import hint, hint_text %}
+{% block title %}{{ row.name }} · Env Vars{% endblock %}
+{% block page_title %}{{ row.name }}{% endblock %}
+{% block page_subtitle %}<code>{{ row.environment }}</code> environment · last updated {{ (row.updated_at or '')[:19] }}{% endblock %}
+{% block content %}
+
+<p class="caption" style="margin-bottom:var(--space-s);">
+  <a href="/admin/env?tab=variables">&larr; Back to environment variables</a>
+</p>
+
+<section class="card">
+  <h2>Details</h2>
+  <form method="post" action="/admin/env-vars/{{ row.var_id }}" style="display:grid;gap:var(--space-s);max-width:720px;">
+    <label>Name<br>
+      <input name="name" value="{{ row.name }}" required>
+    </label>
+    <label>Environment<br>
+      <select name="environment">
+        <option value="staging" {% if row.environment == 'staging' %}selected{% endif %}>staging</option>
+        <option value="prod" {% if row.environment == 'prod' %}selected{% endif %}>prod</option>
+      </select>
+    </label>
+    <label>Value
+      {% if sensitive and not reveal %}
+        <span class="caption">(hidden — <a href="/admin/env-vars/{{ row.var_id }}?reveal=1">reveal</a>; saving without changing it keeps the stored value)</span>
+      {% endif %}
+      <br>
+      <input name="value" value="{{ raw_value if reveal else (row.value or '') }}"
+             {% if sensitive and not reveal %}class="secret-value"{% endif %}
+             autocomplete="off" spellcheck="false"
+             placeholder="value (leave blank for non-db sources)">
+    </label>
+    <label>Source<br>
+      <input name="source" value="{{ row.source }}"
+             placeholder="db | secret_manager:proj/secret | supabase_vault:key">
+      {{ hint_text('Only source=\'db\' resolves today — other sources are accepted but return None at runtime.') }}
+    </label>
+    <label>Description<br>
+      <textarea name="description" rows="3" placeholder="What this var controls">{{ row.description or '' }}</textarea>
+    </label>
+    <label style="display:flex;align-items:center;gap:var(--space-xs);">
+      <input type="checkbox" name="is_secret" {% if row.is_secret %}checked{% endif %}>
+      Secret (mask value in list views and audit log)
+    </label>
+    <div style="display:flex;gap:var(--space-s);justify-content:flex-end;">
+      <button class="primary" type="submit">Save</button>
+    </div>
+  </form>
+</section>
+
+<section class="card" style="margin-top:var(--space-m);">
+  <h2>Danger zone</h2>
+  {{ hint_text('Deletes only the DB override — a matching process env var keeps being served.') }}
+  <form method="post" action="/admin/env-vars/{{ row.var_id }}/delete"
+        onsubmit="return confirm('Delete {{ row.name }} from {{ row.environment }}?');">
+    <button type="submit" class="danger">Delete this env var</button>
+  </form>
+</section>
+
+{% endblock %}

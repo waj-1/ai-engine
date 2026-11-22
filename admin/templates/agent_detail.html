@@ -1,0 +1,82 @@
+{% extends "_base.html" %}
+{# One agent — /admin/agents?profile_id=X&tab=<overview|instructions|tools|
+   subagents|versions|settings>. The Voice tab is /admin/agents/{id}/voice
+   (agent_voice.html), which renders the same header.
+
+   Each tab is its own partial under agents/. Editing tabs wrap their forms in
+   [data-tab-root]: agents.js tracks changes across every form in the tab and
+   the sticky save bar posts each CHANGED form to its own unchanged endpoint
+   (/admin/profiles/{id}, …/mcp-attachments, …/skill-attachments,
+   /admin/prompts/{id}/versions, …/input-validators), one after another, then
+   reloads this tab. Forms that post to /admin/profiles/{id} carry only the
+   fields their tab owns (+ a preserved `delegatable`), so saving one tab can
+   never blank another tab's data. Context: load_agents_context +
+   admin/screens/agents_views.py::build_detail_view. #}
+{% from "_components/callout.html" import alert %}
+{% block title %}{{ agent.name }} · Agents · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ agent.name }}{% endblock %}
+{% block page_subtitle %}{{ (agent.description or 'Agent')|truncate(90) }}{% endblock %}
+{% block content %}
+{% include "agents/_header.html" %}
+
+{% set saved = request.query_params.get('saved') %}
+{% set page_error = request.query_params.get('error') %}
+{% if page_error %}
+<div class="mb-m">{% call alert('error') %}{{ page_error }}{% endcall %}</div>
+{% elif saved %}
+<div class="mb-m" data-flash>{% call alert('success') %}Saved.{% endcall %}</div>
+{% endif %}
+{% if agent.is_template %}
+<div class="mb-m">{% call alert('info') %}This is a <strong>template</strong> — it is read-only.
+  <a href="/admin/templates?env={{ current_env }}&new=1&template={{ agent.id }}">Create an agent from it</a> to make changes.{% endcall %}</div>
+{% endif %}
+
+{% set readonly = agent.is_template %}
+<div class="agent-tab" data-agent-tab="{{ detail_tab }}" data-profile-id="{{ agent.id }}">
+{% if detail_tab == 'instructions' %}{% include "agents/_tab_instructions.html" %}
+{% elif detail_tab == 'tools' %}{% include "agents/_tab_tools.html" %}
+{% elif detail_tab == 'subagents' %}{% include "agents/_tab_subagents.html" %}
+{% elif detail_tab == 'versions' %}{% include "agents/_tab_versions.html" %}
+{% elif detail_tab == 'settings' %}{% include "agents/_tab_settings.html" %}
+{% else %}{% include "agents/_tab_overview.html" %}
+{% endif %}
+</div>
+
+<script type="application/json" id="agent-legacy-anchors">{{ legacy_anchors | tojson }}</script>
+
+{# Test-chat drawer (test-chat.js). Renders only when the agent has a
+   channel to call; the header "Test" button and the floating launcher both
+   open it. The operator's JWT is embedded — safe: the page itself requires
+   superuser auth and the JWT is the cookie that delivered it. #}
+{% set _tc = test_chat_shape(active_profile) if active_profile else None %}
+{% if _tc and _tc.supported %}
+<script>
+  window.__waj_test_chat_config = {
+    // Same-origin relative path — the control plane serves these endpoints.
+    endpoint: {{ _tc.endpoint | tojson }},
+    agent_kind: {{ active_profile.agent_kind | tojson }},
+    profile_id: {{ active_profile.profile_id | tojson }},
+    user_token: "{{ ctx.user_token }}",
+    profile_name: {{ (active_profile.display_name or active_profile.agent_kind) | tojson }},
+    businesses: {{ (businesses or []) | tojson }},
+    // Kinds that resolve their own tenant (a client demo, the AI-agents demo)
+    // show no business picker; demo_tenant_build is the build-wide switch.
+    hide_business: {{ ((demo_tenant_build | default(false)) or (not _tc.needs_business)) | tojson }},
+    {# An agent with no business scope at all (a generic agent) has no demo merchant either. #}
+    no_business_scope: {{ ((not _tc.needs_business) and not (demo_tenant_build | default(false))) | tojson }},
+    // The kind's own body fields (the demo's `agent` key + `case_id`), its
+    // case picker, and whether a `state` token rides between turns.
+    extra_body: {{ _tc.extra_body | tojson }},
+    cases: {{ _tc.cases | tojson }},
+    state_token: {{ _tc.state_token | tojson }},
+    // Answer as THIS profile (a draft copy, a specialist) — X-WAJ-Profile-Id.
+    pin_profile: true,
+  };
+</script>
+<script src="/admin/static/test-chat.js?v={{ asset_version }}" defer></script>
+{% endif %}
+<script src="/admin/static/agents.js?v={{ asset_version }}" defer></script>
+{% if detail_tab == 'instructions' %}
+<script defer src="/admin/static/prompt-mentions.js?v={{ asset_version }}"></script>
+{% endif %}
+{% endblock %}

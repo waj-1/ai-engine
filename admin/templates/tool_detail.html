@@ -1,0 +1,194 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import hint, hint_text %}
+{% set tool_label = tool.display_name or (tool.python_name|replace('_', ' ')|capitalize) %}
+{% block title %}{{ tool_label }} · Tools & integrations · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ tool_label }}{% endblock %}
+{% block page_subtitle %}{% if tool.scope == 'write' %}Changes data{% else %}Only reads data{% endif %}{% if tool.agent_kind %} · {{ agent_label(tool.agent_kind) }}{% endif %}{% endblock %}
+{% block head %}
+{% if (tool.kind or 'python') == 'http' %}
+<script src="/admin/static/tool-dry-run.js?v={{ asset_version }}" defer></script>
+{% endif %}
+{% endblock %}
+{% block content %}
+{% if servers|length == 1 %}
+<a class="back-link" href="/admin/agent-mcp-servers/{{ servers[0].mcp_server_id }}">&larr; {{ mcp_display_name(servers[0].name) }}</a>
+{% else %}
+<a class="back-link" href="/admin/tools">&larr; Tools &amp; integrations</a>
+{% endif %}
+
+<div class="detail-layout">
+
+  <div>
+
+    {# ── What the agent sees ─────────────────────────────────────────────── #}
+    <section class="section">
+      <h2>What the agent sees</h2>
+      <form method="post" action="/admin/tools/{{ tool.tool_id }}" class="form-stack">
+        <input type="hidden" name="_meta_form" value="1">
+
+        <label class="field">
+          <span class="field-label">Name</span>
+          <input type="text" name="display_name" value="{{ tool.display_name or '' }}">
+        </label>
+
+        <div class="field">
+          <span class="field-label">Description</span>
+          <div data-md-editable>
+            <button type="button" class="ghost small" data-md-preview-toggle>Preview</button>
+            <textarea name="description" rows="5" style="width:100%;">{{ tool.description or '' }}</textarea>
+          </div>
+          <span class="field-help">What the tool does, in the words the agent reads.</span>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Usage guidance</span>
+          <textarea name="usage_guidance" rows="4"
+                    placeholder="e.g. Active pipeline = stage NOT IN (won, lost). 'New this week' filters created_at.">{{ tool.usage_guidance or '' }}</textarea>
+          <span class="field-help">When and how to use the tool: what fields mean, how numbers are defined, things to watch out for.</span>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Access</span>
+          <select name="scope">
+            {% for opt in scope_options %}
+              <option value="{{ opt }}" {% if (tool.scope or 'read') == opt %}selected{% endif %}>{{ 'Changes data' if opt == 'write' else 'Only reads data' }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <fieldset class="field-set">
+          <legend>Also available to</legend>
+          {% set extra = tool.additional_agent_kinds or [] %}
+          <div class="check-grid">
+            {% for k in agent_kinds %}{% if k != tool.agent_kind %}
+            <label class="field-check"><input type="checkbox" name="additional_agent_kinds" value="{{ k }}" {% if k in extra %}checked{% endif %}> {{ agent_label(k) }}</label>
+            {% endif %}{% endfor %}
+            {% for k in extra %}{% if k not in agent_kinds %}
+            <label class="field-check"><input type="checkbox" name="additional_agent_kinds" value="{{ k }}" checked> {{ agent_label(k) }}</label>
+            {% endif %}{% endfor %}
+          </div>
+          <span class="field-help">The main agent{% if tool.agent_kind %} ({{ agent_label(tool.agent_kind) }}){% endif %} is set by the engine and can't be changed here.</span>
+        </fieldset>
+
+        <label class="field-check">
+          <input type="checkbox" name="is_deprecated" {% if tool.is_deprecated %}checked{% endif %}>
+          <span>Retired <span class="field-help">Marks the tool as no longer in use and hides it from the bundle picker.</span></span>
+        </label>
+
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <label class="field">
+            <span class="field-label">Category</span>
+            <input type="text" name="category" value="{{ tool.category or '' }}">
+          </label>
+        </details>
+
+        <div class="form-actions">
+          <button type="submit" class="primary">Save</button>
+          <a class="btn ghost" href="/admin/tools">Cancel</a>
+        </div>
+      </form>
+    </section>
+
+    {# ── HTTP endpoint config (HTTP tools only) ───────────────────────────── #}
+    {% if (tool.kind or 'python') == 'http' %}
+    <section class="section">
+      <h2>Web request</h2>
+      <form method="post" action="/admin/tools/{{ tool.tool_id }}/edit" class="form-stack">
+        <label class="field">
+          <span class="field-label">Address (URL)</span>
+          <input type="url" name="endpoint_url" required value="{{ tool.endpoint_url or '' }}">
+        </label>
+        <div class="form-grid">
+          <label class="field">
+            <span class="field-label">Method</span>
+            <select name="http_method">
+              {% for m in ['POST', 'GET', 'PUT', 'PATCH', 'DELETE'] %}
+                <option value="{{ m }}" {% if (tool.http_method or 'POST') == m %}selected{% endif %}>{{ m }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Access token <span class="opt">(optional)</span></span>
+            <input type="text" name="auth_env_var" value="{{ tool.auth_env_var or '' }}"
+                   placeholder="Name of the secret holding the token">
+          </label>
+          <label class="field">
+            <span class="field-label">Timeout (seconds)</span>
+            <input type="number" name="timeout_seconds" min="1" max="600"
+                   value="{{ tool.timeout_seconds or 30 }}">
+          </label>
+        </div>
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <label class="field">
+            <span class="field-label">Inputs (JSON Schema)</span>
+            <textarea name="argument_schema" rows="12" class="code-block" required>{{ tool.argument_schema|pretty_json }}</textarea>
+            <span class="field-help">A top-level JSON Schema object &mdash; checked when you save.</span>
+          </label>
+        </details>
+        <div class="form-actions">
+          <button type="submit" class="primary">Save web request</button>
+        </div>
+      </form>
+    </section>
+
+    {# ── Dry-run widget (HTTP tools only) ─────────────────────────────────── #}
+    <section class="section" data-tool-dry-run>
+      <p class="caption">Loading dry-run UI…</p>
+      <div data-dry-run-result></div>
+    </section>
+    {% endif %}
+
+    {# ── Developer details (schema + source), collapsed ───────────────────── #}
+    <details class="advanced">
+      <summary>Developer details</summary>
+      {% if (tool.kind or 'python') == 'python' %}
+      <h3 class="section-title">Inputs</h3>
+      <span class="caption">Read from the code when the engine starts.</span>
+      <pre class="code-block copyable mt-s" style="overflow:auto;max-height:300px;">{{ tool.argument_schema|pretty_json }}</pre>
+      {% endif %}
+      <h3 class="section-title mt-m">Source code</h3>
+      <span class="caption">Read-only &mdash; change it in the repository. <span class="technical">{{ source.path or tool.source_file or '—' }}</span></span>
+      {% if source.error %}
+        <p class="caption" style="color:var(--error);">{{ source.error }}</p>
+      {% else %}
+        <details class="mt-s">
+          <summary class="caption" style="cursor:pointer;">View source ({{ source.content.splitlines()|length }} lines)</summary>
+          <pre id="tool-source-pre" class="code-block" style="overflow:auto;max-height:520px;margin-top:var(--space-xs);">{{ source.content }}</pre>
+        </details>
+      {% endif %}
+    </details>
+
+    {% if (tool.kind or 'python') == 'http' %}
+    <section class="section danger-zone">
+      <h2>Danger zone</h2>
+      <p class="caption">Retires this web-request tool. Agents stop getting it; the row is kept for history.</p>
+      <form method="post" action="/admin/tools/{{ tool.tool_id }}/delete"
+            onsubmit="return confirm('Retire this tool?');">
+        <button type="submit" class="btn danger">Delete tool</button>
+      </form>
+    </section>
+    {% endif %}
+
+  </div>
+
+  <aside class="card">
+    <h2>Details</h2>
+    <dl class="kv">
+      <dt>Access</dt><dd>{{ 'Changes data' if tool.scope == 'write' else 'Only reads data' }}</dd>
+      <dt>Type</dt><dd>{{ 'Web request' if (tool.kind or 'python') == 'http' else 'Built into the engine' }}</dd>
+      <dt>Status</dt><dd>{% if tool.is_deprecated %}{{ chip('Retired', variant='neutral') }}{% else %}{{ chip('Active', variant='ok', dot=True) }}{% endif %}</dd>
+      <dt>Agent</dt><dd>{{ agent_label(tool.agent_kind) or '—' }}</dd>
+      <dt>In servers</dt>
+      <dd>{% for sv in servers %}<a href="/admin/agent-mcp-servers/{{ sv.mcp_server_id }}">{{ mcp_display_name(sv.name) }}</a>{% if not loop.last %}<br>{% endif %}{% else %}<span class="muted">None</span>{% endfor %}</dd>
+      {% if tool.updated_at %}<dt>Updated</dt><dd class="num">{{ tool.updated_at[:10] }}</dd>{% endif %}
+      <dt>Code name</dt><dd><span class="technical">{{ tool.python_name }}</span></dd>
+      <dt>ID</dt><dd><span class="technical">{{ tool.tool_id }}</span></dd>
+    </dl>
+  </aside>
+
+</div>
+<script src="/admin/static/copy-json.js?v={{ asset_version }}" defer></script>
+{% endblock %}

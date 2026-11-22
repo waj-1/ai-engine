@@ -1,0 +1,169 @@
+{% extends "_base.html" %}
+{# Shared markdown viewer: Settings › Developer docs (/admin/docs, the
+   engineering reference in docs/admin-portal/) and Help (/admin/help, the
+   partner guides in docs/partner/). docs_base / docs_label / docs_subtitle /
+   show_api / media_base come from router.py (_render_doc / _render_help). #}
+{% block title %}{{ page.title }} · {{ docs_label }} · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ docs_label }}{% endblock %}
+{% block page_subtitle %}{{ docs_subtitle }}{% endblock %}
+
+{% block head %}
+<style>
+  .docs-shell { display:grid; grid-template-columns:220px 1fr; gap:var(--space-l); align-items:start; }
+  .docs-nav { position:sticky; top:var(--space-s); padding:var(--space-s); }
+  .docs-nav a { display:block; padding:4px var(--space-xs); border-radius:5px; text-decoration:none;
+                color:var(--fg-2); font-size:12px; }
+  .docs-nav a:hover { background:var(--surface-sunken); color:var(--fg-1); }
+  .docs-nav a.active { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  .docs-crumb { margin-bottom:var(--space-s); }
+  .docs-crumb a { color:var(--fg-2); text-decoration:none; }
+  .docs-crumb a:hover { text-decoration:underline; }
+  .docs-article { max-width:100ch; min-width:0; }
+  .markdown-body a.docs-zoom { display:block; cursor:zoom-in; }
+  .markdown-body { padding:var(--space-l); }
+  .markdown-body h1 { margin-top:0; }
+  .markdown-body h2 { margin-top:var(--space-l); padding-top:var(--space-s);
+                      border-top:1px solid var(--border); }
+  .markdown-body h3 { margin-top:var(--space-m); }
+  .markdown-body :is(h1,h2,h3,h4) { scroll-margin-top:var(--space-m); }
+  .markdown-body .doc-target { background:var(--accent-soft); border-radius:4px;
+                               transition:background 1.2s ease; }
+  .markdown-body code { background:var(--surface-sunken); padding:1px 4px; border-radius:3px;
+                        font-size:0.88em; }
+  .markdown-body pre { background:var(--gray-850); color:var(--gray-100); padding:var(--space-s);
+                       border-radius:6px; overflow:auto; }
+  .markdown-body pre code { background:none; padding:0; }
+  .markdown-body table { border-collapse:collapse; width:100%; margin:var(--space-s) 0; font-size:12px; }
+  .markdown-body th, .markdown-body td { border:1px solid var(--border); padding:6px 8px;
+                                         text-align:left; vertical-align:top; }
+  .markdown-body th { background:var(--surface-sunken); }
+  .markdown-body blockquote { margin:var(--space-s) 0; padding:var(--space-xs) var(--space-s);
+                              border-left:3px solid var(--accent); background:var(--surface-sunken);
+                              color:var(--fg-2); }
+  .markdown-body a { color:var(--accent); }
+  .markdown-body img, .markdown-body video { max-width:100%; height:auto; border-radius:8px;
+                                             border:1px solid var(--border); margin:var(--space-s) 0; }
+  .docs-nav .eyebrow { margin-top:var(--space-s); }
+  .docs-nav .eyebrow:first-child { margin-top:0; }
+  .docs-pager { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-s); margin-top:var(--space-m); }
+  .docs-pager-link { display:flex; flex-direction:column; gap:2px; padding:var(--space-s) var(--space-m);
+                     border:1px solid var(--border); border-radius:8px; text-decoration:none;
+                     color:var(--fg-1); background:var(--surface); font-weight:600; }
+  .docs-pager-link:hover { border-color:var(--accent); color:var(--accent); }
+  .docs-pager-link.next { text-align:right; grid-column:2; }
+  .markdown-body video { width:100%; background:#000; }
+  @media (max-width: 900px) { .docs-shell { grid-template-columns:1fr; } .docs-nav { position:static; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="docs-shell">
+  <aside class="card docs-nav">
+    {% for group, pages in groups.items() %}
+      <div class="eyebrow">{{ group }}</div>
+      {% for p in pages %}
+        <a href="{{ docs_base }}{{ '' if p.slug == 'index' else '/' + p.slug }}"
+           class="{{ 'active' if p.slug == page.slug else '' }}">{{ p.title }}</a>
+      {% endfor %}
+    {% endfor %}
+    {% if show_api %}
+    <div class="eyebrow" style="margin-top:var(--space-xs);">API</div>
+    <a href="/admin/docs/api">API Reference (Swagger)</a>
+    <a href="/admin/docs/api/redoc">API Reference (ReDoc)</a>
+    {% endif %}
+  </aside>
+
+  <article class="docs-article">
+    <nav class="caption docs-crumb" aria-label="Breadcrumb">
+      <a href="{{ docs_base }}">{{ docs_label }}</a>{% if page.slug != 'index' %}{% if page.section %} › {{ page.group }}{% endif %} › {{ page.title }}{% endif %}
+    </nav>
+    <div id="doc-content" class="card markdown-body">Loading…</div>
+    {% if prev_page or next_page %}
+    <nav class="docs-pager" aria-label="Previous and next page">
+      {% if prev_page %}
+      <a class="docs-pager-link" rel="prev" href="{{ docs_base }}{{ '' if prev_page.slug == 'index' else '/' + prev_page.slug }}">
+        <span class="caption">← Previous</span><span>{{ prev_page.title }}</span></a>
+      {% else %}<span></span>{% endif %}
+      {% if next_page %}
+      <a class="docs-pager-link next" rel="next" href="{{ docs_base }}/{{ next_page.slug }}">
+        <span class="caption">Next →</span><span>{{ next_page.title }}</span></a>
+      {% endif %}
+    </nav>
+    {% endif %}
+  </article>
+</div>
+
+{# Markdown + filename→slug map handed to the client as JSON (htmlsafe via tojson). #}
+<script id="doc-md" type="application/json">{{ markdown | tojson }}</script>
+<script id="doc-linkmap" type="application/json">{{ link_map | tojson }}</script>
+<script id="doc-base" type="application/json">{{ {"base": docs_base, "media": media_base} | tojson }}</script>
+<script>
+  window.addEventListener('DOMContentLoaded', function () {
+    var raw = JSON.parse(document.getElementById('doc-md').textContent);
+    var linkMap = JSON.parse(document.getElementById('doc-linkmap').textContent);
+    var cfg = JSON.parse(document.getElementById('doc-base').textContent);
+    var el = document.getElementById('doc-content');
+    // <video>/<source> are allowed so Help pages can embed short clips.
+    el.innerHTML = DOMPurify.sanitize(marked.parse(raw), {
+      ADD_TAGS: ['video', 'source'],
+      ADD_ATTR: ['controls', 'muted', 'loop', 'playsinline', 'poster', 'preload'],
+    });
+    // Repo-relative media (media/x.png, ./media/x.mp4) → the static mount.
+    if (cfg.media) {
+      el.querySelectorAll('img[src], video[src], video[poster], source[src]').forEach(function (n) {
+        ['src', 'poster'].forEach(function (attr) {
+          var v = n.getAttribute(attr);
+          var mm = v && v.match(/^(?:\.\/)?(?:\.\.\/)*media\/(.+)$/);
+          if (mm) n.setAttribute(attr, cfg.media + '/' + mm[1]);
+        });
+      });
+    }
+    // Heading anchors, so global search can deep-link to a section. The slug
+    // rule mirrors admin/search_docs.py:heading_anchor (keep them in step):
+    // lower-case, keep letters/digits/_/space/-, whitespace runs → one "-",
+    // duplicates get -1, -2 … in document order.
+    function slugify(text) {
+      return text.trim().toLowerCase().replace(/[^\p{L}\p{N}\p{M}_\s-]/gu, '').replace(/\s+/g, '-');
+    }
+    var seenSlugs = {};
+    el.querySelectorAll('h1, h2, h3, h4').forEach(function (h) {
+      var s = slugify(h.textContent || '');
+      if (Object.prototype.hasOwnProperty.call(seenSlugs, s)) { seenSlugs[s] += 1; s = s + '-' + seenSlugs[s]; }
+      else { seenSlugs[s] = 0; }
+      if (!h.id) h.id = s;
+    });
+    // The markdown renders after load, so the browser's own #hash jump has
+    // already missed — scroll to the target now and flash it.
+    if (location.hash.length > 1) {
+      var target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+      if (target) {
+        target.scrollIntoView({ block: 'start' });
+        target.classList.add('doc-target');
+        setTimeout(function () { target.classList.remove('doc-target'); }, 2200);
+      }
+    }
+    // Show a video's first frame instead of a blank box before it plays.
+    el.querySelectorAll('video[src]').forEach(function (v) {
+      var src = v.getAttribute('src');
+      if (src.indexOf('#') === -1) v.setAttribute('src', src + '#t=0.1');
+      v.setAttribute('preload', 'metadata');
+    });
+    // Screenshots open full size in a new tab (they are wider than the column).
+    el.querySelectorAll('img').forEach(function (img) {
+      if (img.closest('a')) return;
+      var a = document.createElement('a');
+      a.href = img.getAttribute('src'); a.target = '_blank'; a.rel = 'noopener';
+      a.className = 'docs-zoom'; a.title = 'Open full size';
+      img.parentNode.insertBefore(a, img); a.appendChild(img);
+    });
+    // Rewrite repo-relative *.md links to portal routes so the index nav works in-app.
+    el.querySelectorAll('a[href]').forEach(function (a) {
+      var m = a.getAttribute('href').match(/^(?:\.\/)?([\w.-]+\.md)(#.*)?$/);
+      if (m && linkMap[m[1]]) {
+        var slug = linkMap[m[1]];
+        a.setAttribute('href', cfg.base + (slug === 'index' ? '' : '/' + slug) + (m[2] || ''));
+      }
+    });
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/status_chip.html" import run_status %}
+{% block title %}Test run · {{ brand().title }}{% endblock %}
+{% block page_title %}Test run {{ run.run_id[:8] }}{% endblock %}
+{% block page_subtitle %}{{ run.suite }} · {{ (run.created_at or '')[:19] }}{% endblock %}
+{% block content %}
+
+<div style="display:grid;grid-template-columns:1fr 320px;gap:var(--space-m);">
+
+  <div style="display:flex;flex-direction:column;gap:var(--space-m);">
+
+    <section class="card">
+      <div style="display:flex;gap:var(--space-s);flex-wrap:wrap;">
+        {{ run_status(run.status) }}
+        {{ chip((run.pass_count or 0) ~ ' passed', variant='ok') }}
+        {{ chip((run.fail_count or 0) ~ ' failed', variant='err' if (run.fail_count or 0) else 'neutral') }}
+        {{ chip((run.skip_count or 0) ~ ' skipped', variant='neutral') }}
+        {% if run.duration_ms %}{{ chip((run.duration_ms / 1000)|round(1) ~ 's', variant='ghost') }}{% endif %}
+      </div>
+      {% if run.error %}
+      <p style="color:var(--error);margin-top:var(--space-s);"><strong>Error:</strong> {{ run.error }}</p>
+      {% endif %}
+    </section>
+
+    {% if run.results %}
+    <section class="card">
+      <h2>Per-test outcomes</h2>
+      <table data-tabulator data-tabulator-page-size="50">
+        <thead><tr><th>Outcome</th><th>Node ID</th><th>Message</th></tr></thead>
+        <tbody>
+        {% for r in run.results %}
+        <tr>
+          <td>
+            {{ run_status(r.outcome, dot=False) }}
+          </td>
+          <td><code class="caption">{{ r.nodeid }}</code></td>
+          <td class="caption">{{ r.message or '' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <h2>Pytest stdout</h2>
+      <pre class="code-block" style="max-height:560px;overflow:auto;">{{ run.output or '— no output —' }}</pre>
+    </section>
+
+  </div>
+
+  <aside style="display:flex;flex-direction:column;gap:var(--space-m);">
+    <div class="card">
+      <div class="eyebrow">Suite</div>
+      <p class="num" style="font-size:13px;font-weight:600;">{{ run.suite }}</p>
+    </div>
+    <div class="card">
+      <div class="eyebrow">Started</div>
+      <p class="num caption">{{ (run.started_at or '')[:19] }}</p>
+    </div>
+    <div class="card">
+      <div class="eyebrow">Finished</div>
+      <p class="num caption">{{ (run.finished_at or '')[:19] }}</p>
+    </div>
+    <div class="card">
+      <a href="/admin/tests">← Back to all runs</a>
+    </div>
+  </aside>
+
+</div>
+{% endblock %}

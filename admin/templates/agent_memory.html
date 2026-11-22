@@ -1,0 +1,148 @@
+{% extends "_base.html" %}
+{% from "_components/callout.html" import alert %}
+{% block title %}Memory settings · {{ agent_label(agent_kind) }} · {{ brand().title }}{% endblock %}
+{% block page_title %}Memory settings{% endblock %}
+{% block page_subtitle %}What {{ agent_label(agent_kind) }} remembers about the people it talks to.{% endblock %}
+{% block content %}
+<a class="back-link" href="/admin/agents?env={{ current_env }}{% if profile %}&profile_id={{ profile.profile_id }}{% endif %}">&larr; {{ agent_label(agent_kind) }}</a>
+
+<form method="get" action="/admin/agents/memory" class="filter-row">
+  <input type="hidden" name="env" value="{{ current_env }}">
+  <label class="row" style="gap:var(--space-xs);">
+    <span class="caption">Agent</span>
+    <select name="agent_kind" onchange="this.form.submit()">
+      {% for k in agent_kinds %}<option value="{{ k }}" {% if k == agent_kind %}selected{% endif %}>{{ agent_label(k) }}</option>{% endfor %}
+    </select>
+  </label>
+  <noscript><button type="submit">Show</button></noscript>
+  <a class="btn ghost small" href="/admin/memory?agent_kind={{ agent_kind }}&env={{ current_env }}" style="margin-left:auto;">Look up a person's memories &rarr;</a>
+</form>
+
+{% if saved %}
+{% call alert('success') %}Saved. New conversations use these settings right away.{% endcall %}
+{% endif %}
+
+{% if profile %}
+<form method="post" action="/admin/memory/config?env={{ current_env }}" class="form-stack" id="memory-config">
+  <input type="hidden" name="agent_kind" value="{{ agent_kind }}">
+  <input type="hidden" name="extraction_model_slot" value="{{ config_form.extraction_model_slot }}">
+  <input type="hidden" name="summary_model_slot" value="{{ config_form.summary_model_slot }}">
+
+  <section class="section">
+    <h2>Long-term memory</h2>
+    <label class="field-check">
+      <input type="checkbox" name="enabled" id="memory-enabled" {% if config_form.enabled %}checked{% endif %}>
+      <span><strong>Remember facts about each person</strong>
+        <span class="field-help">The agent saves useful facts from conversations and recalls them next time. When off, nothing below is used.</span></span>
+    </label>
+    {% if 'voice' in (profile.slug or '') %}
+    <p class="caption mt-s">This is a voice agent: memory adds a lookup before every answer, which slows replies down.</p>
+    {% endif %}
+  </section>
+
+  {# Dependent settings: greyed and non-interactive while memory is off. They
+     stay in the form (inert, not disabled) so saving keeps their values. #}
+  <div id="memory-dependent" class="stack-l">
+    <div class="sub-section">
+      <h3 class="section-title mb-s">Saving facts</h3>
+      <div class="form-grid">
+        <label class="field">
+          <span class="field-label">How important a fact must be</span>
+          <input type="number" step="0.05" min="0" max="1" name="extraction_importance_threshold" value="{{ config_form.extraction_importance_threshold }}">
+          <span class="field-help">0 to 1. Higher saves fewer, more important facts.</span>
+        </label>
+        <label class="field">
+          <span class="field-label">Most facts saved per message</span>
+          <input type="number" min="1" max="20" name="extraction_max_per_turn" value="{{ config_form.extraction_max_per_turn }}">
+        </label>
+        <label class="field">
+          <span class="field-label">Treat as the same fact above</span>
+          <input type="number" step="0.01" min="0" max="1" name="dedup_similarity_threshold" value="{{ config_form.dedup_similarity_threshold }}">
+          <span class="field-help">0 to 1 similarity. A new fact this close to an old one updates it instead of adding a copy.</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="sub-section">
+      <h3 class="section-title mb-s">Recalling facts</h3>
+      <div class="form-grid">
+        <label class="field">
+          <span class="field-label">Facts recalled per answer</span>
+          <input type="number" min="1" max="50" name="retrieval_top_k" value="{{ config_form.retrieval_top_k }}">
+        </label>
+        <label class="field">
+          <span class="field-label">Only recall facts closer than</span>
+          <input type="number" step="0.01" min="0" max="1" name="retrieval_min_similarity" value="{{ config_form.retrieval_min_similarity }}">
+          <span class="field-help">0 to 1 similarity to the question.</span>
+        </label>
+      </div>
+      <label class="field-check mt-s">
+        <input type="checkbox" name="retrieval_always_include_pinned" {% if config_form.retrieval_always_include_pinned %}checked{% endif %}>
+        <span>Always recall pinned facts</span>
+      </label>
+    </div>
+
+    <div class="sub-section">
+      <h3 class="section-title mb-s">Conversation summary</h3>
+      <div class="form-grid">
+        <label class="field">
+          <span class="field-label">Update the summary every (messages)</span>
+          <input type="number" min="1" max="50" name="summary_trigger_every_n_turns" value="{{ config_form.summary_trigger_every_n_turns }}">
+        </label>
+        <label class="field">
+          <span class="field-label">Keep the latest messages word for word</span>
+          <input type="number" min="0" max="20" name="summary_keep_recent_verbatim" value="{{ config_form.summary_keep_recent_verbatim }}">
+        </label>
+        <label class="field">
+          <span class="field-label">Forget facts after (days)</span>
+          <input type="number" min="1" name="retention_days" value="{{ config_form.retention_days if config_form.retention_days is not none else '' }}" placeholder="Keep forever">
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="sub-section">
+      <h3 class="section-title mb-s">Conversation window</h3>
+    <span class="caption mb-s" style="display:block;">How much of the current conversation every reply looks back at. Applies even when long-term memory is off.</span>
+    <div class="form-grid">
+      <label class="field">
+        <span class="field-label">Messages to look back at</span>
+        <input type="number" min="1" max="100" name="window_max_messages" value="{{ config_form.window_max_messages }}">
+      </label>
+      <label class="field">
+        <span class="field-label">Longest message kept (characters)</span>
+        <input type="number" min="200" max="20000" name="window_max_message_chars" value="{{ config_form.window_max_message_chars }}">
+      </label>
+      <label class="field">
+        <span class="field-label">Messages used for follow-up suggestions</span>
+        <input type="number" min="0" max="50" name="window_suggestion_context_messages" value="{{ config_form.window_suggestion_context_messages }}">
+      </label>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">Save memory settings</button>
+    <span class="caption">Saved on <span class="technical">{{ profile.slug }}</span> ({{ current_env }}). Production uses the released version &mdash; release the agent after saving in staging.</span>
+  </div>
+</form>
+
+<script>
+(function () {
+  const master = document.getElementById('memory-enabled');
+  const dep = document.getElementById('memory-dependent');
+  if (!master || !dep) return;
+  function sync() {
+    const off = !master.checked;
+    dep.classList.toggle('is-off', off);
+    dep.querySelectorAll('.sub-section').forEach(function (f) { f.classList.toggle('is-off', off); });
+    if (off) { dep.setAttribute('inert', ''); dep.setAttribute('aria-disabled', 'true'); }
+    else { dep.removeAttribute('inert'); dep.removeAttribute('aria-disabled'); }
+  }
+  master.addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% else %}
+{% call alert('error') %}{{ agent_label(agent_kind) }} has no active version in {{ current_env }}, so there are no memory settings to edit.{% endcall %}
+{% endif %}
+{% endblock %}

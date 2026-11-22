@@ -1,0 +1,127 @@
+{# Instructions — the system prompt plus the agent's other prompts (title,
+   suggestions, voice persona …), one form each, all posting to the unchanged
+   POST /admin/prompts/{id}/versions with the hidden profile_id/prompt_key that
+   repoint THIS agent's pin. One Save for the tab (savebar). A safety-check
+   failure comes back as a 400; agents.js then reveals the "Save anyway"
+   checkbox on that form only — it is not shown before it is needed. #}
+{% from "agents/_savebar.html" import savebar %}
+{% from "agents/_persona_status.html" import persona_version_status %}
+{% from "_components/chip.html" import chip %}
+{% set back_q = 'env=' ~ current_env ~ '&profile_id=' ~ agent.id %}
+
+{% macro override_box() -%}
+<label class="override-box caption" data-override hidden>
+  <input type="checkbox" name="override_validation" value="true">
+  Save anyway — this text failed the safety check (recorded in the activity log)
+</label>
+{%- endmacro %}
+
+<div data-tab-root>
+<section class="section">
+  <div class="row between section-head">
+    <div>
+      <h2>Instructions</h2>
+      <span class="caption">What the agent is told before every conversation. Changes reach callers on their next message.</span>
+    </div>
+    {% if system_prompt and system_prompt.prompt_id %}
+    <div class="row">
+      {% set sp_v = system_prompt.latest_version_number %}
+      {% if sp_v and sp_v > 1 %}
+      <a class="btn ghost small" href="/admin/prompts/{{ system_prompt.prompt_id }}/diff?a={{ sp_v - 1 }}&b={{ sp_v }}&{{ back_q }}">Compare versions</a>
+      {% endif %}
+      <a class="btn ghost small" href="/admin/prompts/{{ system_prompt.prompt_id }}/compare?{{ back_q }}">A/B test</a>
+      <a class="btn ghost small" href="/admin/prompts/{{ system_prompt.prompt_id }}/optimize?{{ back_q }}">Improve with AI</a>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if system_prompt %}
+  {# A custom agent posts to its own route (post_url), which creates the
+     agent's own prompt on first save; every other kind posts to the shared
+     prompt slot. #}
+  <form method="post" action="{{ system_prompt.post_url or ('/admin/prompts/' ~ system_prompt.prompt_id ~ '/versions') }}" data-tab-form data-form-label="Instructions">
+    <input type="hidden" name="profile_id" value="{{ agent.id }}">
+    <input type="hidden" name="prompt_key" value="{{ system_prompt.slug }}">
+    <div class="prompt-editor" data-prompt-editor data-mentions-profile="{{ agent.id }}">
+      <div class="prompt-editor-toolbar">
+        <button type="button" class="ghost prompt-tab is-active" data-prompt-view="edit">Edit</button>
+        <button type="button" class="ghost prompt-tab" data-prompt-view="preview">Preview</button>
+        {% if system_prompt.version_number %}<span class="caption">Version {{ system_prompt.version_number }}{% if system_prompt.latest_version_number and system_prompt.latest_version_number != system_prompt.version_number %} · v{{ system_prompt.latest_version_number }} is the newest any agent of this kind saved{% endif %}</span>{% endif %}
+        <button type="button" class="ghost" data-prompt-expand title="Expand editor full-screen">⤢ Expand</button>
+      </div>
+      <textarea name="content" data-prompt-input class="code-block prompt-input" {% if readonly %}readonly{% endif %}>{{ system_prompt.content or '' }}</textarea>
+      <div class="prompt-preview markdown-body" data-prompt-preview hidden></div>
+    </div>
+    <label class="field mt-s"><span class="field-label">What changed? <span class="muted">(optional, shown in history)</span></span>
+      <input name="notes" placeholder="e.g. Shorter greeting">
+    </label>
+    {{ override_box() }}
+  </form>
+  {% else %}
+  <div class="empty-state">No instructions have been set up for this kind of agent yet.</div>
+  {% endif %}
+</section>
+
+{% set owned_persona_slug = voice_config_owner.live.get('persona_prompt_slug') if voice_config_owner else None %}
+{% macro prompt_item(p) -%}
+  {% set is_persona = persona_versions and p.slug == persona_versions.slug %}
+  <details class="accordion-item" {% if is_persona and (persona_versions.diverged or persona_versions.warns_at_connect) %}open{% endif %}>
+    <summary>
+      <span class="accordion-title">{{ p.slug|replace('mold:', 'Template: ')|replace('_', ' ')|capitalize }}</span>
+      <span class="technical">{{ p.slug }}</span>
+      {% if p.version_number %}<span class="caption">v{{ p.version_number }}</span>{% endif %}
+      {%- if is_persona %}
+        {% if persona_versions.served_known %}
+          {{ chip('callers hear v' ~ persona_versions.served.version_number,
+                  variant=('warn' if persona_versions.diverged else 'ok'), dot=True) }}
+        {% else %}
+          {{ chip('served version unnamed', variant='warn', dot=True) }}
+        {% endif %}
+      {%- endif %}
+    </summary>
+    <div class="accordion-body">
+      {% if is_persona %}{{ persona_version_status(persona_versions) }}{% endif %}
+      {% if owned_persona_slug and p.slug == owned_persona_slug %}
+      <div class="alert alert-info mt-s" style="display:block;">
+        <strong>Edit this persona on
+          <a href="?env={{ current_env }}&profile_id={{ voice_config_owner.profile_id }}&tab=instructions">{{ voice_config_owner.display_name }}</a>.</strong>
+        That agent serves voice through this one and holds the persona version a
+        caller actually gets, so a save here would never be spoken. Shown
+        read-only so you can still read what is served.
+      </div>
+      <textarea class="code-block prompt-input-sm" readonly aria-readonly="true">{{ p.content or '' }}</textarea>
+      {% else %}
+      <form method="post" action="/admin/prompts/{{ p.prompt_id }}/versions" data-tab-form data-form-label="{{ p.slug|replace('_', ' ')|capitalize }}">
+        <input type="hidden" name="profile_id" value="{{ agent.id }}">
+        <input type="hidden" name="prompt_key" value="{{ p.slug }}">
+        <textarea name="content" class="code-block prompt-input-sm" {% if readonly %}readonly{% endif %}>{{ p.content or '' }}</textarea>
+        <label class="field mt-s"><span class="field-label">What changed? <span class="muted">(optional)</span></span>
+          <input name="notes" placeholder="Change note">
+        </label>
+        {{ override_box() }}
+      </form>
+      {% endif %}
+    </div>
+  </details>
+{%- endmacro %}
+{% if other_prompts or template_prompts %}
+<section class="section">
+  <h2>Other prompts</h2>
+  <span class="caption">Short prompts the agent uses for specific jobs — titles, suggestions, the voice persona.</span>
+  {% if other_prompts %}
+  <div class="accordion">
+  {% for p in other_prompts %}{{ prompt_item(p) }}{% endfor %}
+  </div>
+  {% endif %}
+  {% if template_prompts %}
+  <details class="advanced mt-m">
+    <summary><span class="h3">Template prompts ({{ template_prompts|length }})</span> <span class="caption">— used only by templates of this kind</span></summary>
+    <div class="accordion">
+    {% for p in template_prompts %}{{ prompt_item(p) }}{% endfor %}
+    </div>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
+{{ savebar('Save instructions', readonly) }}
+</div>

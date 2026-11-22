@@ -1,0 +1,26 @@
+{# admin/templates/_components/section_tabs.html — area-level tab strip.
+
+   The sidebar groups several screens under one item (Knowledge = knowledge
+   bases + skills + memory, Connections, Testing, Settings). This strip, at
+   the top of each member screen, makes them read as one area. The model
+   comes from admin/nav.py:section_tabs_for() — _base.html renders it
+   automatically from the request path, so a member screen needs no markup.
+   Staff-only tabs are already filtered out on partner builds. The current
+   tab carries aria-current="true" (not "page": an area tab can stand for
+   several URLs, and an in-page tabs() strip below may own "page").
+
+   Usage (explicit, e.g. from a page that opts out of the automatic one):
+       {% from "_components/section_tabs.html" import section_tabs %}
+       {{ section_tabs(section_tabs_for(request)) }}
+#}
+{% macro section_tabs(model) -%}
+{% if model %}
+<nav class="section-tabs" aria-label="{{ model.section|capitalize }} sections" data-section="{{ model.section }}">
+  {% for t in model.tabs %}
+  <a class="section-tab {% if t.key == model.current %}active{% endif %}"
+     {% if t.key == model.current %}aria-current="true"{% endif %}
+     href="{{ t.href }}">{{ t.label }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
+{%- endmacro %}

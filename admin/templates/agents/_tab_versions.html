@@ -1,0 +1,115 @@
+{# Versions — checkpoints (agent_profile_versions) with pin / restore / view
+   diff, and "Save checkpoint". Every form posts to its unchanged route
+   (…/pin-version, …/versions/{vid}/restore, …/versions); agents.js submits
+   them in place and returns to this tab, carrying restore's
+   dropped_* / edited_from markers through. #}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import alert %}
+{% set dropped_tools = request.query_params.get('dropped_tools', '0')|int %}
+{% set dropped_kb = request.query_params.get('dropped_kb', '0')|int %}
+{% set dropped_mcp = request.query_params.get('dropped_mcp', '0')|int %}
+{% set dropped_model = request.query_params.get('dropped_model', '0')|int %}
+{% set dropped_prompts = request.query_params.get('dropped_prompts', '0')|int %}
+{% if (dropped_tools + dropped_kb + dropped_mcp + dropped_model + dropped_prompts) > 0 %}
+<div class="mb-m">{% call alert('warning') %}
+  <strong>Restored — dropped:</strong>
+  {% set parts = [] %}
+  {% if dropped_tools %}{% set _ = parts.append(dropped_tools ~ ' tool' ~ ('s' if dropped_tools != 1 else '')) %}{% endif %}
+  {% if dropped_kb %}{% set _ = parts.append(dropped_kb ~ ' knowledge source' ~ ('s' if dropped_kb != 1 else '')) %}{% endif %}
+  {% if dropped_mcp %}{% set _ = parts.append(dropped_mcp ~ ' toolset' ~ ('s' if dropped_mcp != 1 else '')) %}{% endif %}
+  {% if dropped_model %}{% set _ = parts.append('the model (kept current — an agent must always have one)') %}{% endif %}
+  {% if dropped_prompts %}{% set _ = parts.append(dropped_prompts ~ ' prompt' ~ ('s' if dropped_prompts != 1 else '')) %}{% endif %}
+  {{ parts|join(', ') }} — no longer present in this environment.
+{% endcall %}</div>
+{% endif %}
+{% set edited_from_id = request.query_params.get('edited_from') %}
+{% if edited_from_id %}
+{% set edited_from_v = (profile_versions | selectattr('version_id', 'equalto', edited_from_id) | list | first) if profile_versions else None %}
+<div class="mb-m">{% call alert('info') %}
+  You're editing a copy of {% if edited_from_v %}<strong>v{{ edited_from_v.version_number }}</strong>{% else %}a saved version{% endif %} — <strong>Save as new version</strong> below to keep it.
+{% endcall %}</div>
+{% endif %}
+
+<section class="section">
+  <div class="row between section-head">
+    <div>
+      <h2>Version history</h2>
+      <span class="caption">A checkpoint freezes the agent's whole setup. Pin one to serve it; restore one to copy it back into the editable draft.</span>
+    </div>
+    <div class="row">
+      {% set served_v = (profile_versions | selectattr('version_id', 'equalto', served_version_id) | list | first) if served_version_id else None %}
+      {% if served_v %}{{ chip('Serving: v' ~ served_v.version_number, variant='ok', dot=True) }}
+      {% else %}{{ chip('Serving: latest (default)', variant='neutral') }}{% endif %}
+      {% if profile_versions and not readonly %}
+      <form method="post" action="/admin/agents/{{ agent.id }}/pin-version" class="row m-0" data-ajax-action>
+        <label class="sr-only" for="pin-select">Serve</label>
+        <select id="pin-select" name="version_id">
+          <option value="" {% if not served_version_id %}selected{% endif %}>Default (latest)</option>
+          {% for v in profile_versions %}
+          <option value="{{ v.version_id }}" {% if served_version_id == v.version_id %}selected{% endif %}>
+            v{{ v.version_number }} · {{ (v.promoted_at or '')[:10] }}{% if v.notes %} · {{ v.notes|truncate(36) }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn small">Pin</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if profile_versions %}
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Version</th><th>Saved</th><th>Note</th><th>Serving</th><th><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+    {% for v in profile_versions %}
+      <tr>
+        <td class="num"><strong>v{{ v.version_number }}</strong></td>
+        <td class="caption num">{{ (v.promoted_at or '')[:16]|replace('T', ' ') }}</td>
+        <td class="caption">{{ (v.notes or '—')|truncate(80) }}</td>
+        <td>{% if v.is_served %}{{ chip('served', variant='ok', dot=True) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>
+          <div class="row end">
+            <a class="btn ghost small" href="/admin/agents/{{ agent.id }}/versions/{{ v.version_id }}/diff">What changed</a>
+            {% if not readonly %}
+            <form method="post" action="/admin/agents/{{ agent.id }}/pin-version" class="m-0" data-ajax-action>
+              <input type="hidden" name="version_id" value="{{ v.version_id }}">
+              <button type="submit" class="btn ghost small" {% if v.is_served %}disabled{% endif %}>Pin</button>
+            </form>
+            <form method="post" action="/admin/agents/{{ agent.id }}/versions/{{ v.version_id }}/restore" class="m-0" data-ajax-action
+                  data-confirm="Restore v{{ v.version_number }} into the editable draft? This overwrites the current draft setup.">
+              <button type="submit" class="btn ghost small">Restore</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="caption">No versions yet — save a checkpoint below.</p>
+  {% endif %}
+</section>
+
+{% if not readonly %}
+<section class="section">
+  <h2>Save a checkpoint</h2>
+  <span class="caption">Freeze the current setup as a new version you can return to.</span>
+  <form method="post" action="/admin/agents/{{ agent.id }}/versions" class="row mt-s" data-ajax-action>
+    <input name="notes" placeholder="What changed? (optional)" class="grow checkpoint-input" aria-label="Change note">
+    <button type="submit" class="primary">Save as new version</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="section">
+  <h2>Compare</h2>
+  <div class="row mt-s">
+    <button type="button" data-open-dialog="dlg-compare">Compare with another agent…</button>
+    {% if promote_counterpart and promote_target %}
+    <a class="btn" href="/admin/agents/diff?a={{ promote_counterpart.profile_id }}&b={{ agent.id }}">Compare with {{ promote_target.label if promote_target else 'the other environment' }}</a>
+    {% endif %}
+  </div>
+</section>

@@ -1,0 +1,240 @@
+{# Tools & knowledge — only what is ATTACHED is listed; adding goes through a
+   searchable picker; a toolset's actions are chosen in a modal. Unattached
+   toolsets are never rendered expanded (the old card was ~5,700px).
+
+   Four independent forms, one Save (savebar):
+     #form-toolsets → POST /admin/profiles/{id}/mcp-attachments (unchanged
+        wire format: attach_mcp_ids + per-server tool_subset_mode__/
+        tool_subset_all__/tool_subset_cb__ for bundles, tool_subset__ text for
+        external servers). It carries EVERY attached toolset, so the handler's
+        reconcile keeps what is listed and detaches what was removed.
+     #form-knowledge → POST /admin/profiles/{id} with data_source_ids only.
+     #form-skills → POST /admin/profiles/{id}/skill-attachments.
+     #form-legacy (Advanced) → POST /admin/profiles/{id} with tool_ids +
+        mcp_server_ids only.
+   Forms posting to /admin/profiles/{id} leave out `_mapping_form`, so that
+   handler touches only the arrays present; an empty-value sentinel keeps
+   "removed the last one" expressible, and `delegatable` is re-posted as-is
+   because the handler always writes that one. #}
+{% from "agents/_savebar.html" import savebar %}
+{% from "_components/chip.html" import chip %}
+{% macro keep_delegatable() -%}{% if active_profile.delegatable %}<input type="hidden" name="delegatable" value="on">{% endif %}{%- endmacro %}
+
+<div data-tab-root>
+{# ------------------------------------------------------------------ toolsets #}
+<section class="section" id="toolsets">
+  <div class="row between section-head">
+    <div>
+      <h2>Toolsets</h2>
+      <span class="caption">What the agent can do. Only attached toolsets give it actions — <strong data-bound-count>{{ bound_count }}</strong> available right now.</span>
+    </div>
+    {% if not readonly %}
+    <div class="combobox" data-combobox="toolset" data-catalog="catalog-toolsets">
+      <button type="button" class="btn" data-combobox-open aria-haspopup="listbox">+ Add toolset</button>
+      <div class="combobox-panel" hidden>
+        <input type="search" placeholder="Search toolsets" aria-label="Search toolsets" data-combobox-input>
+        <div class="combobox-list" role="listbox" data-combobox-list></div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <form method="post" action="/admin/profiles/{{ agent.id }}/mcp-attachments" id="form-toolsets"
+        data-tab-form data-form-label="Toolsets">
+    <div class="attached-list" data-attached-list="toolset">
+      {% for t in toolsets %}
+      <div class="attached-row" data-row data-mcp-id="{{ t.mcp_server_id }}" data-mode="{{ t.mode }}">
+        <input type="hidden" name="attach_mcp_ids" value="{{ t.mcp_server_id }}">
+        {% if t.mode == 'list' %}
+        <input type="hidden" name="tool_subset_mode__{{ t.mcp_server_id }}" value="list">
+        {% if not t.subset %}<input type="hidden" name="tool_subset_all__{{ t.mcp_server_id }}" value="1" data-subset-all>{% endif %}
+        {% for n in t.subset %}<input type="hidden" name="tool_subset_cb__{{ t.mcp_server_id }}" value="{{ n }}" data-subset-item>{% endfor %}
+        {% else %}
+        <input type="hidden" name="tool_subset__{{ t.mcp_server_id }}" value="{{ t.subset|join(', ') }}" data-subset-text>
+        {% endif %}
+        <details class="attached-main">
+          <summary>
+            <span class="attached-title">{{ t.label }}</span>
+            <span class="chip chip-neutral">{{ t.source }}</span>
+            <span class="caption" data-count-label>{{ t.count_label }}</span>
+            <span class="technical">{{ t.tech }}</span>
+          </summary>
+          <p class="caption mt-xs">{{ t.description }}</p>
+          <div class="chip-row mt-xs" data-chips>
+            {% for c in t.chips %}<span class="chip chip-neutral" title="{{ c.name }}">{{ c.label }}</span>{% else %}<span class="caption">No actions are bound from this toolset.</span>{% endfor %}
+          </div>
+        </details>
+        {% if not readonly %}
+        <div class="row attached-actions">
+          {% if not t.endpoint_only %}<button type="button" class="btn small" data-pick-actions="{{ t.mcp_server_id }}">Choose actions</button>{% endif %}
+          <button type="button" class="btn ghost small" data-remove-row aria-label="Remove {{ t.label }}">Remove</button>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+      <div class="empty-inline" data-empty {% if toolsets %}hidden{% endif %}>
+        No toolsets attached — this agent can't take any actions. Use <strong>+ Add toolset</strong>.
+      </div>
+    </div>
+  </form>
+  {% for x in external_bound %}{% if x.endpoint_only %}
+  <p class="caption mt-xs">{{ x.name }} only provides a connection address — the agent's built-in toolset supplies its actions.</p>
+  {% endif %}{% endfor %}
+</section>
+
+{# ------------------------------------------------------------------ knowledge #}
+<section class="section" id="knowledge">
+  <div class="row between section-head">
+    <div>
+      <h2>Knowledge</h2>
+      <span class="caption">Documents and data the agent can look things up in.</span>
+    </div>
+    {% if not readonly %}
+    <div class="combobox" data-combobox="knowledge" data-catalog="catalog-knowledge">
+      <button type="button" class="btn" data-combobox-open aria-haspopup="listbox">+ Add knowledge</button>
+      <div class="combobox-panel" hidden>
+        <input type="search" placeholder="Search knowledge sources" aria-label="Search knowledge sources" data-combobox-input>
+        <div class="combobox-list" role="listbox" data-combobox-list></div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  <form method="post" action="/admin/profiles/{{ agent.id }}" id="form-knowledge" data-tab-form data-form-label="Knowledge">
+    <input type="hidden" name="data_source_ids" value="">
+    {% for sid in hidden_source_ids %}<input type="hidden" name="data_source_ids" value="{{ sid }}">{% endfor %}
+    {{ keep_delegatable() }}
+    <div class="attached-list" data-attached-list="knowledge">
+      {% for k in knowledge_attached %}
+      <div class="attached-row" data-row data-id="{{ k.id }}">
+        <input type="hidden" name="data_source_ids" value="{{ k.id }}">
+        <div class="attached-main">
+          <span class="attached-title">{{ k.label }}</span>
+          <span class="caption">{{ k.kind }} · refreshes {{ k.refresh }}</span>
+          {% if k.tech != k.label %}<span class="technical">{{ k.tech }}</span>{% endif %}
+          {% if not k.active %}<span class="chip chip-warn">Inactive</span>{% endif %}
+        </div>
+        {% if not readonly %}<div class="row attached-actions"><button type="button" class="btn ghost small" data-remove-row aria-label="Remove {{ k.label }}">Remove</button></div>{% endif %}
+      </div>
+      {% endfor %}
+      <div class="empty-inline" data-empty {% if knowledge_attached %}hidden{% endif %}>No knowledge attached.</div>
+    </div>
+  </form>
+</section>
+
+{# --------------------------------------------------------------------- skills #}
+<section class="section" id="skills">
+  <div class="row between section-head">
+    <div>
+      <h2>Skills</h2>
+      <span class="caption">Playbooks the agent reads when a task needs them. "Always on" skills are read every turn.</span>
+    </div>
+    {% if not readonly and skill_catalog %}
+    <div class="combobox" data-combobox="skill" data-catalog="catalog-skills">
+      <button type="button" class="btn" data-combobox-open aria-haspopup="listbox">+ Add skill</button>
+      <div class="combobox-panel" hidden>
+        <input type="search" placeholder="Search skills" aria-label="Search skills" data-combobox-input>
+        <div class="combobox-list" role="listbox" data-combobox-list></div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  <form method="post" action="/admin/profiles/{{ agent.id }}/skill-attachments" id="form-skills" data-tab-form data-form-label="Skills">
+    <div class="attached-list" data-attached-list="skill">
+      {% for s in skill_attached %}
+      <div class="attached-row" data-row data-id="{{ s.id }}">
+        <input type="hidden" name="attach_skill_ids" value="{{ s.id }}">
+        <div class="attached-main">
+          <span class="attached-title">{{ s.label }}</span>
+          {% if s.always_on %}<span class="chip chip-info">Always on</span>{% else %}<span class="chip chip-neutral">When needed</span>{% endif %}
+          <span class="caption">{{ s.description|truncate(120) }}</span>
+        </div>
+        {% if not readonly %}<div class="row attached-actions"><button type="button" class="btn ghost small" data-remove-row aria-label="Remove {{ s.label }}">Remove</button></div>{% endif %}
+      </div>
+      {% endfor %}
+      <div class="empty-inline" data-empty {% if skill_attached %}hidden{% endif %}>
+        No skills attached.{% if not skill_catalog %} Create one under <a href="/admin/skills">Knowledge → Skills</a>.{% endif %}
+      </div>
+    </div>
+  </form>
+</section>
+
+{# ------------------------------------------------------------------- advanced #}
+<section class="section">
+  <details class="advanced">
+    <summary><span class="section-title">Advanced</span> <span class="caption">— legacy lists the runtime no longer reads</span></summary>
+    <p class="caption mt-s">Kept for older snapshots and partner visibility rules. <strong>Ticking a box here does not give the agent a tool</strong> — use Toolsets above.
+      {% if legacy_not_bound %}{{ legacy_not_bound|length }} listed tool{{ '' if legacy_not_bound|length == 1 else 's' }} never reach the agent: {{ legacy_not_bound|join(', ') }}.{% endif %}</p>
+    <form method="post" action="/admin/profiles/{{ agent.id }}" id="form-legacy" data-tab-form data-form-label="Legacy lists">
+      <input type="hidden" name="tool_ids" value="">
+      <input type="hidden" name="mcp_server_ids" value="">
+      {{ keep_delegatable() }}
+      <div class="legacy-grid">
+        <div>
+          <div class="row between">
+            <h3 class="h3">Legacy tool list <span class="caption">({{ mapped.tool_ids|length }} selected)</span></h3>
+            <input type="search" placeholder="Filter" aria-label="Filter legacy tools" data-filter-checklist="legacy-tools">
+          </div>
+          <div class="checklist" id="legacy-tools">
+            {% set picked = tools|selectattr('tool_id', 'in', mapped.tool_ids)|list %}
+            {% set rest = tools|rejectattr('tool_id', 'in', mapped.tool_ids)|list %}
+            {% for t in picked + rest %}
+            <label data-check-item data-search="{{ (t.python_name ~ ' ' ~ (t.display_name or ''))|lower }}">
+              <input type="checkbox" name="tool_ids" value="{{ t.tool_id }}" {% if t.tool_id in mapped.tool_ids %}checked{% endif %} {% if readonly %}disabled{% endif %}>
+              <span>{{ t.display_name or t.python_name }}</span> <span class="technical">{{ t.python_name }}</span>
+            </label>
+            {% else %}<p class="caption">No tools registered.</p>{% endfor %}
+          </div>
+        </div>
+        <div>
+          <h3 class="h3">Legacy server list <span class="caption">({{ mapped.mcp_ids|length }} selected)</span></h3>
+          <div class="checklist">
+            {% for m in mcp_servers %}
+            <label data-check-item>
+              <input type="checkbox" name="mcp_server_ids" value="{{ m.mcp_server_id }}" {% if m.mcp_server_id in mapped.mcp_ids %}checked{% endif %} {% if readonly %}disabled{% endif %}>
+              <span>{{ m.name }}</span>
+            </label>
+            {% else %}<p class="caption">No servers registered.</p>{% endfor %}
+          </div>
+        </div>
+      </div>
+    </form>
+  </details>
+</section>
+
+{{ savebar('Save tools & knowledge', readonly) }}
+</div>
+
+<script type="application/json" id="catalog-toolsets">{{ toolset_catalog | tojson }}</script>
+<script type="application/json" id="catalog-knowledge">{{ knowledge_catalog | tojson }}</script>
+<script type="application/json" id="catalog-skills">{{ skill_catalog | tojson }}</script>
+
+<dialog id="dlg-actions" class="dialog dialog-wide" aria-labelledby="dlg-actions-title">
+  <div class="stack-m">
+    <div>
+      <h2 id="dlg-actions-title" data-actions-title>Choose actions</h2>
+      <p class="caption" data-actions-desc></p>
+    </div>
+    <label class="switch-row">
+      <input type="checkbox" data-actions-all>
+      <span><strong>All actions</strong> — new actions added to this toolset are included automatically</span>
+    </label>
+    <div data-actions-picker>
+      <div class="row between">
+        <input type="search" placeholder="Search actions" aria-label="Search actions" data-actions-search>
+        <div class="row">
+          <button type="button" class="btn ghost small" data-actions-select="all">Select all</button>
+          <button type="button" class="btn ghost small" data-actions-select="none">Clear</button>
+          <span class="caption" data-actions-count></span>
+        </div>
+      </div>
+      <div class="actions-groups" data-actions-groups></div>
+    </div>
+    <label class="field" data-actions-text hidden>Action names <span class="muted">(comma-separated; blank = all)</span>
+      <input type="text" data-actions-text-input>
+    </label>
+    <div class="row end">
+      <button type="button" class="ghost" data-close-dialog>Cancel</button>
+      <button type="button" class="primary" data-actions-apply>Apply</button>
+    </div>
+  </div>
+</dialog>

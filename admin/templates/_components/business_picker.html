@@ -1,0 +1,38 @@
+{# Shared business-id picker.
+
+Render with:
+    {% from "_components/business_picker.html" import business_picker %}
+    {{ business_picker(
+        name="ctx_business_id",
+        businesses=businesses,
+        selected_id=current_business_id or "",
+        required=False,
+        placeholder="— select a business —",
+        id_attr="some-dom-id",
+        style="width:100%",
+    ) }}
+
+`businesses` is the list produced by `_business_picker.fetch_businesses_for_picker(client)`.
+The selected value is the business uuid (id) so the receiving form/handler
+gets a uuid directly — the displayed text is the business_name + subdomain. #}
+
+{% macro business_picker(name, businesses, selected_id="", required=False, placeholder="— select a business —", id_attr="", style="") -%}
+<select name="{{ name }}"
+        {% if id_attr %}id="{{ id_attr }}"{% endif %}
+        {% if required %}required{% endif %}
+        {% if style %}style="{{ style }}"{% endif %}>
+  <option value=""{% if not selected_id %} selected{% endif %} {% if required %}disabled{% endif %}>
+    {{ placeholder }}
+  </option>
+  {% for b in (businesses or []) %}
+    <option value="{{ b.id }}"{% if selected_id and selected_id == b.id %} selected{% endif %}>
+      {{ b.name }}{% if b.subdomain %} ({{ b.subdomain }}){% endif %}
+    </option>
+  {% endfor %}
+</select>
+{%- if not businesses %}
+<p class="caption" style="color:var(--warning);margin-top:var(--space-xxs);">
+  No businesses loaded. Either none seeded, or the picker fetch failed.
+</p>
+{% endif %}
+{%- endmacro %}

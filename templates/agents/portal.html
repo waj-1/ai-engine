@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<!-- AI agents demo portal — public, no login. One page: the agent picker and
+     the agent workspace (story card + call panel). Everything dynamic is
+     rendered by static/agents/portal.js with textContent only. -->
+<html lang="{{ locale }}" dir="{{ 'rtl' if locale == 'ar' else 'ltr' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>AI Agents</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="/static/agents/portal.css?v=1">
+</head>
+<body data-agent="{{ agent_key }}" data-locale="{{ locale }}">
+  <div class="ap-app">
+    <header class="ap-header">
+      <a class="ap-brand" href="/agents" data-nav="home">
+        <span class="ap-brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="ap-brand-text">
+          <strong data-i18n="appName">AI Agents</strong>
+          <small id="ap-brand-sub"></small>
+        </span>
+      </a>
+      <div class="ap-header-actions">
+        <span class="ap-fiction" id="ap-fiction" data-i18n="fictionPill">Fictional company · test data</span>
+        <button type="button" class="ap-lang" id="ap-lang" aria-label="Language">
+          <span lang="en">EN</span><span lang="ar">ع</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ===================== Picker ===================== -->
+    <main class="ap-picker" id="ap-picker" hidden>
+      <section class="ap-hero">
+        <h1 data-i18n="heroTitle">Meet the agents. Play the customer.</h1>
+        <p data-i18n="heroSub">Four AI agents for a made-up telecom company. Pick one, pick a story, and talk to it — by voice or chat, in English or Arabic.</p>
+      </section>
+      <div class="ap-cards" id="ap-cards"></div>
+      <ol class="ap-howto" id="ap-steps"></ol>
+      <p class="ap-picker-note" id="ap-picker-note"></p>
+    </main>
+
+    <!-- ===================== Workspace ===================== -->
+    <main class="ap-workspace" id="ap-workspace" hidden>
+      <div class="ap-bar">
+        <button type="button" class="ap-back" id="ap-back" data-nav="home">
+          <span class="ap-flip" aria-hidden="true">←</span>
+          <span data-i18n="allAgents">All agents</span>
+        </button>
+        <div class="ap-agent-id">
+          <span class="ap-agent-text">
+            <strong id="ap-agent-name"></strong>
+          </span>
+          <span class="ap-dir" id="ap-agent-dir"></span>
+        </div>
+        <div class="ap-stepper" role="group">
+          <button type="button" class="ap-step" id="ap-prev"><span class="ap-flip" aria-hidden="true">‹</span><span class="ap-sr" data-i18n="prevCase">Previous story</span></button>
+          <select id="ap-case" class="ap-case-select" aria-label="Story"></select>
+          <button type="button" class="ap-step" id="ap-next"><span class="ap-flip" aria-hidden="true">›</span><span class="ap-sr" data-i18n="nextCase">Next story</span></button>
+        </div>
+      </div>
+
+      <div class="ap-row">
+        <!-- Story card -->
+        <details class="ap-story" id="ap-story" open>
+          <summary class="ap-story-summary">
+            <span class="ap-story-headline" id="ap-story-headline"></span>
+            <span class="ap-story-toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="ap-story-body">
+            <section class="ap-block ap-who">
+              <h3 data-i18n="yourStory">Your story</h3>
+              <p id="ap-summary"></p>
+            </section>
+            <section class="ap-block ap-goal">
+              <h3 data-i18n="yourGoal">Your goal on this call</h3>
+              <p id="ap-goal"></p>
+            </section>
+            <section class="ap-block ap-facts">
+              <h3 data-i18n="keyFacts">Your details</h3>
+              <ul class="ap-chips" id="ap-facts"></ul>
+            </section>
+            <section class="ap-block ap-say">
+              <h3><span data-i18n="saySomething">Say something like…</span> <small id="ap-say-hint"></small></h3>
+              <div class="ap-say-list" id="ap-say"></div>
+            </section>
+            <section class="ap-block ap-twist">
+              <h3><span data-i18n="plotTwist">Plot twist to try</span></h3>
+              <p id="ap-twist"></p>
+            </section>
+            <details class="ap-great">
+              <summary><span data-i18n="greatAgent">What a great agent does</span></summary>
+              <p id="ap-great"></p>
+            </details>
+            <p class="ap-fine" data-i18n="fineprint">Every person, account, number and amount here is fictional test data.</p>
+          </div>
+        </details>
+
+        <!-- Call / chat panel -->
+        <section class="ap-call" id="ap-call" aria-live="polite">
+          <div class="ap-call-head">
+            <div class="ap-modes" role="tablist" id="ap-modes">
+              <button type="button" role="tab" data-mode="voice" id="ap-mode-voice"><span data-i18n="modeVoice">Voice</span></button>
+              <button type="button" role="tab" data-mode="chat" id="ap-mode-chat"><span data-i18n="modeChat">Chat</span></button>
+            </div>
+            <label class="ap-accent" id="ap-accent-wrap">
+              <span class="ap-sr" data-i18n="accent">Language &amp; accent</span>
+              <select id="ap-accent"></select>
+            </label>
+            <span class="ap-status" id="ap-status"></span>
+          </div>
+
+          <div class="ap-log" id="ap-log">
+            <div class="ap-empty" id="ap-empty">
+              <p id="ap-empty-text"></p>
+            </div>
+          </div>
+
+          <div class="ap-dock">
+            <div class="ap-voice-controls" id="ap-voice-controls">
+              <button type="button" class="ap-ctl ap-mute" id="ap-mute" disabled>
+                <span data-i18n="mute">Mute</span>
+              </button>
+              <button type="button" class="ap-callbtn" id="ap-callbtn">
+                <span class="ap-callbtn-label" id="ap-callbtn-label"></span>
+              </button>
+              <button type="button" class="ap-ctl ap-end" id="ap-end" disabled>
+                <span data-i18n="end">End</span>
+              </button>
+            </div>
+            <form class="ap-composer" id="ap-composer" hidden autocomplete="off">
+              <button type="button" class="ap-ctl ap-newchat" id="ap-newchat" title="New conversation">
+                <span aria-hidden="true">↺</span><span class="ap-sr" data-i18n="newChat">New conversation</span>
+              </button>
+              <input type="text" id="ap-input" maxlength="1000" autocomplete="off">
+              <button type="submit" class="ap-send" id="ap-send"><span data-i18n="send">Send</span></button>
+            </form>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/shared/voice-live.js?v=6"></script>
+  <script src="/static/agents/portal.js?v=1" defer></script>
+</body>
+</html>

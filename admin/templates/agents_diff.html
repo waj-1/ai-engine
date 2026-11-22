@@ -1,0 +1,254 @@
+{% extends "_base.html" %}
+{# Two agents side by side (/admin/agents/diff?a&b) or a saved version vs the
+   live setup (/admin/agents/{id}/versions/{vid}/diff, `version_info` set).
+   Plain field labels with the technical name muted; model and parent ids are
+   shown by name (diff_display in admin/profile_fork_handlers.py). "Only
+   differences" is on by default and hides identical rows. #}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import alert, hint %}
+{% set name_a = profile_a.display_name or profile_a.agent_kind %}
+{% set name_b = profile_b.display_name or profile_b.agent_kind %}
+{% if version_info is defined and version_info %}
+  {% set vlabel = ('v' ~ version_info.version_number) if version_info.version_number else 'saved version' %}
+  {% set vdate = (version_info.promoted_at or '')[:10] %}
+  {% set title = name_b ~ ' — ' ~ vlabel ~ (' (' ~ vdate ~ ')' if vdate else '') ~ ' vs live' %}
+  {% set label_a = vlabel ~ (' · ' ~ vdate if vdate else '') %}
+  {% set label_b = 'Live setup' %}
+{% else %}
+  {% set title = 'Compare: ' ~ name_a ~ ' ↔ ' ~ name_b %}
+  {% set label_a = name_a %}
+  {% set label_b = name_b %}
+{% endif %}
+{% block title %}{{ title }} · {{ brand().title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}{% if version_info is defined and version_info %}What changed since this checkpoint{% if version_info.notes %} — “{{ version_info.notes|truncate(60) }}”{% endif %}.{% else %}Every difference in setup, side by side.{% endif %}{% endblock %}
+{% block content %}
+
+{% macro status_chip(status) -%}
+  {% if status == 'draft' %}{{ chip('Draft', variant='warn') }}
+  {% elif status == 'archived' %}{{ chip('Archived', variant='neutral') }}
+  {% elif status == 'specialist' %}{{ chip('Specialist', variant='ok') }}
+  {% elif status == 'template' %}{{ chip('Template', variant='info') }}
+  {% else %}{{ chip('Active', variant='ok', dot=True) }}{% endif %}
+{%- endmacro %}
+
+{% macro side_header(p, label) -%}
+<div class="stack-xs min-w-0">
+  <div class="eyebrow">{{ label }}</div>
+  <a class="agent-name" href="/admin/agents?env={{ p.environment or current_env }}&profile_id={{ p.profile_id }}">{{ p.display_name or p.agent_kind }}</a>
+  <div class="row">
+    {{ chip('Production' if p.environment == 'prod' else ('Staging' if p.environment == 'staging' else (p.environment or 'dev')), variant='neutral') }}
+    {{ status_chip(p.status or 'active') }}
+  </div>
+  <div class="technical">{{ p.profile_id[:8] }}… · {{ p.agent_kind }}</div>
+</div>
+{%- endmacro %}
+
+{% macro show_value(field, v) -%}
+  {% if v is none or v == '' %}<span class="muted">—</span>
+  {% elif field in id_fields|default({}) and (value_names|default({})).get(v) %}{{ value_names[v] }} <span class="technical">{{ v[:8] }}</span>
+  {% elif field == 'status' %}{{ v|capitalize }}
+  {% else %}<span style="word-break:break-word;">{{ v }}</span>{% endif %}
+{%- endmacro %}
+
+<div class="page-head">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/admin/agents?env={{ current_env }}">Agents</a><span aria-hidden="true">/</span>
+    <a href="/admin/agents?env={{ current_env }}&profile_id={{ profile_b.profile_id }}{% if version_info is defined and version_info %}&tab=versions{% endif %}">{{ name_b }}</a><span aria-hidden="true">/</span>
+    <span>{% if version_info is defined and version_info %}Version diff{% else %}Compare{% endif %}</span>
+  </nav>
+  <label class="switch-row">
+    <input type="checkbox" data-only-diff checked>
+    <span>Only differences</span>
+  </label>
+</div>
+
+<section class="section">
+  <div class="diff-sides">
+    {{ side_header(profile_a, label_a if (version_info is defined and version_info) else 'First') }}
+    <div class="diff-arrow" aria-hidden="true">↔</div>
+    {{ side_header(profile_b, label_b if (version_info is defined and version_info) else 'Second') }}
+  </div>
+</section>
+
+<section class="section" data-diff-root>
+  <h2>Settings</h2>
+  {% set changed = diff.scalars|rejectattr('equal')|list %}
+  <span class="caption">{{ changed|length }} of {{ diff.scalars|length }} differ.</span>
+  <div class="table-wrap mt-s">
+  <table class="table">
+    <thead><tr><th style="width:200px;">Setting</th><th>{{ label_a }}</th><th>{{ label_b }}</th></tr></thead>
+    <tbody>
+      {% for s in diff.scalars %}
+      <tr {% if not s.equal %}class="diff-changed"{% else %}data-same{% endif %}>
+        <td>{{ (field_labels|default({})).get(s.field, s.field) }}<div class="technical">{{ s.field }}</div></td>
+        <td>{{ show_value(s.field, s.a) }}</td>
+        <td>{{ show_value(s.field, s.b) }} {% if not s.equal %}{{ chip('changed', variant='warn') }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+      <tr data-none-msg hidden><td colspan="3" class="caption">No setting differs.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+{# Array sections: removed | shared | added. Shared items hide with "Only differences". #}
+{% macro array_section(title, bucket, empty_label) -%}
+<section class="section" data-diff-root>
+  <h2>{{ title }}</h2>
+  <span class="caption">{{ bucket.removed_in_b|length }} only in {{ label_a }} · {{ bucket.added_in_b|length }} only in {{ label_b }} · {{ bucket.shared|length }} in both</span>
+  {% if not bucket.shared and not bucket.added_in_b and not bucket.removed_in_b %}
+    <p class="caption mt-s">{{ empty_label }}</p>
+  {% else %}
+  {% set nodiff = not bucket.added_in_b and not bucket.removed_in_b %}
+  {% if nodiff %}<p class="caption mt-s">No differences.</p>{% endif %}
+  <div class="diff-cols mt-s" {% if nodiff %}data-same{% endif %}>
+    <div>
+      <div class="eyebrow">Only in {{ label_a }}</div>
+      {% for it in bucket.removed_in_b %}
+      <div class="diff-item is-removed">{{ it.label }} <span class="technical">{{ it.id[:8] }}…</span></div>
+      {% else %}<p class="caption">—</p>{% endfor %}
+    </div>
+    <div>
+      <div class="eyebrow">Only in {{ label_b }}</div>
+      {% for it in bucket.added_in_b %}
+      <div class="diff-item is-added">{{ it.label }} <span class="technical">{{ it.id[:8] }}…</span></div>
+      {% else %}<p class="caption">—</p>{% endfor %}
+    </div>
+    <div data-same>
+      <div class="eyebrow">In both</div>
+      {% for it in bucket.shared %}
+      <div class="diff-item">{{ it.label }}</div>
+      {% else %}<p class="caption">—</p>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+{%- endmacro %}
+
+{# Toolsets + the actions chosen in each — what the agent can actually do
+   (agent_profile_mcp_servers + tool_subset; toolsets_diff in
+   admin/profile_fork_handlers.py). #}
+{% set ts = diff.toolsets or {'items': [], 'counts': {}, 'n_changed': 0} %}
+<section class="section" data-diff-root>
+  <h2>Toolsets and actions</h2>
+  <span class="caption">
+    {% if ts['items'] %}Changes from {{ label_a }} to {{ label_b }}: {{ ts.n_changed }} of {{ ts['items']|length }} toolset{{ 's' if ts['items']|length != 1 else '' }} differ{% if ts.counts.added %} · {{ ts.counts.added }} added{% endif %}{% if ts.counts.removed %} · {{ ts.counts.removed }} removed{% endif %}{% if ts.counts.changed %} · {{ ts.counts.changed }} with different actions{% endif %}.{% else %}Neither has a toolset attached.{% endif %}
+  </span>
+  {% if ts.unknown %}
+  <div class="mt-s">{% call hint() %}This saved version was taken before toolsets were recorded with versions, so its side shows none. Compare two newer versions to see toolset changes.{% endcall %}</div>
+  {% endif %}
+  {% if ts['items'] %}
+  {% if not ts.n_changed %}<p class="caption mt-s" data-none-msg-static>No differences.</p>{% endif %}
+  <div class="table-wrap mt-s">
+  <table class="table toolset-diff">
+    <thead><tr><th>Toolset</th><th>{{ label_a }}</th><th>{{ label_b }}</th><th>Change</th></tr></thead>
+    <tbody>
+      {% for t in ts['items'] %}
+      <tr class="toolset-row is-{{ t.state }}" {% if t.state == 'same' %}data-same{% endif %}>
+        {% set pretty = mcp_display_name(t.name) %}
+        <td>{{ pretty }}{% if t.source and t.source != 'bundle' %} <span class="caption">· external</span>{% endif %}{% if pretty != t.name %}<div class="technical">{{ t.name }}</div>{% endif %}</td>
+        <td>{% if t.summary_a %}{{ t.summary_a }}{% else %}<span class="muted">Not attached</span>{% endif %}</td>
+        <td>{% if t.summary_b %}{{ t.summary_b }}{% else %}<span class="muted">Not attached</span>{% endif %}</td>
+        <td class="nowrap">
+          {% if t.state == 'added' %}<span title="Only in {{ label_b }}">{{ chip('Added', variant='ok') }}</span>
+          {% elif t.state == 'removed' %}<span title="Only in {{ label_a }}">{{ chip('Removed', variant='err') }}</span>
+          {% elif t.state == 'changed' %}{{ chip('Actions differ', variant='warn') }}
+          {% else %}<span class="caption">Same</span>{% endif %}
+        </td>
+      </tr>
+      {% if t.actions %}
+      <tr class="toolset-actions is-{{ t.state }}" {% if t.state == 'same' %}data-same{% endif %}>
+        <td colspan="4">
+          <div class="chip-row">
+            {% for a in t.actions if a.state != 'same' %}
+            <span class="chip chip-{{ 'ok' if a.state == 'added' else 'err' }}" title="{{ ('Only in ' ~ label_b) if a.state == 'added' else ('Only in ' ~ label_a) }} · {{ a.name }}">{{ '+' if a.state == 'added' else '−' }} {{ a.label }}</span>
+            {% endfor %}
+            {% set same_actions = t.actions|selectattr('state', 'equalto', 'same')|list %}
+            {% if same_actions %}
+            <details class="inline-details">
+              <summary class="caption">{{ same_actions|length }} action{{ 's' if same_actions|length != 1 else '' }} in both</summary>
+              <div class="chip-row mt-xs">{% for a in same_actions %}<span class="chip chip-neutral" title="{{ a.name }}">{{ a.label }}</span>{% endfor %}</div>
+            </details>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+
+{% set sk = diff.skills or {'added_in_b': [], 'removed_in_b': [], 'shared': []} %}
+{% if sk.unknown %}
+<section class="section">
+  <h2>Skills</h2>
+  {% call hint() %}This saved version was taken before skills were recorded with versions.{% endcall %}
+</section>
+{% else %}
+{{ array_section('Skills', sk, 'Neither has a skill attached.') }}
+{% endif %}
+{{ array_section('Knowledge sources', diff.data_sources, 'Neither uses any knowledge sources.') }}
+{{ array_section('Sub-agents', diff.sub_agents, 'Neither hands work to sub-agents.') }}
+
+<details class="advanced section">
+  <summary>Legacy lists (not used when the agent runs)</summary>
+  <p class="caption mt-s">Older setups listed tools and servers directly on the agent. The agent now gets its actions only from the toolsets above; these lists are kept for reference.</p>
+  {{ array_section('Legacy tool list', diff.tools, 'Neither lists any tools.') }}
+  {{ array_section('Legacy server list', diff.mcp_servers, 'Neither lists any servers.') }}
+</details>
+
+<section class="section">
+  <h2>Instructions</h2>
+  {% if diff.prompts.kind_mismatch %}
+    {% call alert('warning') %}
+      <strong>These are different kinds of agent</strong>
+      (<code>{{ profile_a.agent_kind }}</code> vs <code>{{ profile_b.agent_kind }}</code>),
+      so they use completely different instructions and a prompt comparison
+      isn't meaningful. If this was meant to be a copy, double-check before
+      promoting.
+    {% endcall %}
+  {% else %}
+    {% call hint() %}
+      Agents of the same kind share their instructions; each pins its own version.
+      Edit them on the agent's <a href="/admin/agents?env={{ current_env }}&profile_id={{ profile_b.profile_id }}&tab=instructions">Instructions tab</a>.
+    {% endcall %}
+    {% if diff.prompts.shared %}
+      <div class="table-wrap mt-s">
+      <table class="table">
+        <thead><tr><th>Prompt</th><th>Latest version</th></tr></thead>
+        <tbody>
+          {% for p in diff.prompts.shared %}
+          <tr>
+            <td>{{ (p.slug or '')|replace('_', ' ')|capitalize }} <span class="technical">{{ p.slug }}</span></td>
+            <td class="num">v{{ p.latest_version if p.latest_version is not none else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    {% else %}
+      <p class="caption">No prompts set up for <code>{{ profile_a.agent_kind }}</code>.</p>
+    {% endif %}
+  {% endif %}
+</section>
+
+<script>
+(function () {
+  var box = document.querySelector("[data-only-diff]");
+  function apply() {
+    var on = box.checked;
+    document.querySelectorAll("[data-same]").forEach(function (el) { el.hidden = on; });
+    document.querySelectorAll("[data-none-msg]").forEach(function (el) {
+      var tbody = el.parentNode;
+      el.hidden = !on || !!tbody.querySelector("tr.diff-changed");
+    });
+  }
+  box.addEventListener("change", apply);
+  apply();
+})();
+</script>
+{% endblock %}

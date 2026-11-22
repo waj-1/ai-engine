@@ -1,0 +1,36 @@
+{# admin/templates/_components/status_chip.html — the ONE status vocabulary of
+   the Testing area (eval runs, cases, test runs, E2E runs, voice checks,
+   bake-offs): Passed · Failed · Error · Running · Queued · Cancelled ·
+   Skipped · Not run. Labels/colours come from admin/testing_view.py so the
+   Python side (status.json polling, tests) and the templates agree.
+
+     run_status(status)            status chip with a dot
+     verdict_chip(verdict)         Ready / Needs work / Not tested / Agent missing here
+     score_chip(score, target)     "79%" coloured by pass/fail against the target
+#}
+{% macro run_status(status, dot=True) -%}
+<span class="chip chip-{{ status|status_variant }}">
+  {%- if dot -%}<span class="chip-dot"></span>{%- endif -%}
+  {{ status|status_label }}
+</span>
+{%- endmacro %}
+
+{% macro verdict_chip(verdict) -%}
+<span class="chip chip-{{ verdict|verdict_variant }}"><span class="chip-dot"></span>{{ verdict|verdict_label }}</span>
+{%- endmacro %}
+
+{% macro score_chip(score, target=None) -%}
+{%- if score is none -%}<span class="caption">—</span>
+{%- else -%}
+{%- set ok = target is none or score >= target - 0.0000001 -%}
+<span class="chip chip-{{ 'ok' if ok else 'err' }} num">{{ score|pct }}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{# "−3 pts" in red / "+4 pts" in green / "±0 pts" muted; nothing when unknown. #}
+{% macro delta(d, suffix='') -%}
+{%- if d is not none -%}
+{%- set n = (d * 100)|round|int -%}
+<span class="delta {{ 'up' if n > 0 else ('down' if n < 0 else 'flat') }} num">{{ d|pts }}{{ suffix }}</span>
+{%- endif -%}
+{%- endmacro %}

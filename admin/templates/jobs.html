@@ -1,0 +1,8 @@
+{% extends "_base.html" %}
+{% block title %}Background jobs · {{ brand().title }}{% endblock %}
+{% block page_title %}Background jobs{% endblock %}
+{% block page_subtitle %}Long-running admin work — test runs, document uploads, deploys.{% endblock %}
+{% block content %}
+{% set diag_tab = 'jobs' %}{% include "_diagnostics_tabs.html" %}
+{% include "_tab_jobs.html" %}
+{% endblock %}

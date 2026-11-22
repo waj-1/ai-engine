@@ -1,0 +1,264 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/status_chip.html" import run_status, score_chip %}
+{% from "_components/callout.html" import hint, hint_text, info %}
+{% from "_components/kpi.html" import kpi %}
+{% block title %}Schedules · Testing · {{ brand().title }}{% endblock %}
+{% block page_title %}Schedules{% endblock %}
+{% block page_subtitle %}Grade a sample of real conversations automatically, every day or week.{% endblock %}
+{% block content %}
+{% set tab = tab or 'scheduling' %}
+<div class="page-head">
+  <div class="page-head-text"><p>A schedule picks recent real conversations of an agent and has a judge model grade the replies — no prepared answers needed.</p></div>
+  <div class="page-head-actions"><button type="button" class="primary" data-open-schedule>New schedule</button></div>
+</div>
+
+{% if scheduled_runs %}
+<section class="section">
+  <h2>How real conversations score</h2>
+  <span class="caption">Across every scheduled run below.</span>
+  <div class="kpi-grid mt-s">
+    {{ kpi('Latest score', indicators.latest_score|pct) }}
+    {{ kpi('Replies graded good', indicators.pass_rate|pct) }}
+    {{ kpi('Conversations graded', indicators.samples) }}
+    <div class="card kpi">
+      <div class="eyebrow">Change since the run before</div>
+      {% if indicators.drift is none %}
+      <div class="kpi-value num">—</div>
+      <div class="caption">Needs two scored runs</div>
+      {% else %}
+      <div class="kpi-value num"><span class="delta {{ 'up' if indicators.drift > 0 else ('down' if indicators.drift < 0 else 'flat') }}" style="font-size:inherit;">{{ indicators.drift|pts }}</span></div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="section">
+  <h2>Schedules</h2>
+  <span class="caption">Recurring schedules run automatically; “Run now” runs one immediately.</span>
+  {% if schedules %}
+  <div class="table-wrap"><table class="table">
+    <thead><tr>
+      <th>Schedule</th><th>Agent</th><th>How often</th><th>What it checks</th>
+      <th>Status</th><th>Last run</th><th>Next run</th><th><span class="sr-only">Actions</span></th>
+    </tr></thead>
+    <tbody>
+      {% for s in schedules %}
+      <tr>
+        <td>{{ s.name }}{% if s._legacy %} {{ chip('Test suite (older type)', variant='neutral') }}{% endif %}</td>
+        <td class="caption">{{ s._profile }}</td>
+        <td>{{ 'Manual' if s.cadence == 'manual' else s.cadence|capitalize }}</td>
+        <td class="caption">{{ s._sample_config }}</td>
+        <td>{% if s.is_enabled %}{{ chip('On', variant='ok', dot=True) }}{% else %}{{ chip('Off', variant='neutral') }}{% endif %}</td>
+        <td class="caption nowrap" title="{{ s.last_run_at|stamp }}">{{ s.last_run_at|when }}</td>
+        <td class="caption nowrap" title="{{ s.next_run_at|stamp }}">{{ s.next_run_at|stamp if s.next_run_at else '—' }}</td>
+        <td><div class="row end nowrap">
+          <form method="post" action="/admin/eval-runs/schedules/{{ s.schedule_id }}/fire" style="margin:0;">
+            <button type="submit" class="small">Run now</button>
+          </form>
+          <form method="post" action="/admin/eval-runs/schedules/{{ s.schedule_id }}" style="margin:0;">
+            <input type="hidden" name="name" value="{{ s.name }}">
+            <input type="hidden" name="source" value="{{ s.source }}">
+            <input type="hidden" name="cadence" value="{{ s.cadence }}">
+            <input type="hidden" name="profile_id" value="{{ s.profile_id or '' }}">
+            <input type="hidden" name="suite_id" value="{{ s.suite_id or '' }}">
+            <input type="hidden" name="agent_kind" value="{{ s.agent_kind or '' }}">
+            <input type="hidden" name="business_id" value="{{ (s.coverage or {}).get('business_id') or '' }}">
+            <input type="hidden" name="lookback_days" value="{{ (s.coverage or {}).get('lookback_days') or 30 }}">
+            <input type="hidden" name="sample_size" value="{{ (s.coverage or {}).get('sample_size') or 10 }}">
+            <input type="hidden" name="judge_model" value="{{ (s.coverage or {}).get('judge_model') or '' }}">
+            <input type="hidden" name="expectations" value="{{ (s.coverage or {}).get('expectations') or default_expectation }}">
+            {# Toggle enabled state: invert the current value. #}
+            {% if not s.is_enabled %}<input type="hidden" name="is_enabled" value="on">{% endif %}
+            <button type="submit" class="small ghost">{% if s.is_enabled %}Turn off{% else %}Turn on{% endif %}</button>
+          </form>
+          <form method="post" action="/admin/eval-runs/schedules/{{ s.schedule_id }}/delete" style="margin:0;"
+                onsubmit="return confirm('Delete schedule {{ s.name }}?');">
+            <button type="submit" class="small ghost danger-text">Delete</button>
+          </form>
+        </div></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <div class="empty-state">
+    <p>No schedules yet. Add one to grade real conversations every day or week, and see the score here.</p>
+    <button type="button" class="primary" data-open-schedule>New schedule</button>
+  </div>
+  {% endif %}
+</section>
+
+{% if scheduled_runs %}
+<section class="section">
+  <h2>Scheduled runs</h2>
+  <div class="row mb-s mt-s">
+    <button type="button" id="cmp-go" class="btn" disabled aria-disabled="true">Compare selected</button>
+    <span class="caption" id="cmp-count">Tick two or more runs to compare them</span>
+  </div>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr>
+      <th class="col-pick"><span class="sr-only">Select</span></th><th>Run</th><th>Agent</th><th>Result</th><th class="num">Score</th><th class="num">Replies graded good</th><th>Finished</th>
+    </tr></thead>
+    <tbody>
+      {% for r in scheduled_runs %}
+      <tr>
+        <td class="col-pick"><input type="checkbox" class="cmp-pick" value="{{ r.run_id }}" aria-label="Select run"></td>
+        <td><a href="/admin/evals/runs/{{ r.run_id }}">{{ (r.finished_at or r.created_at)|stamp }}</a></td>
+        <td>{{ r._profile }}</td>
+        <td>{{ run_status(r.status) }}</td>
+        <td class="num">{{ r.score|pct }}</td>
+        <td class="num">{{ r._pass_rate|pct }}</td>
+        <td class="caption nowrap">{{ (r.finished_at or r.created_at)|when }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="section" data-eval-trend data-scheduled-only="1">
+  <div class="row between">
+    <h2 class="section-title mb-0">Score over time</h2>
+    <div class="row">
+      <label class="caption">Show
+        <select id="eval-trend-metric">
+          <option value="score">Score</option>
+          <option value="pass_rate">Replies graded good</option>
+        </select>
+      </label>
+      <label class="caption">Window
+        <select id="eval-trend-days">
+          <option value="7">7 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="90">90 days</option>
+          <option value="365">1 year</option>
+        </select>
+      </label>
+    </div>
+  </div>
+  <div class="chart-card mt-s">
+    <div style="position:relative;height:240px;flex:1;">
+      <canvas id="eval-trend-chart"></canvas>
+    </div>
+  </div>
+  <p class="caption" id="eval-trend-empty" style="display:none;">No scheduled runs in this window.</p>
+</section>
+{% endif %}
+
+<dialog id="schedule-dialog" class="drawer" aria-labelledby="schedule-dialog-title">
+<div class="drawer-body stack-m">
+  <div class="row between">
+    <h2 id="schedule-dialog-title" class="mb-0">New schedule</h2>
+    <button type="button" class="ghost icon-btn" data-close-schedule aria-label="Close">&times;</button>
+  </div>
+  <p class="caption">Every run picks recent real conversations of the agent and grades each reply against what a good reply looks like.</p>
+  <form method="post" action="/admin/eval-runs/schedules"
+        class="stack-m">
+    <input type="hidden" name="source" value="live_chats">
+
+    <label class="field">Name
+      <input name="name" required style="width:100%;">
+    </label>
+
+    <label class="field">Agent
+      <select name="profile_id" id="schedule-profile" required style="width:100%;">
+        <option value="" disabled selected>Choose an agent</option>
+        {% for p in profiles %}
+        <option value="{{ p.profile_id }}" data-kind="{{ p.agent_kind }}">{{ p.display_name }}{% if p.environment %} · {{ p.environment }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="field">Judge model
+      <select name="judge_model" required style="width:100%;">
+        <option value="" disabled selected>Pick a judge model</option>
+        {% for m in models %}
+        <option value="{{ m.name }}">{{ m.name }}{% if m.provider %} ({{ m.provider }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="field">What a good reply looks like
+      <textarea name="expectations" id="schedule-expectations" required rows="3" style="width:100%;">{{ default_expectation }}</textarea>
+    </label>
+
+    <div style="display:flex;gap:var(--space-s);">
+      <label class="field" style="flex:1;">From the last (days)
+        <input type="number" name="lookback_days" value="30" min="1" max="365" style="width:100%;">
+      </label>
+      <label class="field" style="flex:1;">Conversations to grade
+        <input type="number" name="sample_size" value="10" min="1" max="100" style="width:100%;">
+      </label>
+    </div>
+
+    <label class="field">How often
+      <select name="cadence" required style="width:100%;">
+        {% for c in cadences %}<option value="{{ c }}" {% if c == 'daily' %}selected{% endif %}>{{ 'Only when I press Run' if c == 'manual' else c|capitalize }}</option>{% endfor %}
+      </select>
+    </label>
+
+    <label class="field">Business (optional)
+      <select name="business_id" style="width:100%;">
+        <option value="">— all / inherit —</option>
+        {% for b in businesses %}
+        <option value="{{ b.id }}">{{ b.name }}{% if b.subdomain %} ({{ b.subdomain }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="caption" style="display:flex;align-items:center;gap:var(--space-xxs);">
+      <input type="checkbox" name="is_enabled" checked> Enabled
+    </label>
+
+    <div style="display:flex;gap:var(--space-s);">
+      <button type="submit" class="primary">Create schedule</button>
+      <button type="submit" name="run_now" value="on">Create and run now</button>
+    </div>
+  </form>
+</div>
+</dialog>
+
+<script src="/admin/static/eval-runs-chart.js?v={{ asset_version }}" defer></script>
+<script src="/admin/static/comparison-picker.js?v={{ asset_version }}" defer></script>
+
+{# Task 2.6: auto-fill the Expectation textarea with the picked profile's
+   agent-kind default. The create form has no agent_kind field of its own —
+   profile_id implies the kind — so the map is embedded server-side
+   (default_expectations_by_kind) and read on Profile change, mirroring the
+   profile-versions-data pattern in _tab_eval_runs.html. Only fires while the
+   operator hasn't typed anything of their own into the textarea, so a
+   deliberate custom expectation is never clobbered by a later profile pick. #}
+<script type="application/json" id="default-expectations-by-kind">{{ default_expectations_by_kind | tojson }}</script>
+<script>
+(function () {
+  var dlg = document.getElementById('schedule-dialog');
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-open-schedule]')) { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); }
+    if (e.target.closest('[data-close-schedule]')) dlg.close();
+  });
+})();
+(function () {
+  var dataEl = document.getElementById('default-expectations-by-kind');
+  var profileSelect = document.getElementById('schedule-profile');
+  var expectationsEl = document.getElementById('schedule-expectations');
+  if (!dataEl || !profileSelect || !expectationsEl) return;
+
+  var byKind = {};
+  try { byKind = JSON.parse(dataEl.textContent || '{}') || {}; } catch (e) { byKind = {}; }
+
+  var userEdited = false;
+  expectationsEl.addEventListener('input', function () { userEdited = true; });
+
+  profileSelect.addEventListener('change', function () {
+    if (userEdited) return;
+    var opt = profileSelect.options[profileSelect.selectedIndex];
+    var kind = opt ? opt.getAttribute('data-kind') : '';
+    var next = kind && byKind[kind];
+    if (next) { expectationsEl.value = next; }
+  });
+})();
+</script>
+{% endblock %}

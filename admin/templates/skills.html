@@ -1,0 +1,82 @@
+{% extends "_base.html" %}
+{% from "_components/callout.html" import alert %}
+{% block title %}Skills · {{ brand().title }}{% endblock %}
+{% block page_title %}Skills{% endblock %}
+{% block page_subtitle %}Reusable instructions an agent loads when it needs them.{% endblock %}
+{% block content %}
+
+{% if error %}
+{% call alert('error') %}<strong>Could not save:</strong> {{ error }}{% endcall %}
+{% endif %}
+
+{% if skills %}
+<section class="section">
+  <table data-tabulator>
+    <thead><tr><th>Name</th><th>Code name</th><th>Agent</th><th>Available to</th><th>Always on</th><th>Status</th><th>Updated</th></tr></thead>
+    <tbody>
+      {% for s in skills %}
+      <tr>
+        <td><a href="/admin/skills/{{ s.skill_id }}">{{ s.display_name }}</a></td>
+        <td><code>{{ s.slug }}</code></td>
+        <td>{{ agent_label(s.agent_kind) }}</td>
+        <td>{% if s.business_id %}<span class="chip chip-neutral">One business</span> <span class="technical">{{ s.business_id }}</span>{% else %}<span class="chip chip-ok">All businesses</span>{% endif %}</td>
+        <td>{% if s.always_on %}<span class="pill warn">always on</span>{% else %}<span class="muted">on demand</span>{% endif %}</td>
+        <td>{% if s.status == 'archived' %}<span class="pill bad">archived</span>{% else %}<span class="pill ok">{{ s.status or 'active' }}</span>{% endif %}</td>
+        <td class="muted">{{ s.updated_at or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<div class="empty-state mb-m">No skills yet. Create the first one below &mdash; it becomes available to the agent you pick.</div>
+{% endif %}
+
+<section class="section" id="new-skill">
+  <h2>New skill</h2>
+  <span class="caption">A skill is a reusable set of instructions an agent pulls in when it needs them &mdash; for example &ldquo;how to write a refund note&rdquo;.</span>
+  <form method="post" action="/admin/skills/create" class="form-stack">
+    <div class="form-grid">
+      <label class="field">
+        <span class="field-label">Name</span>
+        <input name="display_name" required placeholder="Refund note">
+      </label>
+      <label class="field">
+        <span class="field-label">Short code name</span>
+        <input name="slug" required placeholder="refund-note" pattern="[a-z][a-z0-9_-]{1,62}">
+        <span class="field-help">Lowercase letters, digits, - or _. Agents refer to the skill by this name.</span>
+      </label>
+    </div>
+    <div class="form-grid">
+      <label class="field">
+        <span class="field-label">Agent</span>
+        <select name="agent_kind">
+          {% for k in agent_kinds %}<option value="{{ k }}">{{ agent_label(k) }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">Business <span class="opt">(optional)</span></span>
+        <input name="business_id" placeholder="Business ID">
+        <span class="field-help">Leave blank to make the skill available to every business.</span>
+      </label>
+    </div>
+    <label class="field">
+      <span class="field-label">One-line description</span>
+      <input name="description" required placeholder="Format a meeting summary">
+      <span class="field-help">Shown to the agent in its list of skills, so it knows when to use this one. Don't use curly braces.</span>
+    </label>
+    <label class="field">
+      <span class="field-label">Instructions</span>
+      <textarea name="content" required style="min-height:180px;" placeholder="# When to use&#10;..."></textarea>
+      <span class="field-help">Markdown. This becomes version 1; later edits create new versions.</span>
+    </label>
+    <label class="field-check">
+      <input type="checkbox" name="always_on">
+      <span>Always on
+        <span class="field-help">Include these instructions in every conversation instead of loading them only when needed.</span>
+      </span>
+    </label>
+    <div class="form-actions"><button class="primary" type="submit">Create skill</button></div>
+  </form>
+</section>
+{% endblock %}

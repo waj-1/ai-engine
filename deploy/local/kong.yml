@@ -1,0 +1,107 @@
+_format_version: "2.1"
+_transform: true
+
+###
+# Standalone Supabase — declarative Kong gateway config.
+#
+# Mirrors the route declarations from the official supabase/docker `kong.yml`
+# but trimmed to the only two services the local engine talks to:
+#   /rest/v1/*  → PostgREST  (the AI config/KB/memory DB)
+#   /auth/v1/*  → GoTrue     (admin-portal superuser login + JWT validation)
+#
+# The engine points AI_SUPABASE_URL and SUPABASE_URL at this gateway
+# (http://local-supabase-kong:8000 in-network, http://localhost:19001 on host).
+#
+# Consumers + ACLs gate the anon/service keys exactly like upstream: the
+# key-auth plugin reads the apikey header/querystring; the JWTs themselves are
+# the credentials (their `role` claim is what PostgREST switches on).
+###
+
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: __ANON_KEY__
+  - username: service_role
+    keyauth_credentials:
+      - key: __SERVICE_ROLE_KEY__
+
+acls:
+  - consumer: anon
+    group: anon
+  - consumer: service_role
+    group: admin
+
+services:
+  ## Open Auth routes — GoTrue (no key-auth; auth endpoints are public-ish,
+  ## protected by their own logic). Strip the /auth/v1 prefix before proxying.
+  - name: auth-v1-open
+    url: http://auth:9999/verify
+    routes:
+      - name: auth-v1-open
+        strip_path: true
+        paths:
+          - /auth/v1/verify
+    plugins:
+      - name: cors
+  - name: auth-v1-open-callback
+    url: http://auth:9999/callback
+    routes:
+      - name: auth-v1-open-callback
+        strip_path: true
+        paths:
+          - /auth/v1/callback
+    plugins:
+      - name: cors
+  - name: auth-v1-open-authorize
+    url: http://auth:9999/authorize
+    routes:
+      - name: auth-v1-open-authorize
+        strip_path: true
+        paths:
+          - /auth/v1/authorize
+    plugins:
+      - name: cors
+
+  ## Secure Auth routes — everything else under /auth/v1 (token, signup,
+  ## admin, user) requires a valid apikey (anon or service_role).
+  - name: auth-v1
+    _comment: "GoTrue: /auth/v1/* -> http://auth:9999/*"
+    url: http://auth:9999/
+    routes:
+      - name: auth-v1-all
+        strip_path: true
+        paths:
+          - /auth/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## Secure REST routes — PostgREST. anon + service_role may reach it; RLS
+  ## (and the service_role bypass) does the row-level gating downstream.
+  - name: rest-v1
+    _comment: "PostgREST: /rest/v1/* -> http://rest:3000/*"
+    url: http://rest:3000/
+    routes:
+      - name: rest-v1-all
+        strip_path: true
+        paths:
+          - /rest/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: true
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon

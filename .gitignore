@@ -1,0 +1,91 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs
+*.log
+logs/
+
+# Temporary
+*.tmp
+*.bak
+*.swp
+*~
+
+# Documentation build artifacts
+docs/_build/
+
+
+# Call-scenario mock state
+mock_mcp/_state.json
+manual_tests/.voice_scn_audio/
+manual_tests/.agents_demo_audio/
+
+# --- standalone repo additions ---
+.venv/
+.deepeval/
+node_modules/
+build/
+.claude/settings.local.json
+.claude/worktrees/
+.worktrees/
+coverage.xml
+.coverage.*
+
+# Scratch session report files (e.g. *-review-report.md) — working notes,
+# not checked-in documentation.
+*-report.md
+.gstack/
+
+# Plugin ZIP built from waj-plugin/
+waj-plugin/dist/
+
+# Local database export
+seed.json

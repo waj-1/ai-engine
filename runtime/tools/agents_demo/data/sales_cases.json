@@ -1,0 +1,590 @@
+{
+ "cases": [
+  {
+   "id": "O01",
+   "customer_id": "41240031",
+   "offer": "home_fiber_1g",
+   "outcome": "interested",
+   "signals_en": [
+    "uses about 1.9 TB of data a month on Home Fiber 300",
+    "11 devices online in the evenings",
+    "works from home with daily video calls"
+   ],
+   "signals_ar": [
+    "يستخدم حوالي 1.9 تيرابايت شهرياً على فايبر المنزل 300",
+    "11 جهاز متصل في المساء",
+    "يشتغل من البيت ومكالمات فيديو يومية"
+   ],
+   "brief": "Karim on Home Fiber 300 (289 dirhams), contract just ended, heavy usage. Offer: Home Fiber 1 Gig (449 dirhams, mesh included). Happy path: interested, offer link sent to mobile ending 3124 after his yes.",
+   "title_en": "Heavy user — upgrade to 1 Gig",
+   "title_ar": "استخدام كتير — ترقية لـ 1 جيجا",
+   "headline_en": "11 devices, daily video calls — your Wi-Fi is begging for help",
+   "headline_ar": "11 جهاز ومكالمات فيديو كل يوم — والواي فاي تعبان",
+   "summary_en": "You're Karim, working from home in Dubai Marina. Your Home Fiber 300 contract just ended, evenings are a jam of 11 devices, and your video calls freeze at the worst moments.",
+   "summary_ar": "إنت كريم، بتشتغل من البيت بدبي مارينا. عقد فايبر المنزل 300 خلص هلّق، وبالمسا في 11 جهاز شغالين، ومكالماتك بتعلّق بأسوأ وقت.",
+   "who_en": "You're Karim Mansour in Dubai Marina — you work from home and your flat never sleeps.",
+   "who_ar": "إنت كريم منصور بدبي مارينا — بتشتغل من البيت وبيتك ما بيهدا.",
+   "happened_en": "Your Home Fiber 300 contract just ended. Evenings are a traffic jam of phones, consoles and laptops, and your calls freeze at the worst moments.",
+   "happened_ar": "عقد فايبر المنزل 300 خلص هلّق. بالمسا في زحمة موبايلات وأجهزة ألعاب ولابتوبات، ومكالماتك بتعلّق بأسوأ وقت.",
+   "goal_en": "Hear what 1 Gig gives you and get the offer link if you like it.",
+   "goal_ar": "بدك تسمع شو بتعطيك باقة 1 جيجا، وتاخد رابط العرض إذا عجبك.",
+   "say_en": [
+    "Hi, Karim speaking.",
+    "My date of birth is 17 February 1990.",
+    "Sounds good — what's the monthly price, and is mesh included?"
+   ],
+   "say_ar": [
+    "أهلين، معك كريم.",
+    "تاريخ ميلادي 17 فبراير 1990.",
+    "منيح — قديش السعر بالشهر؟ والميش معه؟"
+   ],
+   "say_more_en": [
+    "How do you know how much data I use?",
+    "Do I need a technician to upgrade?",
+    "Is there a contract, and how long is it?",
+    "What happens to my current router?",
+    "Yes, send me the link."
+   ],
+   "say_more_ar": [
+    "كيف بتعرفي قديش بستهلك داتا؟",
+    "بدي فنّي لحتى رقّي الباقة؟",
+    "في عقد؟ وقديش مدّته؟",
+    "وشو بيصير بالراوتر يلّي عندي هلّق؟",
+    "إيه، ابعتيلي الرابط."
+   ],
+   "twist_en": "Ask \"How do you know how much data I use?\" — does she explain it simply and honestly?",
+   "twist_ar": "اسأل: «كيف عرفتوا قديش بصرف إنترنت؟» — بيشرحلك ببساطة وبصدق؟",
+   "great_en": "The agent links the offer to your 1.9 TB and 11 devices, quotes Home Fiber 1 Gig at 449 dirhams with 2 mesh units included, and sends the link to the mobile ending 3124 after your yes.",
+   "great_ar": "المساعد بيربط العرض باستهلاكك 1.9 تيرابايت و11 جهاز، وبيذكر فايبر المنزل 1 جيجا بـ 449 درهم مع جهازين ميش ضمنها، وبيبعت الرابط عالموبايل اللي آخره 3124 بعد موافقتك.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "17/02/1990"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "3349"
+    },
+    {
+     "label_en": "Current plan",
+     "label_ar": "باقتك هلّق",
+     "value": "Home Fiber 300 · AED 289",
+     "value_ar": "فايبر المنزل 300 · 289 درهم"
+    },
+    {
+     "label_en": "Mobile",
+     "label_ar": "الموبايل",
+     "value": "0504003124"
+    }
+   ]
+  },
+  {
+   "id": "O02",
+   "customer_id": "41242287",
+   "offer": "family_addon",
+   "outcome": "interested",
+   "signals_en": [
+    "household of 5 with only one mobile line on the account",
+    "three other family lines paid separately elsewhere, she mentioned in a chat last month"
+   ],
+   "signals_ar": [
+    "أسرة من 5 أشخاص وعلى الحساب خط جوال واحد بس",
+    "ذكرت في محادثة الشهر الماضي إن عندهم 3 خطوط ثانية يدفعونها بشكل منفصل"
+   ],
+   "brief": "Fatima: offer Family line add-on at 49 dirhams per line per month (20 GB each, one bill, up to 4). She asks how much for 3 lines — agent states 49 per line and may say 3 lines are 147 a month only because the tool/case file computes it; sends link on yes.",
+   "title_en": "Family of 5 — add family lines",
+   "title_ar": "عيلة من 5 — خطوط إضافية للعيلة",
+   "headline_en": "Four bills for one family? Time to bring everyone home",
+   "headline_ar": "4 فواتير لعيلة وحدة؟ خلّي الكل بفاتورة وحدة",
+   "summary_en": "You're Fatima from Khalifa City, Abu Dhabi, the family's chief bill-payer. Only your line is on the account, three other family lines are paid separately, and it bugs you.",
+   "summary_ar": "إنتِ فاطمة من مدينة خليفة بأبوظبي، وإنتِ المسؤولة عن فواتير العيلة. بس خطك عالحساب، و3 خطوط تانية للعيلة بتندفع لحال — وهالشي مزعجك.",
+   "who_en": "You're Fatima Al Suwaidi from Khalifa City, Abu Dhabi — the family's chief bill-payer.",
+   "who_ar": "إنتِ فاطمة السويدي من مدينة خليفة بأبوظبي — المسؤولة عن فواتير العيلة.",
+   "happened_en": "Only your line is on the account; three other family lines are paid separately elsewhere. Last month you grumbled about it in a chat.",
+   "happened_ar": "بس خطك عالحساب، و3 خطوط تانية للعيلة بتندفع لحال بمكان تاني. الشهر الماضي اشتكيتي من هالشي بمحادثة.",
+   "goal_en": "Find out what 3 extra lines would cost and get the link if it makes sense.",
+   "goal_ar": "بدك تعرفي قديش بتكلف 3 خطوط إضافية، وتاخدي الرابط إذا الحكي منطقي.",
+   "say_en": [
+    "Hello, yes, Fatima here.",
+    "My ID ends in 7712.",
+    "How much would it be for 3 lines?"
+   ],
+   "say_ar": [
+    "ألو، إي معك فاطمة.",
+    "آخر 4 أرقام من هويتي 7712.",
+    "قديش بيطلع إذا 3 خطوط؟"
+   ],
+   "twist_en": "Ask \"Can I add 5 lines, one for each of us?\" — the add-on goes up to 4, so she should say so.",
+   "twist_ar": "اسألي: «فيني زيد 5 خطوط، خط لكل واحد؟» — الحد 4 خطوط، فلازم يوضحلك.",
+   "great_en": "The agent states 49 dirhams per line per month (20 GB each, one bill, up to 4), says 3 lines come to 147 a month, and sends the link only after your yes.",
+   "great_ar": "المساعد بيوضح إنو الخط بـ 49 درهم بالشهر (20 جيجابايت لكل خط، فاتورة وحدة، لحد 4 خطوط)، وإنو 3 خطوط بيطلعوا 147 بالشهر، وما بيبعت الرابط إلا بعد موافقتك.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "23/06/1986"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "7712"
+    },
+    {
+     "label_en": "Lines you'd add",
+     "label_ar": "الخطوط اللي بدك تزيديها",
+     "value": "3"
+    }
+   ]
+  },
+  {
+   "id": "O03",
+   "customer_id": "71344410",
+   "offer": "biz_fiber_500",
+   "outcome": "callback",
+   "signals_en": [
+    "runs an online perfume store from home",
+    "large upload spikes every evening",
+    "asked about a static IP in a support chat in August"
+   ],
+   "signals_ar": [
+    "يدير متجر عطور إلكتروني من البيت",
+    "رفع بيانات كبير كل مساء",
+    "سأل عن عنوان IP ثابت في محادثة دعم في أغسطس"
+   ],
+   "brief": "Waleed (Riyadh) on home fiber, really runs a business. Offer: Business Fiber 500 (479 riyals, static IP, 4-hour fault response). He likes it but wants to talk to his partner first: books a follow-up within 14 days.",
+   "title_en": "Home business — needs partner's OK",
+   "title_ar": "شغل من البيت — بدو يسأل شريكه",
+   "headline_en": "Your perfume shop runs on home Wi-Fi — time to go pro?",
+   "headline_ar": "متجر عطورك شغّال على واي فاي البيت — إجا وقت تكبّر الشغل؟",
+   "summary_en": "You're Waleed from Al Malqa, Riyadh, selling perfume online from home. Your line groans every evening, you once asked about a static IP, and your partner signs off on big spends.",
+   "summary_ar": "إنت وليد من الملقا بالرياض، بتبيع عطور أونلاين من البيت. الخط بيتعب كل مسا، وسألت قبل عن IP ثابت، وشريكك لازم يوافق على أي مصروف كبير.",
+   "who_en": "You're Waleed Haddad from Al Malqa, Riyadh — you sell perfume online from home.",
+   "who_ar": "إنت وليد حداد من الملقا بالرياض — بتبيع عطور أونلاين من البيت.",
+   "happened_en": "Every evening you upload product photos and orders, and the line groans. In August you asked support about a static IP. Your business partner signs off on big spends.",
+   "happened_ar": "كل مسا بترفع صور منتجات وطلبات والخط بيتعب. بشهر أغسطس سألت الدعم عن IP ثابت. وشريكك لازم يوافق على أي مصروف كبير.",
+   "goal_en": "Show real interest but book a follow-up so you can check with your partner first.",
+   "goal_ar": "وضّح إنك مهتم، بس احجز موعد متابعة لتسأل شريكك بالأول.",
+   "say_en": [
+    "Hello, Waleed speaking.",
+    "My date of birth is 29 November 1985.",
+    "I like it, but I need to talk to my partner first — call me Sunday?"
+   ],
+   "say_ar": [
+    "ألو، معك وليد.",
+    "تاريخ ميلادي 29 نوفمبر 1985.",
+    "عاجبني، بس لازم إسأل شريكي بالأول — بتتصلوا يوم الأحد؟"
+   ],
+   "twist_en": "Ask \"Can you call me back in a month?\" — offers are followed up within 14 days, so see how she negotiates the date.",
+   "twist_ar": "اسأل: «فيكن تحكوني بعد شهر؟» — المتابعة لازم تكون خلال 14 يوم، فشوف كيف بيتفق معك عالموعد.",
+   "great_en": "The agent pitches Business Fiber 500 at 479 riyals (static IP, 4-hour fault response), doesn't push when you mention your partner, and books a follow-up within 14 days.",
+   "great_ar": "المساعد بيعرض فايبر الأعمال 500 بـ 479 ريال (IP ثابت، وتصليح الأعطال خلال 4 ساعات)، وما بيضغط عليك لما تذكر شريكك، وبيحجز متابعة خلال 14 يوم.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "29/11/1985"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "6050"
+    },
+    {
+     "label_en": "Follow-up you want",
+     "label_ar": "موعد المتابعة اللي بدك ياه",
+     "value": "11/10/2026"
+    }
+   ]
+  },
+  {
+   "id": "O04",
+   "customer_id": "71346623",
+   "offer": "device_financing",
+   "outcome": "interested",
+   "signals_en": [
+    "Mobile Unlimited customer for 4 years, always pays on time",
+    "her phone is a 2021 model"
+   ],
+   "signals_ar": [
+    "عميلة جوال غير محدود من 4 سنوات وتسدد دايماً في الوقت",
+    "جوالها موديل 2021"
+   ],
+   "brief": "Reem: offer 0% phone financing — the example phone is 145 riyals a month over 24 months. She asks if there are hidden fees: none, 0%. Sends link on yes.",
+   "title_en": "Loyal customer — new phone at 0%",
+   "title_ar": "زبونة قديمة — موبايل جديد بلا فوايد",
+   "headline_en": "Your 2021 phone is wheezing — a 0% upgrade is calling",
+   "headline_ar": "موبايلك موديل 2021 تعبان — ترقية بلا فوايد رح تتصل فيكِ",
+   "summary_en": "You're Reem from Al Rawdah, Jeddah: 4 years with us, never late. Your 2021 phone dies by lunch, and you want a new one without surprise fees.",
+   "summary_ar": "إنتِ ريم من الروضة بجدة — 4 سنين معنا وما تأخرتي ولا مرة. بطارية موبايلك 2021 بتخلص قبل الغدا، وبدك موبايل جديد بلا رسوم مفاجئة.",
+   "who_en": "You're Reem Al Harthy from Al Rawdah, Jeddah — 4 years with us, never late.",
+   "who_ar": "إنتِ ريم الحارثي من الروضة بجدة — 4 سنين معنا وما تأخرتي ولا مرة.",
+   "happened_en": "Your 2021 phone's battery dies by lunch and the camera has seen better days. You've been eyeing a new one but hate surprise fees.",
+   "happened_ar": "بطارية موبايلك 2021 بتخلص قبل الغدا والكاميرا صارت قديمة. عينك على موبايل جديد بس ما بتحبي الرسوم المفاجئة.",
+   "goal_en": "Understand the monthly cost and make sure there are no hidden fees before saying yes.",
+   "goal_ar": "بدك تفهمي قديش بتدفعي بالشهر، وتتأكدي إنو ما في رسوم مخفية قبل ما توافقي.",
+   "say_en": [
+    "Hi, Reem here.",
+    "The last 4 of my ID are 2276.",
+    "Are there any hidden fees or interest?"
+   ],
+   "say_ar": [
+    "أهلين، معك ريم.",
+    "آخر 4 أرقام من هويتي 2276.",
+    "في رسوم مخفية أو فوايد؟"
+   ],
+   "twist_en": "Interrupt the pitch with \"Wait, what's the catch?\" — does he stay clear and honest instead of salesy?",
+   "twist_ar": "قاطعيه بنص العرض: «لحظة، شو المقلب؟» — بيضل واضح وصادق ولا بيرجع لأسلوب البيع؟",
+   "great_en": "The agent explains 0% financing over 12 or 24 months — the example phone is 145 riyals a month over 24 — confirms no hidden fees, and sends the link only after your yes.",
+   "great_ar": "المساعد بيشرح التقسيط بلا فوايد على 12 أو 24 شهر — الموبايل المثال بـ 145 ريال بالشهر على 24 شهر — وبيأكد إنو ما في رسوم مخفية، وما بيبعت الرابط إلا بعد موافقتك.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "01/08/1993"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "2276"
+    },
+    {
+     "label_en": "Your phone",
+     "label_ar": "موبايلك",
+     "value": "2021 model",
+     "value_ar": "موديل 2021"
+    }
+   ]
+  },
+  {
+   "id": "O05",
+   "customer_id": "41248850",
+   "offer": "home_fiber_300",
+   "outcome": "not_interested",
+   "signals_en": [
+    "on Home 5G Wireless since 2024",
+    "fiber is now available in Al Nahda"
+   ],
+   "signals_ar": [
+    "على الإنترنت المنزلي اللاسلكي 5G من 2024",
+    "الفايبر صار متوفر في النهدة"
+   ],
+   "brief": "Ziad: offer Home Fiber 300 (289 dirhams). He says no twice. Great agent: one short value line after the first no, then thanks him warmly and closes after the second no; logs not interested; never a third push.",
+   "title_en": "Not interested — says no twice",
+   "title_ar": "مش مهتم — بيقول لا مرتين",
+   "headline_en": "Fiber finally reached Al Nahda — and you couldn't care less",
+   "headline_ar": "الفايبر وصل عالنهدة أخيراً — وإنت مش فارقة معك",
+   "summary_en": "You're Ziad from Al Nahda, Sharjah, on Home 5G Wireless since 2024. It works fine for you, and you don't want an installation visit or anything new.",
+   "summary_ar": "إنت زياد من النهدة بالشارقة، على الإنترنت المنزلي اللاسلكي 5G من 2024. ماشي حالك منيح، وما بدك زيارة تركيب ولا شي جديد.",
+   "who_en": "You're Ziad Khoury from Al Nahda, Sharjah — happy with what you've got.",
+   "who_ar": "إنت زياد خوري من النهدة بالشارقة — مرتاح باللي عندك.",
+   "happened_en": "You've been on Home 5G Wireless since 2024 and it works fine for you. You don't want an installation visit or anything new.",
+   "happened_ar": "إنت على الإنترنت المنزلي اللاسلكي 5G من 2024 وماشي حالك منيح. ما بدك زيارة تركيب ولا شي جديد.",
+   "goal_en": "Politely say no — twice — and see if the agent lets you go gracefully.",
+   "goal_ar": "قول لا بأدب — مرتين — وشوف إذا الموظف بيتركك بذوق.",
+   "say_en": [
+    "Hello, Ziad here.",
+    "My ID ends in 1309.",
+    "No thanks, I'm happy with my 5G."
+   ],
+   "say_ar": [
+    "ألو، معك زياد.",
+    "آخر 4 أرقام من هويتي 1309.",
+    "لا شكراً، أنا مرتاح عالـ 5G."
+   ],
+   "say_more_en": [
+    "No thanks, I'm really not interested.",
+    "I don't want anyone coming to install anything.",
+    "…but maybe next year?",
+    "Please don't call me again about offers.",
+    "Okay, thanks, bye."
+   ],
+   "say_more_ar": [
+    "لا شكراً، فعلاً مش مهتم.",
+    "ما بدي حدا يجي يركّب شي بالبيت.",
+    "…بس يمكن السنة الجاية؟",
+    "لو سمحت ما تتصلوا فيّي مرة تانية بخصوص العروض.",
+    "تمام، شكراً، باي."
+   ],
+   "twist_en": "After your second no, add \"…but maybe next year?\" — does he log it gracefully without a third push?",
+   "twist_ar": "بعد تاني لا قول: «…يمكن السنة الجاية؟» — بيسجّلها بذوق بلا محاولة تالتة؟",
+   "great_en": "The agent gives one short value line for Home Fiber 300 at 289 dirhams after your first no, then thanks you warmly after the second, logs not interested — and never tries a third time.",
+   "great_ar": "المساعد بيعطيك جملة وحدة قصيرة عن فايبر المنزل 300 بـ 289 درهم بعد أول لا، وبعد التانية بيشكرك بلطف وبيسجّل إنك مش مهتم — وما بيحاول مرة تالتة.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "20/12/1975"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "1309"
+    },
+    {
+     "label_en": "Current plan",
+     "label_ar": "باقتك هلّق",
+     "value": "Home 5G Wireless · AED 249",
+     "value_ar": "اللاسلكي 5G · 249 درهم"
+    }
+   ]
+  },
+  {
+   "id": "O06",
+   "customer_id": "71350078",
+   "offer": "mobile_plus",
+   "outcome": "callback",
+   "signals_en": [
+    "bought 3 extra data top-ups last month (75 riyals on top of the plan)",
+    "on Mobile Essential (25 GB)"
+   ],
+   "signals_ar": [
+    "اشترت 3 إضافات بيانات الشهر الماضي (75 ريال فوق الباقة)",
+    "على باقة جوال أساسي (25 جيجابايت)"
+   ],
+   "brief": "Noura: offer Mobile Plus (169 riyals, 60 GB). She is in a meeting: 'call me next Tuesday after 4'. Great agent: books the follow-up for next Tuesday 16:00, confirms it, ends quickly.",
+   "title_en": "In a meeting — call next Tuesday",
+   "title_ar": "باجتماع — احكيني التلاتا الجاي",
+   "headline_en": "Whispering from a meeting room: \"not now!\"",
+   "headline_ar": "عم تحكي بصوت واطي من الاجتماع: «مش هلّق!»",
+   "summary_en": "You're Noura from Al Faisaliyah, Dammam, and you bought 3 data top-ups last month. Right now you're in a meeting and your manager is watching.",
+   "summary_ar": "إنتِ نورة من الفيصلية بالدمام، واشتريتي 3 إضافات بيانات الشهر الماضي. وهلّق إنتِ باجتماع ومديرك عم يطلّع فيكِ.",
+   "who_en": "You're Noura Al Mutairi from Al Faisaliyah, Dammam — the queen of data top-ups.",
+   "who_ar": "إنتِ نورة المطيري من الفيصلية بالدمام — بتحبي إضافات البيانات كتير.",
+   "happened_en": "Last month you bought 3 extra data top-ups (75 riyals on top of your plan). Right now you're in a meeting and your manager is looking at you.",
+   "happened_ar": "الشهر الماضي اشتريتي 3 إضافات بيانات (75 ريال فوق باقتك). وهلّق إنتِ باجتماع ومديرك عم يطلّع فيكِ.",
+   "goal_en": "Book a callback for next Tuesday after 4 pm in under a minute.",
+   "goal_ar": "احجزي موعد يرجعوا يتصلوا فيكِ التلاتا الجاي بعد الساعة 4، بأقل من دقيقة.",
+   "say_en": [
+    "Hello? Noura — sorry, I'm in a meeting.",
+    "Call me next Tuesday after 4, please.",
+    "Yes, Tuesday at 4 works. Thanks, bye!"
+   ],
+   "say_ar": [
+    "ألو؟ نورة — آسفة، أنا باجتماع.",
+    "احكيني التلاتا الجاي بعد الساعة 4 من فضلك.",
+    "إي، التلاتا الساعة 4 منيح. شكراً، مع السلامة!"
+   ],
+   "twist_en": "Whisper \"Okay, quickly — what's the offer?\" then cut him off after one sentence — can he stay brief?",
+   "twist_ar": "احكي بصوت واطي: «طيب بسرعة — شو العرض؟» وبعدين قاطعيه بعد جملة وحدة — بيعرف يختصر؟",
+   "great_en": "The agent doesn't pitch Mobile Plus in the meeting, books next Tuesday at 16:00, confirms it back to you and ends quickly.",
+   "great_ar": "المساعد ما بيعرض جوال بلس وإنتِ باجتماع، بيحجز التلاتا الجاي الساعة 16:00، بيأكد الموعد معك وبيخلّص بسرعة.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "14/05/1991"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "4903"
+    },
+    {
+     "label_en": "Call me back",
+     "label_ar": "رجّعوا اتصلوا",
+     "value": "13/10/2026 16:00"
+    }
+   ]
+  },
+  {
+   "id": "O07",
+   "customer_id": "41252204",
+   "offer": "mesh_wifi_addon",
+   "outcome": "do_not_call",
+   "signals_en": [
+    "villa in Dubai South on Home 5G Wireless",
+    "weak signal reported in upstairs rooms"
+   ],
+   "signals_ar": [
+    "فيلا في دبي الجنوب على الإنترنت المنزلي اللاسلكي 5G",
+    "ضعف إشارة في الغرف اللي فوق"
+   ],
+   "brief": "Adel: before any pitch he says 'stop calling me with offers'. Great agent: apologizes, confirms he will not get sales calls again, logs do-not-call, ends immediately — no pitch at all.",
+   "title_en": "Do not call — stop the offers",
+   "title_ar": "لا تتصلوا — وقّفوا العروض",
+   "headline_en": "Another sales call?! You've had enough",
+   "headline_ar": "اتصال مبيعات كمان؟! خلص، طفح الكيل",
+   "summary_en": "You're Adel in a villa in Dubai South. Your upstairs Wi-Fi is weak, but you've had too many offer calls this year and want them to stop for good.",
+   "summary_ar": "إنت عادل، ساكن بفيلا بدبي الجنوب. الواي فاي بالطابق الفوقاني ضعيف، بس إجتك اتصالات عروض كتير هالسنة وبدك ياها توقف نهائياً.",
+   "who_en": "You're Adel Hamdan in a villa in Dubai South — and done with offer calls.",
+   "who_ar": "إنت عادل حمدان، ساكن بفيلا بدبي الجنوب — وزهقت من اتصالات العروض.",
+   "happened_en": "Your upstairs Wi-Fi is weak, sure, but you've had too many marketing calls this year. You want them to stop for good.",
+   "happened_ar": "صحيح الواي فاي بالطابق الفوقاني ضعيف، بس إجتك اتصالات تسويق كتير هالسنة. بدك ياها توقف نهائياً.",
+   "goal_en": "Stop the call before any pitch and get confirmed you won't receive sales calls again.",
+   "goal_ar": "وقّف المكالمة قبل أي عرض، وتأكد إنو ما رح تجيك اتصالات مبيعات مرة تانية.",
+   "say_en": [
+    "Yes, Adel — is this another offer?",
+    "Please stop calling me with offers.",
+    "So you'll take me off the list? Good."
+   ],
+   "say_ar": [
+    "إي، عادل — هاد عرض كمان؟",
+    "من فضلك وقّفوا تتصلوا فيّي بالعروض.",
+    "يعني رح تشيلوني من القائمة؟ منيح."
+   ],
+   "twist_en": "Ask \"How did you even get my number?\" — he should answer honestly and still not sneak in a pitch.",
+   "twist_ar": "اسأل: «من وين جبتوا رقمي أصلاً؟» — لازم يجاوب بصدق، وكمان ما يدخل بأي عرض.",
+   "great_en": "The agent apologises, confirms you won't get sales calls again, logs do-not-call and ends right away — no mention of the mesh offer at all.",
+   "great_ar": "المساعد بيعتذر، وبيأكد إنو ما رح تجيك اتصالات مبيعات مرة تانية، وبيسجّل عدم الاتصال وبيخلّص فوراً — بلا ما يذكر عرض الميش أبداً.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "03/03/1982"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "6677"
+    },
+    {
+     "label_en": "What you want",
+     "label_ar": "شو بدك",
+     "value": "No more sales calls",
+     "value_ar": "ما في اتصالات مبيعات بعد اليوم"
+    }
+   ]
+  },
+  {
+   "id": "O08",
+   "customer_id": "41254419",
+   "offer": "mesh_wifi_addon",
+   "outcome": "already_has",
+   "signals_en": [
+    "large apartment on Al Reem Island",
+    "Wi-Fi 6 router with 2 mesh units already included in her 1 Gig plan",
+    "a support chat mentioned a weak signal on the balcony"
+   ],
+   "signals_ar": [
+    "شقة كبيرة في جزيرة الريم",
+    "عندها راوتر واي فاي 6 مع جهازين ميش ضمن باقة 1 جيجا",
+    "ذكرت في محادثة دعم ضعف الإشارة في البلكونة"
+   ],
+   "brief": "Samira: offer one extra mesh unit (25 dirhams a month). She says she already bought her own mesh system. Great agent: 'great to hear', logs already has, offers at most one other fitting idea in one sentence or closes warmly.",
+   "title_en": "Already bought her own mesh",
+   "title_ar": "عندها ميش اشترتو لحالها",
+   "headline_en": "Balcony Wi-Fi? Already sorted it yourself",
+   "headline_ar": "واي فاي البلكون؟ حلّيتيها لحالك من زمان",
+   "summary_en": "You're Samira on Al Reem Island, Abu Dhabi. You once told support your balcony Wi-Fi was weak, then bought your own mesh system, and it works perfectly now.",
+   "summary_ar": "إنتِ سميرة بجزيرة الريم بأبوظبي. قلتي للدعم مرة إنو الواي فاي ضعيف بالبلكون، وبعدها اشتريتي نظام ميش لحالك — وهلّق شغّال منيح.",
+   "who_en": "You're Samira Aziz in a big apartment on Al Reem Island, Abu Dhabi.",
+   "who_ar": "إنتِ سميرة عزيز، ساكنة بشقة كبيرة بجزيرة الريم بأبوظبي.",
+   "happened_en": "You mentioned weak balcony Wi-Fi to support a while back, then bought your own mesh system. Evening tea outside now streams perfectly.",
+   "happened_ar": "من فترة قلتي للدعم إنو الواي فاي ضعيف بالبلكون، وبعدها اشتريتي نظام ميش لحالك. وهلّق بتشربي شاي المسا برّا والبث شغّال منيح.",
+   "goal_en": "Tell the agent you already solved it and see whether he takes the hint.",
+   "goal_ar": "قولي للموظف إنك حلّيتيها، وشوفي إذا بيفهم عليكِ.",
+   "say_en": [
+    "Hello, Samira speaking.",
+    "My date of birth is 9 September 1989.",
+    "Thanks, but I already bought my own mesh system."
+   ],
+   "say_ar": [
+    "ألو، معك سميرة.",
+    "تاريخ ميلادي 9 سبتمبر 1989.",
+    "شكراً، بس أنا اشتريت نظام ميش إلي."
+   ],
+   "twist_en": "Ask \"So is there anything actually useful for me?\" — he gets at most one fitting idea, in one sentence.",
+   "twist_ar": "اسألي: «طيب في شي بيفيدني عن جد؟» — مسموحله فكرة وحدة مناسبة بجملة وحدة بس.",
+   "great_en": "The agent says \"great to hear\", logs already has, and either offers one fitting idea in a single sentence or closes warmly — no push for the 25-dirham mesh unit.",
+   "great_ar": "المساعد بيقول «منيح كتير»، وبيسجّل إنو عندك واحد، وبعدين يا بيعرض فكرة وحدة مناسبة بجملة وحدة يا بيخلّص بلطف — بلا إلحاح على جهاز الميش بـ 25 درهم.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "09/09/1989"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "2830"
+    },
+    {
+     "label_en": "Your setup",
+     "label_ar": "شو عندك",
+     "value": "Own mesh system",
+     "value_ar": "نظام ميش خاص"
+    }
+   ]
+  },
+  {
+   "id": "O09",
+   "customer_id": "71356632",
+   "offer": "home_fiber_1g",
+   "outcome": "interested",
+   "signals_en": [
+    "Home Fiber 300 contract ends next month",
+    "4 gamers in the house, latency complaints in two support chats"
+   ],
+   "signals_ar": [
+    "عقد فايبر المنزل 300 ينتهي الشهر الجاي",
+    "4 لاعبين في البيت، واشتكوا من التأخير (اللاق) في محادثتين دعم"
+   ],
+   "brief": "Bader: offer Home Fiber 1 Gig (429 riyals). He asks for a discount. There is none — the 24-month contract price is 20 less per month (409) as a catalog fact, not a discount. Great agent: no invented discount, one value line, sends details on yes.",
+   "title_en": "4 gamers — wants a discount",
+   "title_ar": "4 لاعبين — بدو خصم",
+   "headline_en": "Four gamers, one laggy line — and you love a bargain",
+   "headline_ar": "4 لاعبين وخط واحد بيعلّق — وإنت بتحب المفاصلة",
+   "summary_en": "You're Bader from Al Olaya, Riyadh, head of a household of gamers. Your Home Fiber 300 contract ends next month, the kids complain about lag, and you never pay full price.",
+   "summary_ar": "إنت بدر من العليا بالرياض، وكل اللي بالبيت بيلعبوا ألعاب. عقد فايبر المنزل 300 بيخلص الشهر الجاي، والولاد بيشتكوا من التعليق، وإنت ما بتدفع السعر كامل قبل ما تسأل.",
+   "who_en": "You're Bader Al Shammari from Al Olaya, Riyadh — head of a household of gamers.",
+   "who_ar": "إنت بدر الشمري من العليا بالرياض — وكل اللي بالبيت بيلعبوا ألعاب.",
+   "happened_en": "Your Home Fiber 300 contract ends next month. The kids have complained about lag in two support chats, and you never pay full price without asking.",
+   "happened_ar": "عقد فايبر المنزل 300 بيخلص الشهر الجاي. الولاد اشتكوا من التعليق بمحادثتين مع الدعم، وإنت ما بتدفع السعر كامل قبل ما تسأل.",
+   "goal_en": "Push for a discount and see if the agent stays honest.",
+   "goal_ar": "اضغط لتاخد خصم، وشوف إذا الموظف بيضل صادق.",
+   "say_en": [
+    "Hello, Bader here.",
+    "My ID ends in 5594.",
+    "429 is a lot — can you give me a discount?"
+   ],
+   "say_ar": [
+    "ألو، معك بدر.",
+    "آخر 4 أرقام من هويتي 5594.",
+    "429 كتير — ما في خصم؟"
+   ],
+   "say_more_en": [
+    "Another company offered me 20% off.",
+    "Can you match their price?",
+    "What if I sign for 24 months?",
+    "Will it really fix the lag for the kids?",
+    "Okay, send me the details."
+   ],
+   "say_more_ar": [
+    "في شركة تانية عطتني خصم 20%.",
+    "فيك تعطيني نفس سعرهم؟",
+    "وإذا عملت عقد 24 شهر؟",
+    "بجد رح يحلّ مشكلة التقطيع عند الولاد؟",
+    "تمام، ابعتلي التفاصيل."
+   ],
+   "twist_en": "Say \"Another company offered me 20% off\" — he should not match it or invent any discount.",
+   "twist_ar": "قول: «شركة تانية عرضت علي خصم 20%» — لازم ما يجاريها ولا يخترع أي خصم.",
+   "great_en": "The agent invents no discount: it gives one value line for Home Fiber 1 Gig at 429 riyals, mentions the 24-month price is 20 less (409) as a plain fact, and sends details on your yes.",
+   "great_ar": "المساعد ما بيخترع خصم: بيعطي جملة وحدة عن قيمة فايبر المنزل 1 جيجا بـ 429 ريال، وبيذكر إنو سعر عقد 24 شهر أقل بـ 20 (409) كمعلومة، وبيبعت التفاصيل بعد موافقتك.",
+   "facts": [
+    {
+     "label_en": "Date of birth",
+     "label_ar": "تاريخ الميلاد",
+     "value": "31/01/1987"
+    },
+    {
+     "label_en": "ID last 4",
+     "label_ar": "آخر 4 أرقام من الهوية",
+     "value": "5594"
+    },
+    {
+     "label_en": "Contract ends",
+     "label_ar": "العقد بيخلص",
+     "value": "next month",
+     "value_ar": "الشهر الجاي"
+    },
+    {
+     "label_en": "Gamers at home",
+     "label_ar": "عدد اللاعبين بالبيت",
+     "value": "4"
+    }
+   ]
+  }
+ ]
+}
