@@ -97,6 +97,7 @@ def slug_from_name(client, display_name: str) -> str:
 
 def use_template(*, template_id: str, display_name: str, slug: Optional[str] = None,
                  as_subagent_of: Optional[str] = None, model_id: Optional[str] = None,
+                 agent_type: Optional[str] = None,
                  actor_user_id: str) -> Dict[str, Any]:
     from core.auth import admin_service_client
     from endpoints.agents_v1 import generic_agents_enabled
@@ -109,6 +110,14 @@ def use_template(*, template_id: str, display_name: str, slug: Optional[str] = N
         if not found or not found[0].get("is_active") \
                 or (found[0].get("extra_config") or {}).get("realtime"):
             raise ProfileNotFoundError(f"model {model_id} is not an active chat model")
+
+    # The category (slug or id) for the new agent. Resolved before anything
+    # is written, like the model: an unknown one refuses the whole operation
+    # (AgentTypeNotFoundError) instead of creating an uncategorised agent.
+    agent_type_id = None
+    if agent_type:
+        from admin.services.agent_types import resolve_type_id
+        agent_type_id = resolve_type_id(agent_type, client)
 
     tmpl = _rows(client.table("agent_profiles").select("*")
                  .eq("profile_id", template_id).limit(1).execute())
@@ -174,6 +183,13 @@ def use_template(*, template_id: str, display_name: str, slug: Optional[str] = N
             client.table("agent_profiles").update(
                 {"model_main_id": model_id}).eq("profile_id", created_id).execute()
 
+    if agent_type_id:
+        # The new agent and the sub-agents made with it are one team: they
+        # start in the same category.
+        for created_id in created:
+            client.table("agent_profiles").update(
+                {"agent_type_id": agent_type_id}).eq("profile_id", created_id).execute()
+
     if makes_generic:
         from runtime.agents.custom import CUSTOM_AGENT_KIND
         from admin.services import custom_prompts
@@ -219,5 +235,7 @@ def use_template(*, template_id: str, display_name: str, slug: Optional[str] = N
     record_change(entity_type="agent_profiles", entity_id=root["profile_id"],
                   action="use_template", actor_user_id=actor_user_id,
                   after={"template": tmpl.get("slug"), "created": created,
-                         "as_subagent_of": as_subagent_of})
-    return {"root": root["profile_id"], "created": created, "as_subagent_of": as_subagent_of}
+                         "as_subagent_of": as_subagent_of,
+                         **({"agent_type_id": agent_type_id} if agent_type_id else {})})
+    return {"root": root["profile_id"], "created": created, "as_subagent_of": as_subagent_of,
+            **({"agent_type_id": agent_type_id} if agent_type_id else {})}

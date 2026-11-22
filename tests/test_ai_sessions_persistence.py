@@ -60,6 +60,26 @@ async def test_list_sessions_scopes_by_user_business_and_active():
 
 
 @pytest.mark.asyncio
+async def test_list_sessions_without_a_business_is_the_users_sessions_with_no_business():
+    """business_id=None must add `business_id IS NULL`, never drop the filter:
+    dropping it would list a user's sessions across every business."""
+    client, chains = _make_client({
+        "ai_chat_sessions": [{"id": "s1", "user_id": "u1", "business_id": None, "title": "T",
+                              "created_at": "2026-06-10T00:00:00Z", "updated_at": "2026-06-10T00:00:00Z"}],
+        "ai_chat_messages": [],
+    })
+    with patch("core.chat_persistence.get_service_client", return_value=client):
+        rows = await chat_persistence.list_sessions("u1", None)
+
+    assert [r["id"] for r in rows] == ["s1"]
+    s = chains["ai_chat_sessions"]
+    s.eq.assert_any_call("user_id", "u1")
+    s.is_.assert_any_call("business_id", "null")
+    s.is_.assert_any_call("deleted_at", "null")
+    assert all(call.args[0] != "business_id" for call in s.eq.call_args_list)
+
+
+@pytest.mark.asyncio
 async def test_list_sessions_aggregates_last_message_and_download_links():
     client, _ = _make_client({
         "ai_chat_sessions": [

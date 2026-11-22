@@ -25,6 +25,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from admin.auth import require_superuser
 from admin.router import current_env, router, templates
+from admin.services.agent_types import AgentTypeError
 from admin.services.profiles import ProfileNotFoundError
 from admin.services.templates import TemplateNotFoundError, list_templates, use_template
 from core.auth import admin_service_client
@@ -39,6 +40,19 @@ def _model_options() -> List[Dict[str, Any]]:
     from admin._model_picker import fetch_models_for_picker
 
     return fetch_models_for_picker(active_only=True)
+
+
+def _category_options(client) -> List[Dict[str, Any]]:
+    """The user-defined categories the wizard offers (none on a fresh
+    install, and then the picker is not shown). Best-effort, like the parent
+    picker: a failed lookup hides the picker, never a 500."""
+    try:
+        from admin.services.agent_types import list_types
+
+        return list_types(client, with_counts=False)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("templates gallery: category lookup failed (%s)", exc)
+        return []
 
 
 def _parent_options(client) -> List[Dict[str, Any]]:
@@ -98,6 +112,7 @@ def _render_gallery(
             "composites": composites,
             "parent_options": _parent_options(client),
             "model_options": _model_options(),
+            "category_options": _category_options(client),
             "error": error,
         },
         status_code=status_code,
@@ -125,6 +140,7 @@ async def agents_from_template(
     slug: str = Form(""),
     as_subagent_of: str = Form(""),
     model_id: str = Form(""),
+    agent_type_id: str = Form(""),
     ctx: dict = Depends(require_superuser),
 ) -> Response:
     """Fork a mold (and its sub-agent molds, if composite) into a new
@@ -147,9 +163,10 @@ async def agents_from_template(
             slug=slug.strip() or None,
             as_subagent_of=as_subagent_of.strip() or None,
             model_id=model_id.strip() or None,
+            agent_type=agent_type_id.strip() or None,
             actor_user_id=ctx["user_id"],
         )
-    except (TemplateNotFoundError, ProfileNotFoundError) as exc:
+    except (TemplateNotFoundError, ProfileNotFoundError, AgentTypeError) as exc:
         return _render_gallery(request, env, ctx, error=str(exc), status_code=400)
     return RedirectResponse(
         url=f"/admin/agents?profile_id={result['root']}", status_code=303,

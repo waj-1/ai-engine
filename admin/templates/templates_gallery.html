@@ -15,7 +15,8 @@
 {% block content %}
 {{ tabs([('agents', 'Agents', '/admin/agents?env=' ~ current_env),
          ('models', 'Models', '/admin/agents?tab=models&env=' ~ current_env),
-         ('templates', 'Templates', '/admin/templates?env=' ~ current_env)], 'templates') }}
+         ('templates', 'Templates', '/admin/templates?env=' ~ current_env),
+         ('categories', 'Categories', '/admin/agent-types?env=' ~ current_env)], 'templates') }}
 
 {% if error %}
 <div style="margin-bottom:var(--space-m);">
@@ -110,6 +111,15 @@
           </select>
         </label>
         {{ hint_text('The language model that writes the answers. Add your own under Agents › Models; you can change it later in the agent\'s Settings.') }}
+        {% endif %}
+        {% if category_options %}
+        <label class="field"><span class="field-label">Category <span class="muted">(optional)</span></span>
+          <select name="agent_type_id">
+            <option value="">— Uncategorised —</option>
+            {% for c in category_options %}<option value="{{ c.agent_type_id }}">{{ c.display_name }}</option>{% endfor %}
+          </select>
+        </label>
+        {{ hint_text('A group for the Agents list, such as Support or Sales. It does not change what the agent does; you can change it later in the agent\'s Settings.') }}
         {% endif %}
         <label class="field"><span class="field-label">Make it a sub-agent of <span class="muted">(optional)</span></span>
           <select name="as_subagent_of">

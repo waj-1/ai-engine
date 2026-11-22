@@ -7,7 +7,7 @@ The **Agents** page lists every agent in your portal. Open one to see, on a sing
 ![The Agents list with the search box, status filter, an agent row and the New agent button highlighted](../media/agents/agents-list.png)
 
 1. Type part of a name or description in **Search agents**.
-2. Narrow the list with the filters: **Main agents** or **Templates**, a status (**Active**, **Draft**, **Archived**) and **Any channel** (Chat, Voice and so on).
+2. Narrow the list with the filters: **Main agents** or **Templates**, a status (**Active**, **Draft**, **Archived**), **Any channel** (Chat, Voice and so on) and, once you have made some, **Any category**. See [Group your agents into categories](09-categories.md).
 3. Click an agent's name to open it. In our example, that's **Lina — Customer support**.
 4. **New agent** starts a new one from a template. See [Create a new agent](07-new-agent.md).
 
@@ -18,6 +18,10 @@ Each row tells you:
 - **Can use**: how many actions and knowledge sources it has.
 - **Status**: **Active** agents serve people. **Draft** and **Archived** agents don't.
 - **Last changed**: when someone last saved a change, and who.
+
+An agent that is in a [category](09-categories.md) shows the category's coloured label next to its name.
+
+A new install may list a **Demo agent**, marked **Demo**. It was created automatically so you have something to talk to and to copy: open it, read its **Instructions**, and try **Test**. If it replies that no model is configured, add one under **Agents › Models** and try again. Archive it when you no longer need it; it won't come back.
 
 The **⋯** menu at the end of a row opens the agent, starts a test chat, or jumps to its version history.
 
@@ -36,4 +40,4 @@ Lower down, **Health** shows the last automatic test result and links to the las
 
 To change the description, open **Settings**, edit **Description** and click **Save settings**. Keep it to one plain sentence. Other agents read it to decide when to hand this agent a question.
 
-**Related:** [Change what your agent says](02-instructions.md) · [Test your agent](08-test-your-agent.md) · [Make your changes live](../07-publishing/01-publish-changes.md) · [Glossary](../09-reference/01-glossary.md)
+**Related:** [Change what your agent says](02-instructions.md) · [Group your agents into categories](09-categories.md) · [Test your agent](08-test-your-agent.md) · [Make your changes live](../07-publishing/01-publish-changes.md) · [Glossary](../09-reference/01-glossary.md)

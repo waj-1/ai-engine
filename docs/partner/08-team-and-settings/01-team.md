@@ -37,4 +37,4 @@ The list shows people who already have an account. If a colleague isn't there, a
 
 Each time someone gains or loses access, it's recorded in **Activity** with who made the change and when. See [See who changed what](02-activity.md).
 
-**Related:** [See who changed what](02-activity.md) · [Daily voice allowance](03-voice-budgets.md) · [Welcome to the portal](../01-getting-started/01-welcome.md)
+**Related:** [See who changed what](02-activity.md) · [Daily voice allowance](03-voice-budgets.md) · [API keys](04-api-keys.md) · [Add a model key](04-model-keys.md) · [Welcome to the portal](../01-getting-started/01-welcome.md)

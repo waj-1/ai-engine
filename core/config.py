@@ -54,7 +54,10 @@ def _str(name: str, default: str) -> str:
 # `text-embedding-3-small`, so one number cannot serve both. The default
 # therefore follows whichever provider is actually in force
 # (`core.embedding_provider.active_provider()`, i.e. EMBED_PROVIDER); an
-# explicit KB_MATCH_THRESHOLD still wins over both.
+# explicit KB_MATCH_THRESHOLD still wins over both. The OpenAI-compatible
+# provider has no entry: its scores depend on whichever model the operator
+# serves, which no table here can know, so it gets the fallback and the
+# operator pins KB_MATCH_THRESHOLD if their model scores lower.
 _KB_MATCH_THRESHOLD_BY_PROVIDER: dict[str, float] = {
     # Azure text-embedding-3-small scores systematically lower: measured on a
     # client demo VM (2026-08-06) on-topic queries land 0.52-0.75 but

@@ -1,0 +1,202 @@
+# WAJ AI Engine and everything it needs, in one command:
+#
+#   docker compose up
+#
+# then open http://localhost:8000. There is no default login: the first-run page
+# creates the admin account and asks for the one-time setup code printed by
+# `docker compose logs engine`. For an install with no browser step, set both
+# ADMIN_EMAIL and ADMIN_PASSWORD before the first `up`.
+#
+# What starts, in order:
+#   setup    makes this install's secrets and keeps them in the `state` volume
+#   db       Postgres with pgvector
+#   rest     the REST layer the engine's data client speaks
+#   auth     the auth service behind the admin login
+#   gateway  puts rest and auth behind one URL
+#   init     applies the schema, and creates the admin account when ADMIN_EMAIL
+#            and ADMIN_PASSWORD were set (every `up`; safe to repeat)
+#   engine   the engine itself, once init has succeeded
+#
+# No secret is in this file or on your machine's disk outside Docker: setup
+# generates them inside the `state` volume and each service reads them from
+# there at start. `docker compose down -v` deletes the database AND the
+# secrets; the next `up` is a new install.
+#
+# Model keys are optional. Put any of GOOGLE_API_KEY, OPENAI_API_KEY,
+# ANTHROPIC_API_KEY, AZURE_OPENAI_API_KEY in a `.env` file next to this one,
+# or export them, before `up`, or save them later in the portal under
+# Settings > Model keys. With none, the engine still starts, and a model
+# served on this machine by Ollama is reachable from the portal's Ollama
+# provider with no further setup.
+name: waj-ai-engine
+
+x-engine-image: &engine-image
+  build: .
+  image: ${ENGINE_IMAGE:-waj-ai-engine:local}
+
+services:
+  setup:
+    <<: *engine-image
+    user: root          # the state volume is created root-owned
+    command: ["python", "deploy/compose/setup.py"]
+    environment:
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    volumes:
+      - state:/run/engine
+    restart: "no"
+
+  db:
+    image: ghcr.io/supabase/postgres:15.8.1.060
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    entrypoint:
+      - bash
+      - -c
+      - >
+        set -a && . /run/engine/stack.env && set +a
+        && exec docker-entrypoint.sh postgres -c listen_addresses=*
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PORT: "5432"
+      JWT_EXP: "3600"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./deploy/local/db-init:/docker-entrypoint-initdb.d:ro
+      - state:/run/engine:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -h 127.0.0.1"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  rest:
+    image: postgrest/postgrest:v12.2.3
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["postgrest", "/run/engine/postgrest.conf"]
+    volumes:
+      - state:/run/engine:ro
+
+  auth:
+    image: ghcr.io/supabase/gotrue:v2.158.1
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - set -a && . /run/engine/stack.env && set +a && exec auth
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      API_EXTERNAL_URL: http://localhost:${GATEWAY_PORT:-54421}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_SITE_URL: http://localhost:${ENGINE_PORT:-8000}
+      GOTRUE_URI_ALLOW_LIST: "*"
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+    volumes:
+      - state:/run/engine:ro
+
+  gateway:
+    image: kong:2.8.1
+    depends_on:
+      - rest
+      - auth
+    # Loopback only. The engine reaches the gateway inside the compose
+    # network; this port is for getting an admin token on this machine.
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-54421}:8000"
+    entrypoint:
+      - bash
+      - -c
+      - >
+        set -a && . /run/engine/stack.env && set +a
+        && sed -e "s|__ANON_KEY__|$$SUPABASE_ANON_KEY|g"
+        -e "s|__SERVICE_ROLE_KEY__|$$SUPABASE_SERVICE_KEY|g"
+        /home/kong/temp.yml > /home/kong/kong.yml
+        && exec /docker-entrypoint.sh kong docker-start
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+    volumes:
+      - ./deploy/local/kong.yml:/home/kong/temp.yml:ro
+      - state:/run/engine:ro
+
+  init:
+    <<: *engine-image
+    depends_on:
+      db:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+    command: ["sh", "deploy/compose/with_env.sh", "python", "deploy/compose/init.py"]
+    volumes:
+      - state:/run/engine:ro
+    restart: "no"
+
+  engine:
+    <<: *engine-image
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    command:
+      - sh
+      - deploy/compose/with_env.sh
+      - sh
+      - -c
+      - >
+        exec uvicorn main:app --host 0.0.0.0 --port "$$PORT" --workers 1
+        --proxy-headers --forwarded-allow-ips="$$FORWARDED_ALLOW_IPS"
+    environment:
+      # The port the engine listens on inside the container (the image's
+      # default is 8080); scripts run with `docker compose exec` read it.
+      PORT: "8000"
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      PORTAL_NAME: ${PORTAL_NAME:-}
+      # A local embedding model for knowledge bases (see README).
+      EMBED_MODEL: ${EMBED_MODEL:-}
+      EMBED_BASE_URL: ${EMBED_BASE_URL:-}
+      EMBED_API_KEY: ${EMBED_API_KEY:-}
+      EMBED_PROVIDER: ${EMBED_PROVIDER:-}
+      # Try the voice call path with no realtime key (README, "By voice").
+      # Leave unset on a shared server.
+      VOICE_LIVE_SIM_ENABLED: ${VOICE_LIVE_SIM_ENABLED:-}
+    # Loopback only. To serve other machines, put a TLS-terminating proxy in
+    # front and change this binding; do not publish the port as it is.
+    ports:
+      - "127.0.0.1:${ENGINE_PORT:-8000}:8000"
+    # So a model served on this machine (Ollama) is reachable from the container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - state:/run/engine:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+volumes:
+  pg-data:
+  state:

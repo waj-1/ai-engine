@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-import os
 from typing import AsyncIterator, Optional
 
 from google import genai
@@ -36,7 +35,9 @@ class GeminiVoiceProvider(VoiceProvider):
     def __init__(self, *, stt_model: str, tts_model: str, api_key: Optional[str] = None) -> None:
         self._stt_model = stt_model
         self._tts_model = tts_model
-        self._client = genai.Client(api_key=api_key or os.getenv("GOOGLE_API_KEY", ""))
+        from core.provider_keys import env_or_stored
+
+        self._client = genai.Client(api_key=api_key or env_or_stored("GOOGLE_API_KEY"))
 
     async def transcribe(self, audio: bytes, mime: str, *, language: Optional[str] = None) -> TranscriptResult:
         try:

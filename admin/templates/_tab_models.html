@@ -61,9 +61,11 @@
       </select>
     </label>
     <label>Provider<br>
-      <select name="provider">
+      <select name="provider" data-key-status-for>
         {% for p in providers %}<option value="{{ p }}">{{ provider_labels.get(p, p) }}</option>{% endfor %}
       </select>
+      {# Filled from /admin/model-keys/status.json: whether this provider has a key. #}
+      <span class="caption" data-key-status role="status"></span>
     </label>
     <label>Model string<br><input name="model_string" required placeholder="gemini-3-flash-preview"></label>
     <label class="span-all">Base URL (optional)<br>
@@ -108,3 +110,34 @@
   </form>
 </dialog>
 <script src="/admin/static/agents.js?v={{ asset_version }}" defer></script>
+<script>
+/* New model form: say whether the chosen provider has a key (Settings › Model keys). */
+(function () {
+  var select = document.querySelector('[data-key-status-for]');
+  var out = document.querySelector('[data-key-status]');
+  if (!select || !out) return;
+  var sources = null, manage = '/admin/model-keys';
+  function show() {
+    if (!sources) return;
+    var p = select.value, s = sources[p];
+    out.textContent = '';
+    var text;
+    if (s === 'portal') text = 'This provider has a key stored in the portal. ';
+    else if (s === 'environment') text = 'This provider has a key from its environment variable. ';
+    else if (s === 'none') text = 'This provider has no key yet: the model will not answer until one is set. ';
+    else if (p === 'ollama') text = 'A local model server needs no key. ';
+    else text = 'This provider\'s key is not managed on the Model keys screen. ';
+    out.appendChild(document.createTextNode(text));
+    if (s) {
+      var a = document.createElement('a');
+      a.href = manage; a.textContent = s === 'none' ? 'Add a key' : 'Model keys';
+      out.appendChild(a);
+    }
+  }
+  select.addEventListener('change', show);
+  fetch('/admin/model-keys/status.json', {credentials: 'same-origin', headers: {'Accept': 'application/json'}})
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (data) { if (data) { sources = data.sources || {}; manage = data.manage_url || manage; show(); } })
+    .catch(function () {});
+})();
+</script>

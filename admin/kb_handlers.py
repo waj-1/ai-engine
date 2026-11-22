@@ -264,6 +264,9 @@ async def kb_detail(
             "pages": pages,
             "pages_total": pages_total,
             "chunks_total": chunks_total,
+            "embedding": embedding_status(),
+            "embedding_mismatch": embedding_mismatch(row.get("config")) if chunks_total else None,
+            "reembed_command": REEMBED_COMMAND,
         },
     )
 
@@ -371,6 +374,91 @@ def _is_shared_kb(config: dict) -> bool:
     return (config or {}).get("table") == "ai_kb_embeddings"
 
 
+# Where a shared knowledge base records which embedder wrote its vectors
+# (`provider:model`, core.embedding_provider.embedding_identity). The table
+# itself has no such column, and vectors from two models are not comparable,
+# so this is the only way to tell "embedded by something else" from "fine".
+# Sources created before this existed carry no stamp and are not flagged.
+EMBEDDED_WITH_KEY = "embedded_with"
+
+REEMBED_COMMAND = "python -m scripts.reembed --target kb --apply"
+
+
+def embedding_status() -> Dict[str, Any]:
+    """The embedder in force, for the Knowledge screens (no network call)."""
+    from core.embedding_provider import embedding_status as _status
+
+    return _status()
+
+
+def embedding_mismatch(config: Any) -> Optional[Dict[str, str]]:
+    """{stored, current} when this source's vectors came from another embedder."""
+    if not isinstance(config, dict) or not _is_shared_kb(config):
+        return None
+    stored = config.get(EMBEDDED_WITH_KEY)
+    if not stored or not isinstance(stored, str):
+        return None
+    from core.embedding_provider import embedding_identity
+
+    current = embedding_identity()
+    return None if stored == current else {"stored": stored, "current": current}
+
+
+def upload_blocker(client: Any, source_id: str, config: Any) -> Optional[str]:
+    """Why a document cannot be added right now, in plain words, or None.
+
+    Two reasons, both known before any work is done: no embedding model is
+    set up, or this knowledge base already holds passages written by a
+    different one (adding more would mix two spaces in one search).
+    """
+    status = embedding_status()
+    if not status["ready"]:
+        return f"No embedding model is set up, so documents cannot be made searchable. {status['problem']}"
+    mismatch = embedding_mismatch(config)
+    if mismatch and _has_passages(client, source_id):
+        return (
+            f"This knowledge base was built with {mismatch['stored']}, and the engine "
+            f"now uses {mismatch['current']}. Re-embed it first ({REEMBED_COMMAND}), "
+            "or switch the embedding settings back."
+        )
+    return None
+
+
+def _has_passages(client: Any, source_id: str) -> bool:
+    try:
+        found = (
+            client.table("ai_kb_embeddings").select("id")
+            .eq("source_id", source_id).limit(1).execute().data
+        )
+    except Exception as exc:  # noqa: BLE001 - cannot tell: do not block on a guess
+        logger.info("kb: passage lookup failed for %s (%s)", source_id, exc)
+        return False
+    return bool(found)
+
+
+def stamp_embedded_with(client: Any, source_id: str, identity: Optional[str] = None) -> None:
+    """Record on the source which embedder wrote its vectors. Never raises."""
+    try:
+        if identity is None:
+            from core.embedding_provider import embedding_identity
+
+            identity = embedding_identity()
+        found = (
+            client.table("agent_data_sources").select("config")
+            .eq("source_id", source_id).limit(1).execute().data
+        )
+        if not found:
+            return
+        config = found[0].get("config")
+        config = dict(config) if isinstance(config, dict) else {}
+        if config.get(EMBEDDED_WITH_KEY) == identity:
+            return
+        config[EMBEDDED_WITH_KEY] = identity
+        client.table("agent_data_sources").update({"config": config}).eq("source_id", source_id).execute()
+    except Exception as exc:  # noqa: BLE001 - a missing stamp only loses a warning
+        logger.warning("kb: could not record the embedding model on %s (%s)", source_id, exc)
+
+
 def _vector_literal(vec: List[float]) -> str:
     """Render a float list as a pgvector text literal: ``[0.1,0.2,...]``."""
     return "[" + ",".join(f"{v:.7f}" for v in vec) + "]"
@@ -476,6 +564,12 @@ async def kb_upload(
     table_name = config.get("table") if isinstance(config, dict) else None
     if not table_name:
         return _redirect_with_error(source_id, "config.table is not set on this source")
+
+    # Say what is wrong before staging anything: a page row with no passages
+    # and a job that "succeeded" with every file failed helps nobody.
+    blocker = upload_blocker(client, source_id, config)
+    if blocker:
+        return _redirect_with_error(source_id, blocker)
 
     # Validate the embeddings table actually has the columns we'll be writing.
     schema_rows = _inspect_pgvector_table(client, table_name)
@@ -704,6 +798,8 @@ def _kb_ingest_worker(
                 for c, vec in zip(chunks, vectors)
             ]
             client.table(table_name).insert(rows_to_insert).execute()
+            if _shared and not total_chunks:
+                stamp_embedded_with(client, source_id)
 
             file_result["chunk_count"] = len(rows_to_insert)
             file_result["embed_ms"] = embed_ms

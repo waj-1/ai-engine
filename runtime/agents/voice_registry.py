@@ -106,6 +106,9 @@ def register_voice_agent_builder(
     tenant_access: Optional[VoiceTenantAccess] = None,
     client_context_keys: Tuple[str, ...] = ("screen_context",),
     session_metadata_keys: Tuple[str, ...] = (),
+    slug_addressed: bool = False,
+    persona_fallback: Optional[Callable[..., str]] = None,
+    config_defaults: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Register `builder` as the duplex-voice constructor for `agent_kind`.
 
@@ -130,6 +133,17 @@ def register_voice_agent_builder(
     session leave it unset. `default_phrase_list()` supplies the recognizer
     phrase list used when the profile sets none. Both are callables so a
     registration stays import-light and tests can patch what they import.
+
+    `slug_addressed=True` is for a kind with MANY live profiles told apart by
+    slug (the generic `custom` kind): it has no single active profile, so the
+    plain socket refuses it and it is only served where a route names the
+    slug (`WS /v1/agents/{slug}/voice`, endpoints/agents_v1.py). The builder
+    then receives `agent_slug` in its params. `persona_fallback(profile,
+    language=...)` returns the persona used when `voice_config` names no
+    persona prompt, for kinds whose agents are configuration only; a kind
+    without one keeps the rule that a missing persona slug closes the call.
+    `config_defaults` are `voice_config` values used where the profile leaves
+    the key unset.
     """
     key = agent_kind.strip().lower()
     _BUILDERS[key] = builder
@@ -142,6 +156,9 @@ def register_voice_agent_builder(
         "tenant_access": tenant_access,
         "client_context_keys": tuple(client_context_keys),
         "session_metadata_keys": tuple(session_metadata_keys),
+        "slug_addressed": bool(slug_addressed),
+        "persona_fallback": persona_fallback,
+        "config_defaults": dict(config_defaults or {}),
     }
 
 
@@ -188,6 +205,21 @@ def voice_client_context_keys(agent_kind: str) -> Tuple[str, ...]:
 def voice_session_metadata_keys(agent_kind: str) -> Tuple[str, ...]:
     """Client-context keys copied onto `agent_kind`'s session row metadata."""
     return _OPTIONS.get((agent_kind or "").strip().lower(), {}).get("session_metadata_keys", ())
+
+
+def voice_agent_slug_addressed(agent_kind: str) -> bool:
+    """True iff `agent_kind` is served only at a slug-naming route."""
+    return bool(_OPTIONS.get((agent_kind or "").strip().lower(), {}).get("slug_addressed"))
+
+
+def voice_persona_fallback(agent_kind: str) -> Optional[Callable[..., str]]:
+    """The persona builder `agent_kind` uses when no persona prompt is named."""
+    return _OPTIONS.get((agent_kind or "").strip().lower(), {}).get("persona_fallback")
+
+
+def voice_config_defaults(agent_kind: str) -> Dict[str, Any]:
+    """`voice_config` values `agent_kind` uses where a profile sets none."""
+    return dict(_OPTIONS.get((agent_kind or "").strip().lower(), {}).get("config_defaults") or {})
 
 
 def voice_agent_kinds() -> frozenset:
@@ -238,6 +270,37 @@ def _demo_builder(agent_key: str):
 for _key, _kind in (("support", "agents_support"), ("inquiries", "agents_inquiries"),
                     ("collection", "agents_collection"), ("sales", "agents_sales")):
     register_voice_agent_builder(_kind, _demo_builder(_key))
+
+
+def _custom_builder(params: Dict[str, Any]) -> Any:
+    from runtime.agents.custom_voice import build_custom_voice_agent
+
+    return build_custom_voice_agent(params)
+
+
+def _custom_persona(profile: Any, *, language: Optional[str] = None) -> str:
+    from runtime.agents.custom_voice import default_persona
+
+    return default_persona(profile, language=language)
+
+
+def _register_custom() -> None:
+    from runtime.agents.custom_voice import CONFIG_DEFAULTS
+
+    # The generic agent (runtime/agents/custom.py). Auth-required: a custom
+    # agent can reach whatever tools an operator attached. Its identity check
+    # is the route's own (endpoints/agents_v1.py), not a plain login.
+    register_voice_agent_builder(
+        "custom", _custom_builder,
+        requires_auth=True,
+        identity_source="api",
+        slug_addressed=True,
+        persona_fallback=_custom_persona,
+        config_defaults=CONFIG_DEFAULTS,
+    )
+
+
+_register_custom()
 
 # Product agents register their own builders from a plugin package (see
 # core/plugins.py), so this module names no agent it does not ship with.

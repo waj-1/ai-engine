@@ -31,14 +31,14 @@ Testing and Settings show an area-level **section tab strip** at the top
 | Sidebar item | Screens (route) | Section / page tabs | Documented in |
 |------------|---------------------|------|---------------|
 | **Overview** (was Dashboard) | `/admin/live` | — (Jobs moved to Settings › Diagnostics) | [Operate](./01-operate.md#overview) |
-| **Agents** | `/admin/agents`, `/admin/templates` | Agents · Models · Templates (agent page tabs: Overview · Instructions · Tools & knowledge · Sub-agents · Voice · Versions · Settings) | [Configure](./02-configure.md#agent-profiles) |
+| **Agents** | `/admin/agents`, `/admin/templates`, `/admin/agent-types` | Agents · Models · Templates · Categories (agent page tabs: Overview · Instructions · Tools & knowledge · Sub-agents · Voice · Versions · Settings) | [Configure](./02-configure.md#agent-profiles) |
 | **Conversations** (was Traces) | `/admin/observability` | — | [Operate](./01-operate.md#conversations) |
 | **Knowledge** | `/admin/kb`, `/admin/skills`, `/admin/memory` | Knowledge bases · Skills · Memory | [Configure](./02-configure.md#knowledge-base) |
 | **Connections** | `/admin/tools`, `/admin/channels` | Tools & integrations · Channels | [Configure](./02-configure.md#mcp--tools) |
 | **Testing** | `/admin/evals`, `/admin/evals/suites`, `/admin/evals/runs`, `/admin/evals/bakeoffs`, `/admin/voice-scenarios`, `/admin/evals/scheduling`, `/admin/tests` | Overview · Test suites · Runs · Model comparison · Voice checks · Schedules · Engineering (staff) | [Test](./03-test.md#evals) |
 | **Activity** (Audit Log) | `/admin/audit` | — | [Govern](./04-govern.md#audit-log) |
 | **Help** | `/admin/help`, `/admin/help/{slug}` | — | [Help](#help-adminhelp) |
-| **Settings** (footer) | `/admin/settings` hub → `/admin/users`, `/admin/env`, `/admin/deployments`, `/admin/env?tab=variables`, `/admin/voice-budgets`, `/admin/drift`, `/admin/diagnostics/runtime`, `/admin/lmnr/diagnose`, `/admin/docs` | Overview · Team & access · Releases · Environment variables · Diagnostics · Developer docs | [Govern](./04-govern.md#settings-hub) |
+| **Settings** (footer) | `/admin/settings` hub → `/admin/users`, `/admin/api-keys`, `/admin/env`, `/admin/deployments`, `/admin/env?tab=variables`, `/admin/voice-budgets`, `/admin/model-keys`, `/admin/drift`, `/admin/diagnostics/runtime`, `/admin/lmnr/diagnose`, `/admin/docs` | Overview · Team & access · Voice budgets · Model keys · Releases · Environment variables · Diagnostics · Developer docs | [Govern](./04-govern.md#settings-hub) |
 
 Inside Settings › Releases, `/admin/env` (promote) and `/admin/deployments` share
 one page strip: Promote agent changes · Deploy code · History · Targets.
@@ -101,7 +101,7 @@ run id is a 404 (it used to 500). API callers keep the JSON envelope
 
 | Page | Covers |
 |------|--------|
-| [MCP Server](./06-mcp.md) | The admin-portal management surface exposed over MCP for Claude Code operators: the 51-tool catalog, the lifecycle map, doc resources, token minting + verified auth, the `env` parameter, the confirm gate, and where an MCP tool's behavior deviates from its portal counterpart |
+| [MCP Server](./06-mcp.md) | The admin-portal management surface exposed over MCP for Claude Code operators: the 54-tool catalog, the lifecycle map, doc resources, token minting + verified auth, the `env` parameter, the confirm gate, and where an MCP tool's behavior deviates from its portal counterpart |
 | [Architecture](./00-architecture.md) | Portal-as-source-of-truth, runtime agents, env switching, compile-on-promote, seeding, observability, auth, theming & layout, legacy redirects |
 | [Data Model](./data-model.md) | Every admin-portal table, its purpose, key columns, and which screen edits it |
 
@@ -113,14 +113,14 @@ The collapsible left nav rail has eight items plus **Settings** in the footer;
 each item has its own icon in the collapsed rail:
 
 - **Overview** — live KPIs + background jobs.
-- **Agents** — define how an agent behaves (+ Models tab, templates).
+- **Agents** — define how an agent behaves (+ Models tab, templates, and your own categories for grouping agents).
 - **Conversations** — full trace exploration (transcripts, spans, audio).
 - **Knowledge** — knowledge bases, skills, memory.
 - **Connections** — MCP servers & tools, channels.
 - **Testing** — eval suites, monitoring schedules, bake-offs, voice checks, pytest.
 - **Activity** — the audit log.
 - **Help** — partner guides from `docs/partner/`.
-- **Settings** — Team & access, Releases (promote + deploy), Environment variables,
+- **Settings** — Team & access, API keys, Releases (promote + deploy), Environment variables,
   Voice budgets, Diagnostics (drift, telemetry, jobs, tests), Developer docs (these pages).
 
 Screens that absorbed a former standalone screen expose it as a **tab** (e.g.

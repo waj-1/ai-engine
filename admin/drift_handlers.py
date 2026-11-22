@@ -53,6 +53,7 @@ RUNTIME_FLAG_NAMES: List[str] = [
     "ENVIRONMENT",
     *scope_env_vars(),  # what selects a deployment scope (core/deployment.py)
     "EMBED_PROVIDER",
+    "EMBED_MODEL",  # the OpenAI-compatible embedder's model
 ]
 
 

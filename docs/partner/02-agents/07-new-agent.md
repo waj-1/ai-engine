@@ -16,8 +16,9 @@ New agents start from a **template**: a ready-made starting point that already h
 ![The New agent window, step 2, with the Name field, the sub-agent picker and Create draft agent highlighted](../media/agents/new-agent-name.png)
 
 2. Give it a clear **Name**, for example "FAQ helper".
-3. To make it a specialist for one of your existing agents, choose that agent in **Make it a sub-agent of**. Otherwise leave **— No, a standalone agent —**.
-4. Click **Create draft agent**. The new agent opens on its **Overview**.
+3. If you use [categories](09-categories.md), choose one in **Category** (the field appears once a category exists). You can change it later in **Settings**.
+4. To make it a specialist for one of your existing agents, choose that agent in **Make it a sub-agent of**. Otherwise leave **— No, a standalone agent —**.
+5. Click **Create draft agent**. The new agent opens on its **Overview**.
 
 You can usually leave **Advanced** as it is.
 
@@ -25,7 +26,7 @@ You can usually leave **Advanced** as it is.
 
 Then work through the tabs:
 
-1. **Settings**: write a one-line **Description** of what the agent does, and check the **Model**.
+1. **Settings**: write a one-line **Description** of what the agent does, check the **Model**, and pick a **Category** if you use them.
 2. **Instructions**: rewrite the template text for your business. See [Change what your agent says](02-instructions.md).
 3. **Tools & knowledge**: attach only the toolsets and knowledge it needs. See [Choose what your agent can do and know](03-tools-and-knowledge.md).
 4. **Settings → Status**: switch from **Draft — not served** to **Active — serves people** when it's ready, then click **Save settings**. A specialist uses **Specialist — only via a parent agent**.
@@ -42,4 +43,4 @@ Use a copy to prepare and compare changes. **More ▾ → Compare with another a
 
 **Note:** a draft copy shares its instructions history with the original agent — saving instructions on the copy changes the original too. Change instructions on the original agent instead, after [saving a checkpoint](06-versions.md).
 
-**Related:** [Find your agents and see what they do](01-your-agents.md) · [Let your agent hand off to other agents](04-sub-agents.md) · [Make your changes live](../07-publishing/01-publish-changes.md)
+**Related:** [Find your agents and see what they do](01-your-agents.md) · [Group your agents into categories](09-categories.md) · [Let your agent hand off to other agents](04-sub-agents.md) · [Make your changes live](../07-publishing/01-publish-changes.md)

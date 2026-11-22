@@ -99,6 +99,31 @@ def default_target(ws_path: str) -> str:
     return f"{base}{ws_path}"
 
 
+GENERIC_AGENT_PATH = re.compile(r"^/v1/agents/[a-z0-9][a-z0-9_-]{0,63}/voice$")
+
+
+def scenario_headers(
+    scenario: Dict[str, Any], *, target: Optional[str],
+    headers: Optional[Dict[str, str]], user_token: Optional[str],
+) -> Optional[Dict[str, str]]:
+    """The headers a run connects with.
+
+    A scenario whose call path is a generic agent's address
+    (`/v1/agents/{slug}/voice`) needs a caller the agent admits, so the
+    operator who started the run is sent as its bearer token. Only to this
+    engine's own loopback edge: with an explicit `target` the token would
+    leave the server, so there the caller supplies headers themselves. An
+    `Authorization` header passed in always wins.
+    """
+    path = str(scenario.get("ws_path") or "")
+    if (not user_token or target or os.getenv("VOICE_SCENARIO_TARGET", "").strip()
+            or not GENERIC_AGENT_PATH.match(path)):
+        return headers
+    if any(k.lower() == "authorization" for k in (headers or {})):
+        return headers
+    return {**(headers or {}), "Authorization": f"Bearer {user_token}"}
+
+
 def _voice_for(step: Dict[str, Any], locale: Optional[str]) -> str:
     if step.get("voice"):
         return str(step["voice"])
@@ -281,6 +306,7 @@ def run_scenario_job(
     triggered_by: str = "",
     target: Optional[str] = None,
     headers: Optional[Dict[str, str]] = None,
+    user_token: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Sync entrypoint for admin/_jobs.start_tracked_job (thread context).
 
@@ -327,7 +353,9 @@ def run_scenario_job(
         result: Dict[str, Any] = {"status": "skipped", "reason": "scenario is disabled"}
     else:
         result = asyncio.run(
-            run_scenario(scenario, target=target, headers=headers)
+            run_scenario(scenario, target=target,
+                         headers=scenario_headers(scenario, target=target, headers=headers,
+                                                  user_token=user_token))
         )
 
     if run_id:

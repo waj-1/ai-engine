@@ -13,6 +13,10 @@ const TABLES = [
   'ai_voice_recordings', 'ai_voice_recording_chunks',
   'ai_conversation_insights', 'ai_background_leases',
   'agent_skills', 'agent_skill_versions', 'agent_skill_resources', 'agent_profile_skills',
+  'api_keys',
+  'provider_keys',
+  'agent_types',
+  'engine_setup',
 ];
 
 async function execute(client: PrismaClient) {

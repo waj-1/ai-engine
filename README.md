@@ -12,53 +12,100 @@ to the instructions or the model before it reaches anyone.
 This is an early release. What is in this README works today on a fresh
 database; what does not yet is listed under [Roadmap](#roadmap).
 
-## Run it locally
+## Quick start
 
-You need Docker and Python 3.11. The engine itself runs with Python; Docker
-runs the database stack it talks to (Postgres with pgvector, a REST layer, an
-auth service and a gateway).
+You need Docker.
 
 ```bash
 git clone https://github.com/waj-1/ai-engine.git
 cd ai-engine
-python3.11 -m venv venv && ./venv/bin/pip install -r requirements.lock
-
-# 1. Secrets, generated on this machine (prints the admin login once)
-./venv/bin/python deploy/local/gen_env.py
-
-# 2. Database, REST layer, auth, gateway
-docker compose -f deploy/local/docker-compose.yml --env-file deploy/local/.env up -d
-
-# 3. Schema and the admin user (safe to run again)
-set -a; . deploy/local/.env; set +a
-./venv/bin/python deploy/local/init_db.py
-
-# 4. The engine
-./venv/bin/python main.py      # http://127.0.0.1:8000/admin/login
+docker compose up
 ```
 
-Log in with the email and password that step 1 printed. No model key is needed
-to start. A fresh install has no agents, no knowledge sources and no test
-suites: it has seven templates and a short list of Gemini models, which work
-once `GOOGLE_API_KEY` is set.
+Open **http://localhost:8000**. There is no default login. The first-run page
+has you do three things:
 
-More detail, including how to start over, is in
-[deploy/local/README.md](deploy/local/README.md).
+1. **Create the admin account.** It asks for the one-time setup code printed in
+   the engine's log, so nobody else can claim a fresh install:
+   ```bash
+   docker compose logs engine
+   ```
+   Each start of the engine prints a new code; five wrong tries lock the page
+   until the next start (`docker compose restart engine`).
+2. **Add a model key** (optional). Paste a provider's key and test it, or skip
+   this and use a local model.
+3. **Copy your API key.** It is shown once, with a ready-to-paste `curl` call
+   and the MCP client settings.
+
+Once the admin account exists the first-run page is gone for good. For an
+install with no browser step, set both `ADMIN_EMAIL` and `ADMIN_PASSWORD`
+before the first `docker compose up`: that account is created at start and the
+first-run page never appears.
+
+That one command builds the engine and starts it with everything it needs:
+Postgres with pgvector, a REST layer, an auth service and a gateway. The
+install's secrets are generated inside a Docker volume, not written to your
+disk, and only the engine (port 8000) and the gateway (port 54421) are
+published, on this machine only. `docker compose down` stops it and keeps your
+data; `docker compose down -v` deletes the data and the secrets, so the next
+`up` is a new install.
+
+No model key is needed to start. A fresh install has one agent, **Demo agent**,
+plus seven templates and a short list of Gemini models; it has no knowledge
+sources and no test suites. The demo agent answers at `/v1/agents/demo/chat`
+with whichever model the install can use. With none yet, it replies that no
+model is configured and where to add one; add a model and it answers, with no
+change to the agent. It is seeded once: edit, archive or rename it and it
+stays that way (`SEED_DEMO_AGENT=false` never seeds it).
+
+**Add a model key.** Open **Settings › Model keys**, paste your provider's key
+(Google Gemini, OpenAI, Anthropic or Azure OpenAI) and click **Test**. The key
+is encrypted with this install's `SECRET_KEY` before it is saved, is never
+shown again, and is used from the next message. You can instead put
+`GOOGLE_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` or
+`AZURE_OPENAI_API_KEY` in a `.env` file next to `docker-compose.yml`; a key
+saved in the portal wins.
+
+To run the engine with Python instead of in a container (for development),
+see [deploy/local/README.md](deploy/local/README.md).
 
 ### A model with no API key
 
 A model served on your own machine works with no key at all:
 
 ```bash
-docker run -d --name ollama -p 127.0.0.1:11434:11434 -v ollama:/root/.ollama ollama/ollama
-docker exec ollama ollama pull qwen2.5:3b
+ollama pull qwen2.5:3b
 ```
 
 Add it under **Agents › Models › New model**: provider **Ollama**, model
-string `qwen2.5:3b`. For any other OpenAI-compatible server (vLLM, LM Studio,
+string `qwen2.5:3b`. The engine's container reaches Ollama on your machine at
+`host.docker.internal:11434`, so Ollama has to listen on an address containers
+can reach, not only on `127.0.0.1`: start it with `OLLAMA_HOST=0.0.0.0`, or, on
+Linux with Ollama in Docker, publish it on the Docker bridge address
+(`-p 172.17.0.1:11434:11434`). For any other OpenAI-compatible server (vLLM, LM Studio,
 a hosted catalog) choose provider **OpenAI** and fill in **Base URL**. A small
 model follows short instructions and calls tools most of the time; use a larger
 one for anything real.
+
+### Knowledge bases with no API key
+
+Documents are made searchable by an embedding model. Without a Gemini key, use
+one on your machine:
+
+```bash
+ollama pull nomic-embed-text
+echo "EMBED_MODEL=nomic-embed-text" >> .env
+docker compose up -d
+```
+
+Any OpenAI-compatible server works (`EMBED_BASE_URL`, `EMBED_MODEL`). The
+**Knowledge** screen names the model in use, or says what to set when there is
+none. Choose the model before uploading: changing it later means re-embedding
+every document (`python -m scripts.reembed --target kb --apply`), and the
+screen marks a knowledge base that needs it. Attach a knowledge base on an
+agent's **Tools & knowledge** tab and the agent gets a `search_knowledge` tool.
+A small chat model does not always call it; in our run a 1.5B model answered
+without searching and a 3B model searched and answered from the document.
 
 ## Build an agent
 
@@ -81,35 +128,71 @@ For a team, tick *make it available as a specialist* on each specialist's
 gets one hand-off tool per specialist (`ask_support_desk`), which its
 instructions can name.
 
+To keep many agents tidy, group them into your own **categories** (Support,
+Sales, Internal tools) under **Agents › Categories**, then choose the category
+in the New agent window or on an agent's **Settings** tab. The Agents list
+shows and filters by it. A category only organises the list: it does not
+change how an agent runs. A fresh install has none.
+
 The same steps work over MCP; see [Connect your AI assistant](#connect-your-ai-assistant).
 
 ## Talk to an agent
 
-The chat API is off unless `ENABLE_GENERIC_AGENTS=1`; `deploy/local/gen_env.py`
-turns it on. For now it takes the admin user's access token (portal-issued API
-keys are on the roadmap). On the local stack you get one from the auth service:
+The chat API takes an API key. Use the key from first-run
+setup, or open **Settings › API keys**, create a key with **Chat only** access
+and copy it. It is shown once, and only
+a hash of it is stored.
 
 ```bash
-set -a; . deploy/local/.env; set +a
-TOKEN=$(curl -s "http://127.0.0.1:54421/auth/v1/token?grant_type=password" \
-  -H "apikey: $SUPABASE_ANON_KEY" -H "Content-Type: application/json" \
-  -d "{\"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\"}" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+export AI_ENGINE_API_KEY=wae_...
 
-curl -N http://127.0.0.1:8000/v1/agents/support-desk/chat \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+curl -N http://localhost:8000/v1/agents/support-desk/chat \
+  -H "Authorization: Bearer $AI_ENGINE_API_KEY" -H "Content-Type: application/json" \
   -d '{"message": "What can you help me with?"}'
 ```
+
+A new install already has an agent to try: replace `support-desk` with `demo`.
+
+Each key has its own conversations: one key cannot read or continue another's,
+and `GET /ai/sessions` with the key lists them.
+Revoke a key on the same screen and it stops working on its next request.
 
 The reply streams as server-sent events: a `session` event, the answer in
 `answer` chunks, then `usage` and `done`. To continue the conversation, send the
 `session` event's `id` back as `session_id` with the next message.
 Conversations are saved in the database.
 
+### By voice
+
+An agent can take calls at `WS /v1/agents/<slug>/voice`. On the agent, open
+**Settings › set up voice for this agent**, tick **Duplex voice enabled**, pick
+a realtime model, a voice and a language, and save; **Call** on that page
+places a call from your browser. The realtime model needs its own key:
+`GOOGLE_API_KEY` for Gemini Live, or the variable named on an Azure Voice Live
+model. Without it the page and the socket say which key to set. A caller that
+is not a browser sends an API key, as an `Authorization` header or as a first
+frame `{"type": "auth", "token": "…"}`. Calls are capped per agent per day
+(`VOICE_LIVE_DAILY_SECONDS`).
+
+What we have run: the whole call path with a simulated realtime provider (the
+question arrives as if spoken, the agent's own model answers, the spoken answer
+comes back as text). We have not yet placed a call with real audio against
+these agents in this tree, so speech recognition, synthesis and interruption
+with a live provider are unverified here. To run the same check:
+
+```bash
+VOICE_LIVE_SIM_ENABLED=1 docker compose up -d
+docker compose exec -T engine sh deploy/compose/with_env.sh \
+  python deploy/compose/voice_text_call.py support-desk "What are your office hours?"
+```
+
+Leave `VOICE_LIVE_SIM_ENABLED` unset on a shared server: with it, a call from
+the engine's own machine needs no key.
+
 ## Connect your AI assistant
 
-The admin MCP server at `/mcp` is on when `ENABLE_ADMIN_MCP=1` (also set by
-`gen_env.py`) and takes the same token. Add it to Claude, Cursor or any MCP
+The admin MCP server at `/mcp` takes an API key with **Full access** (a Chat
+only key is refused there). Create one under **Settings › API keys**. Add it to Claude, Cursor or any MCP
 client:
 
 ```json
@@ -117,8 +200,8 @@ client:
   "mcpServers": {
     "waj-ai-engine": {
       "type": "http",
-      "url": "http://127.0.0.1:8000/mcp",
-      "headers": { "Authorization": "Bearer <token>" }
+      "url": "http://localhost:8000/mcp",
+      "headers": { "Authorization": "Bearer wae_..." }
     }
   }
 }
@@ -134,6 +217,8 @@ Building an agent this way is a handful of calls:
 | Give it a model, publish it, build a team | `update_profile(…)` |
 | Write its instructions | `prompts(action="create_version", profile_id=…, content=…)` |
 | Choose its tools | `profile_mcp_attachments(action="set", …)` |
+| Group agents into categories | `agent_types(action="create", display_name=…)`, then `update_profile(profile_id=…, agent_type="support")` |
+| Store a model key | `provider_keys(action="set", provider=…, value=…)` |
 
 ## Test a change before it ships
 
@@ -150,38 +235,40 @@ From **Testing** in the portal, or over MCP:
 ## Supported model providers
 
 Chat models: Google Gemini, OpenAI, Azure OpenAI, Anthropic, Ollama, and any
-OpenAI-compatible endpoint. Each reads its key from the environment
-(`GOOGLE_API_KEY`, `OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY`,
-`ANTHROPIC_API_KEY`); a local server needs none. The local test runs used a
+OpenAI-compatible endpoint. Each takes its key from **Settings › Model keys**
+or from the environment; a local server needs none. The local test runs used a
 small model served by Ollama; the other providers are wired in but have not all
 been run against the test suites in this tree.
 
 ## Configuration
 
-`deploy/local/gen_env.py` writes everything the local stack needs to
-`deploy/local/.env`. `.env.example` lists every variable the engine reads. A few
+`docker compose up` generates what the stack needs and turns on the chat API
+and the MCP server. `.env.example` lists every variable the engine reads. A few
 worth knowing:
 
 | Variable | Purpose |
 |---|---|
 | `ENABLE_GENERIC_AGENTS` | Serve `/v1/agents/{slug}/chat` (off by default) |
 | `ENABLE_ADMIN_MCP` | Serve the admin MCP server at `/mcp` (off by default) |
-| `PORTAL_NAME` | The name shown in the portal (default "WAJ Admin") |
+| `PORTAL_NAME` | The name shown in the portal (default "WAJ AI Engine") |
 | `ALLOWED_ORIGINS` | Browser origins allowed to call the API |
-| `GOOGLE_API_KEY`, `OPENAI_API_KEY`, … | Model provider keys |
+| `SECRET_KEY` | Encrypts model keys saved in the portal. `docker compose up` generates it. Keep it: without it saved keys cannot be read. Rotate with `SECRET_KEY=new,old` |
+| `GOOGLE_API_KEY`, `OPENAI_API_KEY`, … | Optional. Model provider keys from the environment, used when none is saved in the portal |
 
-The engine talks to its database through the REST and auth services in
-`deploy/local/`, not over a direct Postgres connection, so it needs that stack
-(or a Supabase project) rather than a bare `DATABASE_URL`.
+The engine talks to its database through the REST and auth services that
+`docker-compose.yml` starts, not over a direct Postgres connection, so it needs
+that stack (or a Supabase project) rather than a bare `DATABASE_URL`.
 
-Tracing is optional and off on the local stack. Without it, conversations are
-still saved, but the portal's **Conversations** screen shows "temporarily
-unavailable".
+Tracing is optional and off in this stack. Without it, the portal's
+**Conversations** screen lists and opens the saved chats (messages, tokens,
+response time, model) and says that step-by-step detail (timings, each model
+call) needs the tracing stack. **Overview** shows a "tracing is off" state
+instead of live statistics.
 
 ## Run the tests
 
-The suite needs no running services, only placeholder settings so the engine
-can import:
+The suite needs Python 3.11 and no running services, only placeholder settings
+so the engine can import (`make develop` creates `venv/`):
 
 ```bash
 ENVIRONMENT=development \
@@ -199,26 +286,14 @@ Run it in a shell where `deploy/local/.env` is not loaded:
 
 ## Roadmap
 
-Not built yet, in roughly the order we plan to build them:
+Not done yet:
 
-- `docker compose up` at the repo root that runs the engine and its database
-  together, with nothing else to install.
-- A first-run page: create the admin account with a one-time setup code
-  printed in the engine log, add a model key, copy an API key.
-- API keys issued from the portal (shown once, revocable), accepted by the
-  chat API and `/mcp` in place of the admin token.
-- A demo agent seeded on first boot.
-- Model keys entered in the portal and stored encrypted, instead of
-  environment variables.
-- Knowledge bases without a cloud embedding key (a local embedding option).
-  Knowledge search works today with a Gemini or Azure OpenAI embedding key,
-  but was not part of the local test runs.
-- Voice for agents built in the portal. The engine has a realtime voice edge,
-  but it is not yet wired to these agents.
-- User-defined agent categories, managed from the portal and MCP.
-- The Conversations screen reading saved chats when the tracing stack is not
-  running.
-- Deploy guides, written only for targets we have tested.
+- Deploy guides for more targets. Today there is one, for the target we have
+  run: [Docker Compose on one machine](docs/deploy/compose.md), with backup,
+  restore and upgrade. Serving the engine to other machines behind a TLS
+  proxy, cloud container services and Kubernetes are not tested yet.
+- A call with real audio against a portal-built agent (see "By voice").
+- A local embedding model's retrieval quality has only been spot-checked.
 
 Known limits: team hand-offs were unreliable with a 3B local model and have not
 yet been re-run with a stronger one.

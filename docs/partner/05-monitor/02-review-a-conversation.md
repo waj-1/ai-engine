@@ -46,3 +46,15 @@ Click **Copy link** to copy a link to this conversation. Anyone on your team who
 Then turn the problem into a test case, so you'll know when it's fixed. See [Test suites](../06-testing/06-test-suites.md).
 
 **Related:** [Read the Overview](01-overview.md) · [Test your agent](../02-agents/08-test-your-agent.md) · [FAQ](../09-reference/02-faq.md)
+
+## If tracing is off
+
+Some installs run without the tracing stack. A grey line above the list says so. You still see every conversation and can open and read it, because conversations are always saved.
+
+What changes:
+
+- **More filters** is not shown. Period, Agent, Channel, Outcome and Search still work, and Search looks inside the messages.
+- An action label shows the action's name without ✓ or ✕. Whether it worked, and what it sent and received, is recorded only with tracing on.
+- **Technical** shows totals for the conversation (tokens, cost, response time) and no step-by-step timing.
+
+Ask your portal administrator to turn tracing on if you need the step-by-step view.

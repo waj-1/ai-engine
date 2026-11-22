@@ -1,9 +1,20 @@
 {% extends "_base.html" %}
 {% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import alert %}
 {% block title %}Knowledge bases · {{ brand().title }}{% endblock %}
 {% block page_title %}Knowledge bases{% endblock %}
 {% block page_subtitle %}Documents and sources your agents can look things up in.{% endblock %}
 {% block content %}
+
+{# Which model turns documents into searchable vectors, or what to set when
+   there is none: an upload would otherwise be the first place it shows. #}
+{% if embedding and not embedding.ready %}
+{% call alert('warning') %}<strong>Knowledge bases cannot be searched yet.</strong>
+Documents are made searchable by an embedding model, and none is set up. {{ embedding.problem }}{% endcall %}
+{% elif embedding %}
+<p class="caption mb-m" id="kb-embedding">Documents are made searchable by <strong>{{ embedding.model }}</strong>
+  ({{ embedding.label }}{% if embedding.base_url %} at <span class="technical">{{ embedding.base_url }}</span>{% endif %}).</p>
+{% endif %}
 
 <details class="card collapse-card mb-m" {% if not rows %}open{% endif %}>
   <summary>New knowledge base</summary>

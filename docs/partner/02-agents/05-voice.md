@@ -36,10 +36,40 @@ To change a setting, open its group, edit the field and click **Save voice setti
 
 You can usually leave **Which row stores what**, **The brain**, **Relay**, **Limits** and the technical fields as they are. Ask your portal administrator before you change them.
 
+## 4. Turn on voice for an agent you built
+
+An agent you created with **New agent** has no Voice tab until you set voice up.
+
+1. Open the agent, go to **Settings** and click **set up voice for this agent**.
+2. Open **Session** under **Call settings** and tick **Duplex voice enabled**.
+3. Choose the **Realtime model**: the model that listens and speaks on the call.
+4. Set the **Voice ID** and the **Language**. For more than one language, fill in **Voice by language** and, under **Recognition**, **Caller languages**.
+5. Leave **Barge-in enabled** ticked under **Turn behaviour** so callers can interrupt.
+6. Click **Save voice settings**.
+
+You can leave **Persona prompt slug** and **Greeting trigger** empty. The agent then uses a built-in persona, which passes each question to your agent and says the answer, and a short built-in greeting. Fill in **Greeting trigger** to choose the greeting yourself.
+
+## 5. Make a test call
+
+The **Call this agent** section, under the summary, shows the agent's call address and a **Call** button.
+
+1. Click **Call** and allow the microphone when your browser asks.
+2. Wait for the greeting, then speak. What you say and what the agent answers appear under the button.
+3. Click **End call** when you're done.
+
+The call uses the settings you last saved, on the agent you're looking at, even if it's still a draft.
+
+If you see **A call cannot start yet** instead of the button, the line under it says why:
+
+- **Voice is not turned on for this agent.** Tick **Duplex voice enabled** and save.
+- **No realtime voice model is set for this agent.** Choose a **Realtime model** and save.
+- **Realtime model key missing: set … on the server.** The server doesn't have the key for that speech model yet. Ask your portal administrator to add it.
+- **The generic agents API is switched off on this server.** Ask your portal administrator.
+
 ## Tips
 
 - Change one thing at a time, then make a test call.
 - Don't switch off **Barge-in enabled** unless you mean to: callers then can't interrupt the agent at all.
-- Daily call minutes are capped per business. See [Voice budgets](../08-team-and-settings/03-voice-budgets.md).
+- Daily call minutes are capped per business. See [Voice budgets](../08-team-and-settings/03-voice-budgets.md). An agent you built has its own daily cap instead; **Call this agent** shows the ID it's counted under.
 
 **Related:** [Change what your agent says](02-instructions.md) · [Voice checks](../06-testing/05-voice-checks.md) · [Review a conversation](../05-monitor/02-review-a-conversation.md) · [Versions and restore](06-versions.md)

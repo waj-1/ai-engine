@@ -36,6 +36,7 @@ module + the client wrapper at /app so the seeders and SQL are reachable.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -80,6 +81,10 @@ _FALLBACK_RLS_TABLES = [
     'ai_voice_usage_daily',
     'ai_voice_budgets', 'ai_voice_scenarios', 'ai_voice_scenario_runs',
     'ai_voice_recordings', 'ai_voice_recording_chunks',
+    'api_keys',
+    'provider_keys',
+    'agent_types',
+    'engine_setup',
 ]
 
 
@@ -248,6 +253,37 @@ class InitConfig:
     # upsert-by-path, non-fatal (a flaky ingest shouldn't block stack
     # bring-up) — e.g. a client's own troubleshooting guide.
     extra_ingest_files: tuple[str, ...] = field(default_factory=tuple)
+
+
+class SqlUserRows:
+    """``public."user"`` over a psycopg2 connection: how this init step writes
+    the admin's row for ``core.admin_account.ensure_admin_account``."""
+
+    def __init__(self, conn) -> None:
+        self._conn = conn
+
+    def find(self, auth_id: str):
+        with self._conn.cursor() as cur:
+            cur.execute('SELECT id FROM public."user" WHERE auth_id=%s LIMIT 1', (auth_id,))
+            row = cur.fetchone()
+        return str(row[0]) if row else None
+
+    def update(self, auth_id: str, fields: dict) -> None:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                'UPDATE public."user" SET email=%s, permission=%s::jsonb, role=%s WHERE auth_id=%s',
+                (fields["email"], json.dumps(fields["permission"]), fields["role"], auth_id),
+            )
+
+    def insert(self, fields: dict):
+        with self._conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO public."user" (auth_id, email, permission, role) '
+                'VALUES (%s, %s, %s::jsonb, %s) RETURNING id',
+                (fields["auth_id"], fields["email"], json.dumps(fields["permission"]), fields["role"]),
+            )
+            row = cur.fetchone()
+        return str(row[0]) if row else None
 
 
 class DBInitializer:
@@ -490,59 +526,27 @@ class DBInitializer:
     # ──────────────────────────────────────────────────────────────────────
     # 6. GoTrue admin user + superuser `user` row (idempotent)
     # ──────────────────────────────────────────────────────────────────────
-    def ensure_admin_user(self, conn) -> None:
+    def ensure_admin_user(self, conn) -> bool:
+        """Create (or repair) the admin account. True when it exists afterwards.
+
+        The work is ``core.admin_account.ensure_admin_account``, shared with
+        the first-run page; only the row is written differently here, over
+        this step's own Postgres connection (autocommit psycopg2).
+        """
         email = os.getenv("ADMIN_EMAIL", self.config.admin_email_default)
         password = os.getenv("ADMIN_PASSWORD", self.config.admin_password_default)
         self.log(f"ensuring admin superuser ({email})…")
 
         # supabase-py talks to GoTrue via the kong gateway (SUPABASE_URL).
+        from core.admin_account import AdminAccountError, ensure_admin_account
         from core.auth import get_main_client  # engine package, baked into image
 
-        client = get_main_client()
-        auth_id = None
         try:
-            created = client.auth.admin.create_user(
-                {"email": email, "password": password, "email_confirm": True}
-            )
-            auth_id = created.user.id
-            self.log(f"  ✓ GoTrue user created ({auth_id})")
-        except Exception as exc:  # noqa: BLE001 — already exists or transient
-            self.log(f"  GoTrue create said: {exc}; looking up existing user…")
-            try:
-                page = client.auth.admin.list_users()
-                users = page if isinstance(page, list) else getattr(page, "users", [])
-                for u in users:
-                    if getattr(u, "email", None) == email:
-                        auth_id = u.id
-                        break
-                if auth_id:
-                    client.auth.admin.update_user_by_id(auth_id, {"password": password})
-                    self.log(f"  ↻ reset password for existing GoTrue user ({auth_id})")
-            except Exception as exc2:  # noqa: BLE001
-                self.log(f"  ! could not resolve GoTrue user: {exc2}")
-
-        if not auth_id:
-            self.log("  ! skipping superuser row (no auth_id). /admin login may not work — see README.")
-            return
-
-        # Upsert the public.user superuser row directly (autocommit psycopg2).
-        with conn.cursor() as cur:
-            cur.execute('SELECT id FROM public."user" WHERE auth_id=%s LIMIT 1', (auth_id,))
-            row = cur.fetchone()
-            perm = '{"is_superuser": true}'
-            if row:
-                cur.execute(
-                    'UPDATE public."user" SET email=%s, permission=%s::jsonb, role=%s WHERE auth_id=%s',
-                    (email, perm, "admin", auth_id),
-                )
-                self.log("  ↻ updated superuser user row.")
-            else:
-                cur.execute(
-                    'INSERT INTO public."user" (auth_id, email, permission, role) '
-                    'VALUES (%s, %s, %s::jsonb, %s)',
-                    (auth_id, email, perm, "admin"),
-                )
-                self.log("  ✓ inserted superuser user row.")
+            ensure_admin_account(get_main_client(), SqlUserRows(conn), email, password, log=self.log)
+        except AdminAccountError as exc:
+            self.log(f"  ! skipping superuser row ({exc}). /admin login may not work — see README.")
+            return False
+        return True
 
     # ──────────────────────────────────────────────────────────────────────
     # 7. Seed client + ingest KB (via the existing scripts)

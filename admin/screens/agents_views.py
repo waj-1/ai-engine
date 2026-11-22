@@ -151,6 +151,8 @@ def load_agents_list(env: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         "members": _q("agent_mcp_tools", "mcp_server_id, tool_id, position"),
         "tools": _q("agent_tools", "tool_id, python_name", is_deprecated=False),
         "skills": _q("agent_profile_skills", "profile_id, skill_id"),
+        # User-defined categories (admin/services/agent_types.py).
+        "types": _q("agent_types", "agent_type_id, slug, display_name, description, color, sort_order"),
     })
     profiles = batch["profiles"]
     all_env_profiles = list(profiles)
@@ -175,9 +177,15 @@ def load_agents_list(env: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         if slug:
             voice_owner_by_slug[slug] = p.get("display_name") or p.get("agent_kind")
 
+    categories = sorted(
+        [t for t in batch["types"] if isinstance(t, dict) and t.get("agent_type_id")],
+        key=lambda t: (t.get("sort_order") or 0, (t.get("display_name") or "").lower()))
+    category_by_id = {t["agent_type_id"]: t for t in categories}
+
     def _row(p: Dict[str, Any]) -> Dict[str, Any]:
         pid = p["profile_id"]
         st = P.status_info(p.get("status"))
+        category = category_by_id.get(p.get("agent_type_id"))
         parent_id = p.get("parent_profile_id")
         is_template = st["key"] == "template"
         is_sub = bool(parent_id and parent_id in env_ids)
@@ -199,6 +207,9 @@ def load_agents_list(env: str, user_id: Optional[str] = None) -> Dict[str, Any]:
             "status": st,
             "type_key": "template" if is_template else ("sub" if is_sub else "main"),
             "type_label": kind_label,
+            # The user-defined category, or None (uncategorised). Any kind of
+            # agent can carry one; it never affects how the agent runs.
+            "category": category,
             "parent_name": names_by_id.get(parent_id) if is_sub else None,
             "channels": channels,
             "channel_keys": " ".join(sorted({c["key"] for c in channels})),
@@ -216,7 +227,7 @@ def load_agents_list(env: str, user_id: Optional[str] = None) -> Dict[str, Any]:
             "children": [],
             "search": " ".join(filter(None, [
                 p.get("display_name"), p.get("description"), p.get("agent_kind"),
-                p.get("slug")])).lower(),
+                p.get("slug"), (category or {}).get("display_name")])).lower(),
         }
 
     rows = {p["profile_id"]: _row(p) for p in profiles}
@@ -246,7 +257,8 @@ def load_agents_list(env: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         for r in sorted(rows.values(), key=lambda r: r["name"].lower())
         if r["type_key"] != "template"
     ]
-    return {"agent_rows": top, "agent_counts": counts, "compare_options": compare_options}
+    return {"agent_rows": top, "agent_counts": counts, "compare_options": compare_options,
+            "agent_categories": categories}
 
 
 # --------------------------------------------------------------------------

@@ -6,6 +6,7 @@ The words you'll see in the portal, in plain language.
 |---|---|
 | **Agent** | One AI assistant with one job, such as customer support. See [Your agents](../02-agents/01-your-agents.md). |
 | **Sub-agent** | An agent that another agent can hand part of a conversation to, such as a billing specialist. See [Sub-agents](../02-agents/04-sub-agents.md). |
+| **Category** | A group you make to keep agents tidy, such as Support or Sales. It only organises the list; it doesn't change what an agent does. See [Group your agents into categories](../02-agents/09-categories.md). |
 | **Template** | A ready-made starting point for a new agent. See [Create a new agent](../02-agents/07-new-agent.md). |
 | **Instructions** | What the agent is told before every conversation: who it is, how it speaks, what it must and mustn't do. See [Change what your agent says](../02-agents/02-instructions.md). |
 | **Toolset** | A group of related actions from one connected system. See [Tools and knowledge](../02-agents/03-tools-and-knowledge.md). |
@@ -26,7 +27,9 @@ The words you'll see in the portal, in plain language.
 | **Version** | A saved copy of an agent's whole setup. You can compare versions and restore an earlier one. See [Versions](../02-agents/06-versions.md). |
 | **Draft** | An agent that isn't serving customers yet, or a copy you're working on. New agents start as drafts. |
 | **Live** | What customers get right now. An **Active** agent is live. |
+| **Model key** | The secret a provider such as Google or OpenAI gives you so your agents can use its AI models. See [Add a model key](../08-team-and-settings/04-model-keys.md). |
 | **Voice budget** | The number of voice-call minutes a business can use each day. See [Set the daily voice allowance](../08-team-and-settings/03-voice-budgets.md). |
+| **API key** | A piece of text, starting with `wae_`, that lets a program use your agents without anyone signing in. See [Create and revoke API keys](../08-team-and-settings/04-api-keys.md). |
 | **Admin** | A person who can sign in to the portal and change every agent and setting. See [Choose who can use the portal](../08-team-and-settings/01-team.md). |
 
 **Related:** [Welcome to the portal](../01-getting-started/01-welcome.md) · [FAQ](02-faq.md)

@@ -46,6 +46,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from admin.auth import ADMIN_TOKEN_COOKIE, require_superuser
+from admin.services import first_run
 from admin.audit import record_change
 from admin.integrations_registry import INTEGRATIONS, visible_integrations  # noqa: F401
 from admin.evals import run_eval_suite_sync
@@ -395,7 +396,10 @@ def render_error_page(
 
 
 @router.get("/login", response_class=HTMLResponse)
-async def login_form(request: Request) -> HTMLResponse:
+async def login_form(request: Request) -> Response:
+    # A fresh install with no admin yet: the setup page, not a login nobody has.
+    if await first_run.in_first_run():
+        return RedirectResponse(url="/admin/setup", status_code=303)
     return templates.TemplateResponse(request, "login.html", {"error": None})
 
 
@@ -479,6 +483,8 @@ async def logout() -> Response:
 @router.get("", include_in_schema=False)
 @router.get("/", include_in_schema=False)
 async def root_redirect() -> Response:
+    if await first_run.in_first_run():
+        return RedirectResponse(url="/admin/setup", status_code=303)
     return RedirectResponse(url="/admin/live", status_code=302)
 
 
@@ -1028,6 +1034,11 @@ def _render_agents_list(
 ) -> HTMLResponse:
     """The Agents table (/admin/agents with no agent picked)."""
     data = agents_views.load_agents_list(env, ctx.get("user_id"))
+    # ?category=<slug> (or __none__) preselects the category filter; it is
+    # only honoured when it names a category this list actually offers.
+    wanted = request.query_params.get("category") or ""
+    offered = {c.get("slug") for c in data.get("agent_categories") or []} | {"__none__"}
+    data["selected_category"] = wanted if wanted in offered else ""
     return templates.TemplateResponse(
         request, "agents_list.html",
         {
@@ -1089,6 +1100,10 @@ async def profile_update(
             payload[field_name] = value
     if "is_active" in form:
         payload["is_active"] = form.get("is_active") == "on"
+    # Category picker (Settings tab): blank means uncategorised, so the empty
+    # value must be written, unlike the fields above.
+    if "agent_type_id" in form:
+        payload["agent_type_id"] = (form.get("agent_type_id") or "").strip() or None
     # Checkbox is always rendered by the mapping form (agents.html #status
     # card), so absent means the operator unchecked it — unconditional
     # assignment is correct (same semantics as models_update's is_active).
@@ -1452,11 +1467,18 @@ async def kb_screen(
             if k and k not in filter_kinds:
                 filter_kinds.append(k)
     _attach_kb_document_stats(client, rows)
+    from admin.kb_handlers import embedding_mismatch, embedding_status
+
+    for r in rows:
+        # Vectors written by another embedding model do not match questions
+        # embedded by this one, and the search does not say so.
+        if r.get("doc_count") and embedding_mismatch(r.get("config")):
+            r["status"] = ("warn", "Needs re-embedding")
     return templates.TemplateResponse(
         request, "kb.html",
         {"ctx": ctx, "active": "kb", "current_env": env,
          "rows": rows, "kind_filter": kind, "filter_kinds": filter_kinds,
-         "kb_kinds": list(KB_KIND_LABELS)},
+         "kb_kinds": list(KB_KIND_LABELS), "embedding": embedding_status()},
     )
 
 
@@ -1852,6 +1874,9 @@ async def voice_scenarios_run(
         triggered_by=ctx["user_id"],
         target=target.strip() or None,
         headers=headers,
+        # Sent only to this engine's own edge, and only for a scenario that
+        # calls a generic agent's address (see scenario_headers).
+        user_token=ctx.get("user_token"),
     )
     return RedirectResponse(url="/admin/voice-scenarios", status_code=302)
 
@@ -1942,6 +1967,7 @@ _MODEL_PROVIDER_LABELS = {
     "openai": "OpenAI", "anthropic": "Anthropic", "azure_openai": "Azure OpenAI",
     "azure_voice_live": "Azure Voice Live", "bedrock": "AWS Bedrock",
     "ollama": "Ollama",
+    "auto": "Automatic",
 }
 
 
@@ -2062,6 +2088,8 @@ def _read_model_form(form) -> Dict[str, Any]:
     # rows at save time keeps the runtime from silently routing to a
     # google fallback or raising at boot.
     provider = payload.get("provider")
+    if provider == "auto":
+        provider = None  # the Automatic row: resolved at request time, built by no provider
     if provider:
         from runtime.llm_factory import SUPPORTED_PROVIDERS, UNSUPPORTED_PROVIDERS
         if provider in UNSUPPORTED_PROVIDERS:
@@ -2401,6 +2429,17 @@ async def tools_list(
 def _redirect_session_to_trace(session_id: str, env: str) -> Response:
     """Resolve a chat session to its trace and deep-link the explorer
     Transcript; fall back to the explorer list when no trace is linked."""
+    from core.lmnr_clickhouse import tracing_configured
+
+    if not tracing_configured():
+        # No tracing store: the Conversations screen opens a saved chat by its
+        # session id (admin/screens/saved_chats.py).
+        import re as _re
+
+        if _re.fullmatch(r"[0-9a-fA-F-]{32,36}", session_id or ""):
+            return RedirectResponse(
+                f"/admin/observability/explorer#trace={session_id}", status_code=302)
+        return RedirectResponse("/admin/observability/explorer", status_code=302)
     try:
         rows = _safe_list(
             client_for(env).table("agent_traces")
@@ -3268,6 +3307,7 @@ async def audit_list(
     people = govern.resolve_people(
         main, [r.get("actor_user_id") for r in rows] + recent_actor_ids
         + [r.get("entity_id") for r in rows if r.get("entity_type") == "user"])
+    govern.label_api_key_actors(people, client)
     entities = govern.resolve_entities(client, rows)
     versions = govern.promote_versions(client, rows)
     items = [govern.describe_row(r, people=people, entities=entities, versions=versions, me=me)
@@ -3327,7 +3367,7 @@ async def audit_detail(
     except Exception as exc:  # noqa: BLE001
         logger.warning("audit: main client unavailable (%s)", exc)
     ids = [row.get("actor_user_id")] + ([row.get("entity_id")] if row.get("entity_type") == "user" else [])
-    people = govern.resolve_people(main, ids)
+    people = govern.label_api_key_actors(govern.resolve_people(main, ids), client)
     item = govern.describe_row(row, people=people, entities=govern.resolve_entities(client, [row]),
                                versions=govern.promote_versions(client, [row]), me=ctx.get("user_id"))
     return templates.TemplateResponse(
@@ -4405,6 +4445,9 @@ def _live_kpis(client, env: str, insights: dict) -> dict:
 
 from admin import tool_handlers  # noqa: F401, E402  -- attaches /admin/tools/{tool_id} routes
 from admin import env_vars_handlers  # noqa: F401, E402  -- attaches /admin/env-vars routes
+from admin import api_keys_handlers  # noqa: F401, E402  -- attaches /admin/api-keys routes
+from admin import model_keys_handlers  # noqa: F401, E402  -- attaches /admin/model-keys routes
+from admin import first_run_handlers  # noqa: F401, E402  -- attaches /admin/setup (the first-run page)
 from admin import eval_handlers  # noqa: F401, E402  -- attaches /admin/evals/suites/{suite_id} routes
 from admin import model_handlers  # noqa: F401, E402  -- attaches /admin/agent-models/{model_id} routes
 from admin import deploy_handlers  # noqa: F401, E402  -- attaches /admin/env/{env}/deploy routes
@@ -4421,5 +4464,6 @@ from admin import drift_handlers  # noqa: F401, E402  -- attaches /admin/drift
 from admin import search as _search_handlers  # noqa: F401, E402  -- attaches /admin/search.json
 from admin import skill_handlers  # noqa: F401, E402  -- attaches /admin/skills* CRUD + versioning routes
 from admin import profile_skill_attach_handlers  # noqa: F401, E402  -- attaches /admin/profiles/{id}/skill-attachments
+from admin import agent_type_handlers  # noqa: F401, E402  -- attaches /admin/agent-types (Agents › Categories)
 
 

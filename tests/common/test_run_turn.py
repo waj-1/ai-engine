@@ -518,3 +518,30 @@ async def test_no_stage_dict_records_nothing(fake_session):
                   profile=_profile(),
                   extra_context={"stage_timings": "not-a-dict"})]
     assert events[-1]["type"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_tool_names_are_saved_on_the_reply_and_absent_without_tools(fake_session):
+    """The names an agent reports in `tool_activity` are saved on the
+    assistant row (metadata.tools_used), so a transcript can show which
+    actions ran on an install with no tracing store. A turn with no tools
+    keeps writing no metadata at all."""
+    async def _run(events):
+        fake_session.append_assistant.reset_mock()
+        with patch("common.chat_session.get_service_client", return_value=MagicMock()), \
+             patch("common.chat_session.ChatSession.for_identity", return_value=fake_session), \
+             patch("common.chat_session.record_turn_telemetry", AsyncMock()):
+            out = [ev async for ev in run_turn(
+                agent=_FakeAgent(events), message="hi",
+                identity=TurnIdentity(agent_kind="custom", session_id="s1"), profile=_profile())]
+        return out, fake_session.append_assistant.call_args.kwargs["metadata"]
+
+    out, meta = await _run([
+        {"type": "tool_activity", "tools": ["search_knowledge"]},
+        {"type": "tool_activity", "tools": ["lookup_order", ""]},
+        {"type": "answer", "content": "Hello"},
+    ])
+    assert meta == {"tools_used": ["search_knowledge", "lookup_order"]}
+    assert [e for e in out if e.get("type") == "tool_activity"]  # still forwarded to the client
+    _out, meta = await _run([{"type": "answer", "content": "Hello"}])
+    assert meta is None

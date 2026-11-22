@@ -352,6 +352,32 @@ body.prompt-editor-lock { overflow: hidden; }
 .chip-err   { color: var(--error);   border-color: var(--error);   background: var(--error-soft); }
 .chip-ghost { color: var(--fg-2); }
 .chip-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+/* Agent categories (agent_types.color): a fixed palette of colour keys, the
+   same list as admin/services/agent_types.py PALETTE. */
+.chip-cat { color: var(--cat); border-color: color-mix(in srgb, var(--cat) 55%, transparent);
+  background: color-mix(in srgb, var(--cat) 12%, transparent); }
+.chip-cat-slate  { --cat: #4D5760; }
+.chip-cat-teal   { --cat: #006A6A; }
+.chip-cat-blue   { --cat: #1D5FBF; }
+.chip-cat-violet { --cat: #6D3FC4; }
+.chip-cat-pink   { --cat: #B02A72; }
+.chip-cat-red    { --cat: #B3261E; }
+.chip-cat-amber  { --cat: #8A5A00; }
+.chip-cat-green  { --cat: #1F7A3D; }
+html[data-theme="dark"] .chip-cat-slate  { --cat: #AEB7C0; }
+html[data-theme="dark"] .chip-cat-teal   { --cat: #5BBCB8; }
+html[data-theme="dark"] .chip-cat-blue   { --cat: #7FB0F5; }
+html[data-theme="dark"] .chip-cat-violet { --cat: #B49AF2; }
+html[data-theme="dark"] .chip-cat-pink   { --cat: #F08CC0; }
+html[data-theme="dark"] .chip-cat-red    { --cat: #F28B82; }
+html[data-theme="dark"] .chip-cat-amber  { --cat: #E8B34A; }
+html[data-theme="dark"] .chip-cat-green  { --cat: #7ACB8F; }
+.cat-colors { border: 0; padding: 0; margin: 0; min-width: 0; }
+.cat-colors > legend { padding: 0; margin-bottom: var(--space-xs); }
+.cat-color { cursor: pointer; }
+.cat-color input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.cat-color input:checked + .chip { outline: 2px solid var(--cat); outline-offset: 1px; }
+.cat-color input:focus-visible + .chip { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .pill {
   display: inline-block;
@@ -1290,6 +1316,7 @@ dialog.drawer.wide { width: min(800px, 100vw); }
 .status-strip.status-partial .status-dot { background: var(--warning); }
 .status-strip.status-down { background: var(--warning-soft); border-color: transparent; }
 .status-strip.status-down .status-dot { background: var(--error); }
+.status-strip.status-off .status-dot { background: var(--fg-2); }
 .status-detail > summary { cursor: pointer; color: var(--fg-2); font-size: 12px; }
 .status-detail[open] { flex-basis: 100%; }
 .status-detail-body { margin-top: var(--space-xs); }

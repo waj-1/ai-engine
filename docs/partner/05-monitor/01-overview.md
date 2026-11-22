@@ -42,3 +42,7 @@ What to do next depends on the cause:
 If a tile or table says **Unavailable right now**, the numbers couldn't be loaded. That doesn't mean zero. Try again in a few minutes.
 
 **Related:** [Review a conversation](02-review-a-conversation.md) · [Your agents](../02-agents/01-your-agents.md) · [FAQ](../09-reference/02-faq.md)
+
+## If tracing is off
+
+Some installs run without the tracing stack. The line above the tiles then reads "Tracing is off on this install". **Conversations** still counts your saved conversations, and the other tiles read **Needs tracing**. The per-agent table, **Needs attention** and the charts stay empty until tracing is turned on. Your conversations are not affected: click **Read conversations →** to open them.

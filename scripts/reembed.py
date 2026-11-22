@@ -1,4 +1,5 @@
-"""Re-embed stored vectors after changing `EMBED_PROVIDER`.
+"""Re-embed stored vectors after changing `EMBED_PROVIDER` (or, for the
+OpenAI-compatible provider, `EMBED_MODEL`).
 
 WHY YOU NEED THIS
 
@@ -19,6 +20,17 @@ Run it with the NEW provider already configured in the environment: this
 script embeds with whatever `core.embedding_provider` currently resolves, and
 writes the result back over the old vector.
 
+Moving to a model on your own machine is the same three steps, with the new
+provider's settings in the environment the script runs in:
+
+    EMBED_BASE_URL=http://127.0.0.1:11434/v1 EMBED_MODEL=nomic-embed-text \
+        python -m scripts.reembed --target kb --apply
+
+A model whose vectors do not fit the column stops the run on its first page,
+naming the model and both widths, before anything is written. After a `kb`
+run every shared knowledge base is marked with the model that now holds its
+vectors, which is what clears the portal's "needs re-embedding" warning.
+
 Both targets are idempotent — re-running re-embeds the same rows to the same
 values — so an interrupted run is resumed by simply running it again.
 
@@ -34,7 +46,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.auth import get_service_client                     # noqa: E402
-from core.embedding_provider import active_provider, embed_batch  # noqa: E402
+from core.embedding_provider import (                        # noqa: E402
+    active_provider, embed_batch, embedding_identity, embedding_status,
+)
 
 # (table, primary key, text column, vector width)
 #
@@ -107,7 +121,39 @@ def reembed(target: str, *, apply: bool, page_size: int = 200) -> int:
               f"  [{rate:.1f}/s]")
 
     print(f"== {'re-embedded' if apply else 'would re-embed'} {done} rows in {table}")
+    if apply and target == "kb":
+        _mark_knowledge_bases(client)
     return done
+
+
+def _mark_knowledge_bases(client) -> None:
+    """Record the embedder now in force on every shared knowledge base.
+
+    The whole table was just rewritten, so every source in it is in the new
+    space. The portal compares this mark with the embedder in force to warn
+    about a knowledge base that was left behind.
+    """
+    identity = embedding_identity()
+    try:
+        sources = (
+            client.table("agent_data_sources").select("source_id,config")
+            .eq("kind", "pgvector").execute().data
+            or []
+        )
+        marked = 0
+        for src in sources:
+            config = src.get("config")
+            if not isinstance(config, dict) or config.get("table") != "ai_kb_embeddings":
+                continue
+            if config.get("embedded_with") != identity:
+                client.table("agent_data_sources").update(
+                    {"config": {**config, "embedded_with": identity}}
+                ).eq("source_id", src["source_id"]).execute()
+            marked += 1
+        print(f"== marked {marked} knowledge bases as embedded with {identity}")
+    except Exception as exc:  # noqa: BLE001 - the vectors are written either way
+        print(f"   could not mark the knowledge bases ({exc}); the portal may "
+              "keep showing a re-embedding warning until the next upload")
 
 
 def main() -> int:
@@ -118,7 +164,12 @@ def main() -> int:
     ap.add_argument("--page-size", type=int, default=200)
     args = ap.parse_args()
 
-    print(f"provider in force: {active_provider()!r}")
+    print(f"provider in force: {active_provider()!r} ({embedding_identity()})")
+    problem = embedding_status()["problem"]
+    if problem:
+        print(f"The embedding model is not set up. {problem}")
+        if args.apply:
+            return 2
     if args.apply:
         print("Writing. Retrieval against this table is INCONSISTENT until "
               "this finishes — rows already rewritten live in the new space "

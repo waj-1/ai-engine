@@ -1,0 +1,177 @@
+{% extends "_base.html" %}
+{% from "_components/chip.html" import chip %}
+{% from "_components/callout.html" import alert %}
+{% block title %}Model keys · {{ brand().title }}{% endblock %}
+{% block page_title %}Model keys{% endblock %}
+{% block page_subtitle %}The keys your agents use to reach each AI provider, stored encrypted.{% endblock %}
+{% block content %}
+{% set can_store = status.can_store %}
+
+{% if error %}
+{% call alert('error') %}<strong>Not saved:</strong> {{ error }}{% endcall %}
+{% endif %}
+{% if saved %}
+{% call alert('success') %}The {{ saved }} key is stored. Agents use it from their next message.{% endcall %}
+{% endif %}
+{% if removed %}
+{% call alert('success') %}The stored {{ removed }} key was removed.{% endcall %}
+{% endif %}
+{% if status.load_error %}
+{% call alert('error') %}{{ status.load_error }}{% endcall %}
+{% endif %}
+{% if not can_store %}
+{% call alert('warning') %}<strong>Keys cannot be stored on this server yet.</strong> {{ status.problem }}
+Until then, each provider uses its environment variable.{% endcall %}
+{% endif %}
+
+<section class="section">
+  <p style="max-width:760px;margin:0;">
+    Paste a provider's key here and every model of that provider uses it. A key stored here is used
+    <strong>before</strong> the provider's environment variable; with none stored, the variable is used.
+    A stored key is never shown again: only its last four characters, so you can tell keys apart.
+  </p>
+</section>
+
+<section class="section">
+  <h2>Providers</h2>
+  <div class="table-wrap">
+    <table class="table" id="model-keys-table">
+      <thead><tr><th>Provider</th><th>Key in use</th><th>Stored key</th><th>Set or replace</th><th></th></tr></thead>
+      <tbody>
+        {% for p in status.providers %}
+        {% set d = p.default %}
+        <tr data-provider="{{ p.provider }}">
+          <td><strong>{{ p.label }}</strong><br><span class="technical">{{ p.provider }}</span></td>
+          <td>
+            {% if p.source == 'portal' %}{{ chip('Stored key', variant='ok') }}
+            {% elif p.source == 'environment' %}{{ chip('Environment variable', variant='brand') }}
+            {% else %}{{ chip('No key', variant='warn') }}{% endif %}
+            <br><span class="caption">Variable <code>{{ p.env_var }}</code> is {{ 'set' if p.env_set else 'not set' }}.</span>
+          </td>
+          <td>
+            {% if d %}
+              {% if d.hint %}ends in <code>{{ d.hint }}</code>{% else %}stored{% endif %}
+              <br><span class="caption">Updated {{ (d.updated_at or '')[:16]|replace('T', ' ') }}</span>
+              {% if not d.readable %}<br>{{ chip('Cannot be read', variant='warn') }}
+              <span class="caption">It was encrypted with a different <code>SECRET_KEY</code>. Enter it again.</span>{% endif %}
+            {% else %}<span class="caption">None</span>{% endif %}
+          </td>
+          <td>
+            <form method="post" action="/admin/model-keys" class="inline-form" autocomplete="off" style="display:flex;gap:6px;margin:0;">
+              <input type="hidden" name="provider" value="{{ p.provider }}">
+              <input type="password" name="value" required minlength="8" autocomplete="new-password"
+                     placeholder="{{ 'Paste a new key' if d else 'Paste the key' }}"
+                     aria-label="{{ p.label }} key" {% if not can_store %}disabled{% endif %}>
+              <button type="submit" class="primary small" {% if not can_store %}disabled{% endif %}>{{ 'Replace' if d else 'Save' }}</button>
+            </form>
+          </td>
+          <td style="white-space:nowrap;">
+            <button type="button" class="ghost small" data-test-key data-provider="{{ p.provider }}" data-name=""
+                    {% if p.source == 'none' %}disabled{% endif %}>Test</button>
+            {% if d %}
+            <form method="post" action="/admin/model-keys/delete" style="display:inline;margin:0;"
+                  onsubmit="return confirm('Remove the stored {{ p.label }} key? {{ 'The environment variable will be used instead.' if p.env_set else 'Models of this provider will have no key.' }}');">
+              <input type="hidden" name="provider" value="{{ p.provider }}">
+              <button type="submit" class="ghost small">Remove</button>
+            </form>
+            {% endif %}
+            <div class="caption" data-test-result role="status" style="max-width:320px;white-space:normal;"></div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Named keys</h2>
+  <p class="caption" style="max-width:760px;">
+    A second key for the same provider, for a model that talks to a different endpoint: for example two
+    OpenAI-compatible servers with different keys. A model uses a named key when its extra settings
+    carry <code>"credential": "&lt;name&gt;"</code>; models without it use the provider's key above.
+  </p>
+  {% set named = namespace(any=false) %}
+  {% for p in status.providers %}{% if p.credentials %}{% set named.any = true %}{% endif %}{% endfor %}
+  {% if named.any %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Provider</th><th>Name</th><th>Stored key</th><th></th></tr></thead>
+      <tbody>
+        {% for p in status.providers %}{% for c in p.credentials %}
+        <tr data-provider="{{ p.provider }}" data-credential="{{ c.name }}">
+          <td>{{ p.label }}</td>
+          <td><span class="technical">{{ c.name }}</span></td>
+          <td>{% if c.hint %}ends in <code>{{ c.hint }}</code>{% else %}stored{% endif %}
+            <span class="caption">· updated {{ (c.updated_at or '')[:16]|replace('T', ' ') }}</span>
+            {% if not c.readable %}{{ chip('Cannot be read', variant='warn') }}{% endif %}</td>
+          <td style="white-space:nowrap;">
+            <button type="button" class="ghost small" data-test-key data-provider="{{ p.provider }}" data-name="{{ c.name }}">Test</button>
+            <form method="post" action="/admin/model-keys/delete" style="display:inline;margin:0;"
+                  onsubmit="return confirm('Remove the key named {{ c.name }}? Models that name it will stop working.');">
+              <input type="hidden" name="provider" value="{{ p.provider }}">
+              <input type="hidden" name="name" value="{{ c.name }}">
+              <button type="submit" class="ghost small">Remove</button>
+            </form>
+            <div class="caption" data-test-result role="status" style="max-width:320px;white-space:normal;"></div>
+          </td>
+        </tr>
+        {% endfor %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No named keys. Most installs never need one.</div>
+  {% endif %}
+  <form method="post" action="/admin/model-keys" class="form-stack" autocomplete="off" style="margin-top:var(--space-m);">
+    <div class="form-grid">
+      <label class="field">
+        <span class="field-label">Provider</span>
+        <select name="provider" {% if not can_store %}disabled{% endif %}>
+          {% for p in status.providers %}<option value="{{ p.provider }}" {% if p.provider == 'openai' %}selected{% endif %}>{{ p.label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">Name</span>
+        <input type="text" name="name" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.\-]*" placeholder="e.g. catalog" {% if not can_store %}disabled{% endif %}>
+        <span class="field-help">Letters, digits, dots, dashes and underscores. Saving an existing name replaces its key.</span>
+      </label>
+      <label class="field">
+        <span class="field-label">Key</span>
+        <input type="password" name="value" required minlength="8" autocomplete="new-password" {% if not can_store %}disabled{% endif %}>
+      </label>
+    </div>
+    <div class="form-actions"><button type="submit" class="primary" {% if not can_store %}disabled{% endif %}>Save named key</button></div>
+  </form>
+</section>
+
+<details class="advanced">
+  <summary>How keys are stored and used</summary>
+  <ul class="caption stack-xs" style="max-width:760px;padding-left:var(--space-m);">
+    <li>Keys are encrypted with this server's <code>SECRET_KEY</code> before they reach the database. Without <code>SECRET_KEY</code> nothing is stored; a key is never saved as plain text.</li>
+    <li>Keep <code>SECRET_KEY</code> safe and backed up: without it the stored keys cannot be read and must be entered again. To change it, set <code>SECRET_KEY=new,old</code>, restart, and save each key again; then drop the old value.</li>
+    <li>A saved key is used by this engine from the next message. Other engine instances sharing the database pick it up within a minute.</li>
+    <li><strong>Test</strong> asks the provider for its model list with the key in use. It costs nothing and sends no message. For Azure OpenAI it needs <code>AZURE_OPENAI_ENDPOINT</code> or a model with an endpoint.</li>
+    <li>Every save and removal is recorded under Activity, without the key.</li>
+  </ul>
+</details>
+
+<script>
+(function () {
+  document.querySelectorAll('[data-test-key]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const out = btn.closest('td').querySelector('[data-test-result]');
+      const body = new URLSearchParams({provider: btn.dataset.provider, name: btn.dataset.name || ''});
+      btn.disabled = true;
+      out.textContent = 'Testing…';
+      fetch('/admin/model-keys/test', {method: 'POST', body: body, credentials: 'same-origin',
+                                       headers: {'Accept': 'application/json'}})
+        .then(function (r) { return r.json(); })
+        .then(function (res) { out.textContent = (res.ok ? '✓ ' : '✗ ') + (res.detail || ''); })
+        .catch(function () { out.textContent = '✗ The test could not be run.'; })
+        .finally(function () { btn.disabled = false; });
+    });
+  });
+})();
+</script>
+{% endblock %}

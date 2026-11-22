@@ -503,6 +503,10 @@ async def run_turn(
     suggestions: Optional[list] = None
     usage: dict[str, Any] = {}
     turn_meta: dict[str, Any] = {}
+    # Names of the tools the agent reported running this turn (`tool_activity`
+    # events), saved on the assistant row so the transcript can show which
+    # actions ran on an install with no tracing store.
+    tools_used: list[str] = []
 
     async def _emit_telemetry(status: str) -> None:
         """Write the per-turn agent_traces row. Called on BOTH the success
@@ -547,6 +551,8 @@ async def run_turn(
                 pending_title = event.get("content") or None
             elif etype == "suggestions":
                 suggestions = event.get("questions")
+            elif etype == "tool_activity":
+                tools_used.extend(str(n) for n in (event.get("tools") or []) if n)
             elif etype == "usage":
                 usage["input_tokens"] = event.get("input_tokens")
                 usage["output_tokens"] = event.get("output_tokens")
@@ -600,6 +606,8 @@ async def run_turn(
         # -> `{}`.
         memory_meta = turn_meta.get("memory")  # turn_meta normalized to dict at capture
         assistant_metadata = {"memory": memory_meta} if memory_meta else None
+        if tools_used:
+            assistant_metadata = {**(assistant_metadata or {}), "tools_used": list(tools_used)}
         try:
             await asyncio.to_thread(
                 session.append_assistant, final_text, metadata=assistant_metadata

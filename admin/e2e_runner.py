@@ -493,13 +493,16 @@ def _try_build_judge(model_string: str, model_id: Optional[str] = None) -> Optio
     except Exception as exc:
         logger.warning("e2e: judge LLM unavailable (%s); falling back to smoke", exc)
         return None
-    if not os.getenv("GOOGLE_API_KEY"):
-        logger.info("e2e: GOOGLE_API_KEY unset; judge mode disabled, smoke-only")
+    from core.provider_keys import env_or_stored
+
+    google_key = env_or_stored("GOOGLE_API_KEY")
+    if not google_key:
+        logger.info("e2e: no Gemini key set; judge mode disabled, smoke-only")
         return None
     try:
         return ChatGoogleGenerativeAI(
             model=model_string,
-            google_api_key=os.getenv("GOOGLE_API_KEY", ""),
+            google_api_key=google_key,
             temperature=0.0,
             # 4096 (not 512): Gemini 3 "thinking" models spend output budget on
             # invisible reasoning, so a 512 cap truncated the multi-criteria

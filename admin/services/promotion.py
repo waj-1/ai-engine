@@ -278,6 +278,17 @@ def promote(*, profile_id: str, target_env: str, force: bool,
         if new_row.get("model_light_id"):
             new_row["model_light_id"] = _model_sibling(new_row["model_light_id"])
 
+    # The category rides on the row, not in the snapshot. In one database the
+    # id is already right; across two it is matched by slug (and created in
+    # the target when missing). Copied verbatim it would fail the target's
+    # agent_profiles_agent_type_id_fkey and take the whole promote with it.
+    if new_row.get("agent_type_id"):
+        from admin.services.agent_types import carry_to
+
+        new_row["agent_type_id"] = carry_to(
+            source_client, target_client, new_row["agent_type_id"],
+            actor_user_id=actor_user_id)
+
     # Upsert into target DB so re-promoting an already-promoted profile
     # syncs columns instead of failing the (agent_kind, slug, environment)
     # unique constraint.

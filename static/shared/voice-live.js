@@ -63,6 +63,11 @@
 
   function VoiceLiveClient(options) {
     this.url = options.url;
+    // Optional first frame, sent the moment the socket opens: a browser
+    // cannot set an Authorization header on a WebSocket, so an endpoint that
+    // needs the caller's identity takes it as `{type:"auth", token:...}`
+    // (voice/live/protocol.py). Unset for the anonymous portals.
+    this.auth = options.auth || null;
     this.onEvent = options.onEvent || function () {};
     this.onState = options.onState || function () {};
     this.ws = null;
@@ -105,6 +110,11 @@
     this._prewarmPlayback();
     this.ws = new WebSocket(this.url);
     this.ws.binaryType = "arraybuffer";
+    if (this.auth) {
+      this.ws.onopen = function () {
+        try { self.ws.send(JSON.stringify(self.auth)); } catch (e) { }
+      };
+    }
 
     this.ws.onmessage = function (evt) {
       if (typeof evt.data === "string") {

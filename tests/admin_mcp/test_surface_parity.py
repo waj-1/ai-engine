@@ -87,6 +87,12 @@ ROUTE_TO_TOOL: Dict[str, str] = {
     "/admin/agent-models": "models",
     "/admin/agent-models/{model_id}": "models",
     "/admin/agent-models/{model_id}/promote": "models",
+    # Agents › Categories. `move` (one place up or down) is `update` with
+    # `sort_order` over MCP.
+    "/admin/agent-types": "agent_types",
+    "/admin/agent-types/{agent_type_id}/delete": "agent_types",
+    "/admin/agent-types/{agent_type_id}/move": "agent_types",
+    "/admin/agent-types/{agent_type_id}/update": "agent_types",
     "/admin/agents/from-template": "templates",
     # POST is a read: the portal sends the search query in the body so it
     # never lands in a URL/access log. Same payload as GET → `search` tool.
@@ -108,6 +114,8 @@ ROUTE_TO_TOOL: Dict[str, str] = {
     # tools_govern.py). Mapped to update_profile as the primary tool; the
     # memory half has its own MCP surface already.
     "/admin/agents/{profile_id}/voice/brain": "update_profile",
+    "/admin/api-keys": "api_keys",
+    "/admin/api-keys/{key_id}/revoke": "api_keys",
     "/admin/audit/verify": "audit",
     "/admin/channels": "channels",
     "/admin/channels/{channel_id}": "channels",
@@ -149,6 +157,9 @@ ROUTE_TO_TOOL: Dict[str, str] = {
     "/admin/profiles/{profile_id}/serve-prompt-version": "prompts",
     "/admin/profiles/{profile_id}/skill-attachments": "profile_skill_attachments",
     # Non-streaming twin of the portal's SSE optimizer (same helpers).
+    "/admin/model-keys": "provider_keys",
+    "/admin/model-keys/delete": "provider_keys",
+    "/admin/model-keys/test": "provider_keys",
     "/admin/prompts/{prompt_id}/optimize": "prompt_optimize",
     "/admin/prompts/{prompt_id}/versions": "prompts",
     # A custom agent's own instructions: the same create_version + serve the
@@ -195,6 +206,12 @@ PORTAL_ONLY: Dict[str, str] = {
     ),
     "/admin/login": "session-cookie auth — MCP authenticates with a bearer JWT, not a login flow",
     "/admin/logout": "session-cookie auth — MCP authenticates with a bearer JWT, not a login flow",
+    "/admin/setup": (
+        "first-run page: creates the first admin before any credential exists, "
+        "so there is nothing for an MCP caller to authenticate with"
+    ),
+    "/admin/setup/api-key": "first-run walkthrough step; over MCP it is api_keys action=create",
+    "/admin/setup/model-key": "first-run walkthrough step; over MCP it is provider_keys action=set / test",
     "/admin/profiles/{profile_id}/input-validators": (
         "documented MCP gap (06-mcp.md) — no tool exposes profile.input_validators"
     ),

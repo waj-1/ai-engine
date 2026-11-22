@@ -13,7 +13,8 @@
 {% block content %}
 {{ tabs([('agents', 'Agents', '/admin/agents?env=' ~ current_env),
          ('models', 'Models', '/admin/agents?tab=models&env=' ~ current_env),
-         ('templates', 'Templates', '/admin/templates?env=' ~ current_env)], 'agents') }}
+         ('templates', 'Templates', '/admin/templates?env=' ~ current_env),
+         ('categories', 'Categories', '/admin/agent-types?env=' ~ current_env)], 'agents') }}
 
 {% if missing_profile %}
 <div class="mb-m">{% call alert('info') %}That agent isn't {{ 'here' if single_env_deployment() else ('in ' ~ ('Production' if current_env == 'prod' else 'Staging')) }} — here are the agents that are.{% endcall %}</div>
@@ -44,6 +45,16 @@
     <option value="{{ key }}">{{ label }}</option>
     {% endfor %}
   </select>
+  {% if agent_categories %}
+  <select data-filter-select="category" aria-label="Category">
+    <option value="">Any category</option>
+    {% for c in agent_categories %}
+    <option value="{{ c.slug }}" {% if c.slug == selected_category %}selected{% endif %}>{{ c.display_name }}</option>
+    {% endfor %}
+    <option value="__none__" {% if selected_category == '__none__' %}selected{% endif %}>Uncategorised</option>
+  </select>
+  <a class="caption" href="/admin/agent-types?env={{ current_env }}">Manage categories</a>
+  {% endif %}
 </div>
 
 {% macro channel_cell(r) -%}
@@ -54,7 +65,7 @@
 <tr class="agent-row{% if child %} is-child{% endif %}{% if r.children %} has-children{% endif %}"
     data-agent-row data-id="{{ r.profile_id }}" data-parent="{{ parent_id }}"
     data-type="{{ r.type_key }}" data-status="{{ r.status.bucket }}"
-    data-channels="{{ r.channel_keys }}" data-search="{{ r.family_search if not child else r.search }}" data-self-search="{{ r.search }}">
+    data-channels="{{ r.channel_keys }}" data-category="{{ r.category.slug if r.category else '' }}" data-search="{{ r.family_search if not child else r.search }}" data-self-search="{{ r.search }}">
   <td class="agent-cell">
     <div class="agent-cell-inner">
       {% if r.children %}
@@ -63,7 +74,8 @@
       {% elif child %}<span class="tree-indent" aria-hidden="true">↳</span>
       {% else %}<span class="caret-spacer"></span>{% endif %}
       <div class="min-w-0">
-        <a class="agent-name" href="/admin/agents?env={{ current_env }}&profile_id={{ r.profile_id }}">{{ r.name }}</a>
+        <a class="agent-name" href="/admin/agents?env={{ current_env }}&profile_id={{ r.profile_id }}">{{ r.name }}</a>{% if r.kind == 'custom' and r.slug == 'demo' %} <span class="chip chip-neutral" title="Seeded on first start so there is something to talk to and copy. Safe to archive.">Demo</span>{% endif %}
+        {% if r.category %}<span class="chip chip-cat chip-cat-{{ r.category.color }}" title="Category{% if r.category.description %}: {{ r.category.description }}{% endif %}" data-category-chip><span class="chip-dot"></span>{{ r.category.display_name }}</span>{% endif %}
         <div class="agent-desc-clamp caption">{{ r.description or 'No description yet.' }}</div>
       </div>
     </div>

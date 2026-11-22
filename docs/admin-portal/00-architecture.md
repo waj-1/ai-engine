@@ -575,6 +575,19 @@ agent code loads, so it can patch LangChain / LangGraph / OpenAI / Anthropic / G
 and emit an OpenTelemetry span for every LLM call automatically. With
 `LMNR_PROJECT_API_KEY` unset the engine boots with tracing disabled.
 
+**An install with no tracing store.** With `LMNR_DISABLED` set and no
+`LMNR_CLICKHOUSE_URL` (`core.lmnr_clickhouse.tracing_configured()` is False; the
+local compose stack) there is nothing in ClickHouse to read, and the portal
+says so instead of reporting an outage. **Conversations** lists and opens the
+saved chats from Postgres (`ai_chat_sessions`, `ai_chat_messages`, and the
+per-turn `agent_traces` rows for tokens, response time, model and cost;
+`admin/screens/saved_chats.py`). **Overview** and its charts show a plain
+"tracing is off" state that names what the tracing stack adds. Span-level
+detail (each model call, tool inputs and outputs, timings inside a reply)
+exists only with tracing on. An explicit `LMNR_CLICKHOUSE_URL` always counts as
+configured, so a reader that exports no spans of its own still reads the shared
+store.
+
 It instruments the **LLM providers only** — there is no per-request FastAPI span — so
 each streaming endpoint opens an explicit **root span** around the whole stream
 (`common/sse.py:sse_response(trace_name=…, trace_attributes=…)` →
@@ -675,13 +688,28 @@ Two ClickHouse facts shape the reader:
   or revoke takes effect identically on both.
 - Login accepts **email + password** (Supabase GoTrue) with a raw-JWT paste fallback
   for service accounts / CI. See [Govern](./04-govern.md).
+- **A build with no product plugin has no default login.** Until a superuser exists,
+  `/`, `/admin` and `/admin/login` redirect to the first-run page (`/admin/setup`),
+  which creates the first admin for whoever can type the one-time setup code the engine
+  prints at boot. It is the only unauthenticated write under `/admin`; once an admin
+  exists it redirects to the login page for good. A product build never has it
+  (`admin/services/first_run.enabled()`). See
+  [Govern → First-run setup](./04-govern.md#first-run-setup).
 
-**The custom-agent API** (`POST /v1/agents/{slug}/chat`) takes a superuser token for
-now — the same boundary as `/admin` and the admin MCP. Portal-issued API keys are
-planned to replace it.
+**The custom-agent API** (`POST /v1/agents/{slug}/chat`) and the admin MCP server
+(`/mcp`) accept a **portal-issued API key** (`Authorization: Bearer wae_…`) as well as a
+superuser token. A key carries scopes: `chat` opens the chat API only, `admin` opens
+both. A key-authenticated turn runs as the key (its row id is the session's `user_id`),
+so keys cannot read each other's conversations. `/admin/*` itself never accepts a key.
+See [Govern → API keys](./04-govern.md#api-keys).
 
 Agent chat endpoints that read a tenant's data authenticate the end user's JWT and rely
 on RLS for tenant isolation; admin/service-key queries bypass RLS for operational reads.
+
+`GET /ai/sessions` takes `business_id` to list the caller's sessions of that
+business; without it, it lists the caller's sessions that belong to **no**
+business (the ones a generic agent writes through `/v1/agents/{slug}/chat`).
+Either way only the caller's own (`user_id` from the verified token).
 
 The **chat-history read/manage endpoints** (`endpoints/ai_sessions.py` —
 `GET /ai/sessions`, `GET /ai/sessions/{id}`, `GET /ai/sessions/{id}/messages`,
@@ -893,7 +921,8 @@ a builder (`register_voice_agent_builder`). The engine registers the four `/agen
 demo kinds (anonymous, with per-IP caps seeded on their profiles). **A deployment's
 plugin may register more** through the `voice_builders` hook — one registration per
 kind is the entire code footprint of duplex voice for it; a new tenant or profile of a
-registered kind needs no code. The `custom` kind has no voice socket yet. A
+registered kind needs no code. The generic `custom` kind is registered too, but is
+served at its own route: see [Voice for generic agents](#voice-for-generic-agents). A
 registration may declare:
 
 - `requires_auth=True` — the client must send its credentials as the FIRST frame after
@@ -1281,6 +1310,61 @@ agent kind are never recorded. Capture is best-effort and can never break a call
 per-call cap, retention prune, and the master switch are env-tunable
 (`VOICE_RECORDING_*`, see `.env.example`).
 
+### Voice for generic agents
+
+`WS /v1/agents/{slug}/voice` (`endpoints/agents_v1.py`) is a call with one generic
+(`custom`) agent. The wire protocol, the turn machinery and the providers are the
+shared handler's; the route adds only what a kind with many live profiles needs.
+
+**One handler, kind + slug.** The plain socket picks its agent by kind, which names
+nothing when many agents share the kind. The route parks a `VoiceRoute` (the slug, the
+caller check, an optional profile pin) on the socket and calls the same `voice_live`
+handler, which reads it at four points: whose profile, who may call, which budget
+bucket, and whose session. A `VoiceRoute` is never built from a query parameter, and
+`WS /voice/live?agentKind=custom` is refused (`slug_addressed` on the registration).
+
+| | Plain socket | Generic agent's address |
+|---|---|---|
+| Settings come from | the kind's active profile | the profile `(custom, slug, environment)`: fails closed, an unknown slug closes 4403 "Agent not found." and never resolves to another agent |
+| Caller | anonymous, or the kind's own auth | `agents_v1._require_caller`, the chat route's check (a superuser token; API keys once they exist there). `Authorization` header, or `{"type": "auth", "token": "…"}` as the first frame |
+| Brain | the active profile or `agent_profile_slug` (falls back) | the same agent, or the custom agent named by `agent_profile_slug` (no fall-back: a slug that does not exist refuses the call) |
+| Persona | the prompt named by `persona_prompt_slug` (required) | that prompt when one is named, else a built-in persona that sends every question to `ask_agent` (`runtime/agents/custom_voice.py`) |
+| Greeting | `greeting_trigger`, blank = silent | `greeting_trigger`, blank = a built-in "greet and ask how you can help" |
+| Daily budget, recording | the business id | one bucket per agent: `uuid5("voice-live-agent:custom:<slug>")`, shown on the Voice tab |
+| Session row | `agent_kind` | `agent_kind='custom'`, `source='api'`, `metadata.agent_slug=<slug>`, `metadata.channel='voice'` (as the chat route stamps it) |
+
+**Gates.** Off unless `ENABLE_GENERIC_AGENTS=1`, never on a scoped build, and a
+malformed slug is refused before anything is read. Those three close the handshake
+before `accept()`, so the route looks absent.
+
+**Why one bucket per agent.** A generic agent is called with an admin token or an API
+key, not on behalf of a tenant, so there is no business id to charge. The realtime
+audio is the agent owner's cost whoever dials, an API key carries no user id, and a
+per-caller bucket would multiply the daily cap by the number of keys. The bucket takes
+its own allowance in `ai_voice_budgets` under that id (the speech model's page);
+without one the server default (`VOICE_LIVE_DAILY_SECONDS`) applies. `TurnIdentity`'s
+`business_id` stays empty, as on the chat route.
+
+**Draft and published.** The address serves the published agent. `?profileId=<id>`
+calls a draft copy of the same agent instead, for an operator only (a verified
+superuser token, or the trusted simulated-eval path); a pin naming a different agent
+is ignored. The Voice tab's Call button and the voice eval runner send it. On a
+snapshot-served environment the settings, the realtime model row and the persona pin
+come from the agent's own promote snapshot, exactly as for any other kind.
+
+**No realtime key.** A realtime provider needs a key the engine does not ship with.
+The handshake checks before it dials (`voice/live/readiness.py`) and closes with the
+reason: 4403 "No realtime voice model is set for this agent…", or 4502 "Realtime model
+key missing: set GOOGLE_API_KEY on the server." (the variable is the one the model row
+names for `azure_voice_live`). Nothing is charged and no agent is built. The Voice tab
+shows the same sentence in place of the Call button.
+
+**Testing without a key.** `tests/voice/test_custom_agent_voice.py` runs the whole
+path on the simulated provider: socket, gates, auth frame, greeting, a caller turn,
+`ask_agent`, `run_turn`, the custom agent's answer spoken back, and the identifier
+provenance guard. A real key adds only the audio: speech recognition, the realtime
+model choosing to call `ask_agent`, and synthesis.
+
 ---
 
 ## Memory layer
@@ -1377,15 +1461,28 @@ default is used, rather than every extraction failing silently.
 
 ### Embeddings
 
-The provider is chosen by `core/embedding_provider.py` (`EMBED_PROVIDER`): Gemini's
-`gemini-embedding-001` by default (`MEMORY_EMBED_MODEL` overrides the model), or Azure
+The provider is chosen by `core/embedding_provider.py` (`EMBED_PROVIDER`), for user
+memory and for knowledge bases alike: Gemini's `gemini-embedding-001` by default, Azure
 OpenAI `text-embedding-3-small` with `EMBED_PROVIDER=azure` (needs
-`AZURE_OPENAI_ENDPOINT` and a key). Both are asked for 768 dimensions, matching the
-`vector(768)` columns. **`EMBED_PROVIDER` is not a runtime toggle**: vectors from
-different models are not comparable and pgvector does not error, so flipping it without
-re-embedding makes knowledge search and memory recall return nothing useful, silently.
-Migrate first with `python -m scripts.reembed --target kb|memory --apply` (dry-run by
-default), then set the var. `to_vector_literal` serializes float lists to the pgvector
+`AZURE_OPENAI_ENDPOINT` and a key), or any OpenAI-compatible server (Ollama, vLLM, LM
+Studio, a hosted catalog) with `EMBED_BASE_URL` and `EMBED_MODEL`, which needs no cloud
+key. Each caller asks for its column's width: 768 for `ai_user_memory.embedding`, 1536
+for `ai_kb_embeddings.embedding`. Gemini and Azure produce either width directly. An
+OpenAI-compatible model has one width of its own, checked at first use: a narrower
+vector is zero-padded (cosine similarity, the only distance these columns are searched
+by, is unchanged), a wider one is requested at the column's width (`dimensions`) and
+refused with the model and both widths named if the server does not comply. The
+request runs through `httpx` on a worker thread (`asyncio.to_thread` on the memory
+path, the tool executor for `search_knowledge`, the job thread for ingestion), never
+on the event loop. **The provider and model are not a runtime toggle**: vectors from
+different models are not comparable and pgvector does not error, so changing them
+without re-embedding makes knowledge search and memory recall return nothing useful,
+silently. Migrate first with `python -m scripts.reembed --target kb|memory --apply`
+(dry-run by default) under the new settings, then keep them. Knowledge bases record
+the model that embedded them (`agent_data_sources.config.embedded_with`) so the portal
+can flag one that was left behind; memory rows carry no such record. Settings, the
+width rule and the migration are in
+[Configure → Knowledge Base](./02-configure.md#knowledge-base). `to_vector_literal` serializes float lists to the pgvector
 text format `"[0.1,0.2,...]"` for PostgREST compatibility.
 
 ### Admin surface

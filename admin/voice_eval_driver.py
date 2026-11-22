@@ -308,6 +308,10 @@ async def run_voice_eval_scenario(
         url += f"&callCase={call_case}"
     if locale:
         url += f"&locale={locale}"
+    if voice_ctx.get("profile_id"):
+        # A generic agent under test: call THIS profile (a draft), not the
+        # published one at the same address.
+        url += f"&profileId={voice_ctx['profile_id']}"
     if mode == "sim":
         url += "&provider=simulated"
     else:

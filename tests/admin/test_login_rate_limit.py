@@ -39,12 +39,12 @@ def _skip_rate_limit(path: str) -> bool:
         or path.startswith("/static")
         or (
             path.startswith("/admin")
-            and path not in ("/admin/login", "/admin/logout")
+            and path not in ("/admin/login", "/admin/logout", "/admin/setup")
         )
     )
 
 
-@pytest.mark.parametrize("path", ["/admin/login", "/admin/logout"])
+@pytest.mark.parametrize("path", ["/admin/login", "/admin/logout", "/admin/setup"])
 def test_skip_predicate_does_not_skip_auth_endpoints(path):
     """The unauthenticated auth endpoints must NOT be skipped (so the limiter
     runs and can throttle brute-force attempts)."""

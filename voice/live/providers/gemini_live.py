@@ -336,7 +336,11 @@ def _connect(cfg: LiveVoiceConfig, persona: str, *, omit_language: bool = False)
     them. Only the SpeechConfig field is dropped; `cfg.language` itself
     stays authoritative everywhere else (holding-line language, speakable
     rendering)."""
-    client = genai.Client(api_key=cfg.extra_config.get("api_key") or None)
+    # A key stored on Settings > Model keys, else the SDK reads the variable.
+    from core.provider_keys import stored_key
+
+    client = genai.Client(api_key=cfg.extra_config.get("api_key")
+                          or stored_key("google_genai") or None)
     # Ambient-scribe (text_only) sessions never produce audio output, so there
     # is nothing to voice and nothing to transcribe on the output side --
     # `speech_config`/`output_audio_transcription` are audio-output-only

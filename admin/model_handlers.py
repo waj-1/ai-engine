@@ -62,7 +62,9 @@ async def model_detail(
         "current_env": env,
         "row": row,
         "extra_config": row.get("extra_config") or {},
-        "providers": _MODEL_PROVIDERS,
+        # The Automatic row (core.model_resolver) keeps its own provider in the
+        # select; without it, saving the form re-typed it as the first option.
+        "providers": _MODEL_PROVIDERS + (("auto",) if row.get("provider") == "auto" else ()),
         "extra_config_keys": _MODEL_EXTRA_CONFIG_KEYS,
         "related": related,
         "target_envs": ("staging", "prod"),

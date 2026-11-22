@@ -156,12 +156,14 @@ _PATH_SECTIONS: Tuple[Tuple[str, str], ...] = (
     ("/admin/observability", "conversations"),
     ("/admin/sessions", "conversations"),
     ("/admin/agents", "agents"),
+    ("/admin/agent-types", "agents"),     # Agents › Categories
     ("/admin/agent-models", "agents"),
     ("/admin/templates", "agents"),
     ("/admin/prompts", "agents"),
     ("/admin/profiles", "agents"),
     ("/admin/e2e", "agents"),
     ("/admin/voice-budgets", "settings"),
+    ("/admin/model-keys", "settings"),
     ("/admin/kb", "knowledge"),
     ("/admin/skills", "knowledge"),
     ("/admin/memory", "knowledge"),
@@ -183,6 +185,7 @@ _PATH_SECTIONS: Tuple[Tuple[str, str], ...] = (
     ("/admin/help", "help"),
     ("/admin/settings", "settings"),
     ("/admin/users", "settings"),
+    ("/admin/api-keys", "settings"),
     ("/admin/env-vars", "settings"),
     ("/admin/env", "settings"),
     ("/admin/deployments", "settings"),
@@ -203,6 +206,7 @@ _ACTIVE_SECTIONS: Dict[str, str] = {
     "help": "help",
     "settings": "settings", "users": "settings", "env": "settings",
     "env_vars": "settings", "deployments": "settings", "drift": "settings",
+    "api_keys": "settings",
     "docs": "settings",
 }
 
@@ -269,7 +273,9 @@ SECTION_TABS: Dict[str, Tuple[SectionTab, ...]] = {
     "settings": (
         SectionTab("overview", "Overview", "/admin/settings"),
         SectionTab("users", "Team & access", "/admin/users"),
+        SectionTab("api_keys", "API keys", "/admin/api-keys", staff_only=True),
         SectionTab("voice_budgets", "Voice budgets", "/admin/voice-budgets"),
+        SectionTab("model_keys", "Model keys", "/admin/model-keys"),
         SectionTab("releases", "Releases", "/admin/env", staff_only=True),
         SectionTab("variables", "Environment variables", "/admin/env?tab=variables", staff_only=True),
         SectionTab("diagnostics", "Diagnostics", "/admin/drift", staff_only=True),
@@ -295,7 +301,9 @@ _TAB_PAGES: Dict[str, Tuple[str, Any]] = {
     "/admin/tests": ("testing", "tests"),
     "/admin/settings": ("settings", "overview"),
     "/admin/users": ("settings", "users"),
+    "/admin/api-keys": ("settings", "api_keys"),
     "/admin/voice-budgets": ("settings", "voice_budgets"),
+    "/admin/model-keys": ("settings", "model_keys"),
     "/admin/env": ("settings", lambda q: "variables" if q.get("tab") == "variables" else "releases"),
     "/admin/deployments": ("settings", "releases"),
     "/admin/drift": ("settings", "diagnostics"),
@@ -362,9 +370,22 @@ SETTINGS_ENTRIES: Tuple[SettingsEntry, ...] = (
         (("Manage team", "/admin/users", ""),),
     ),
     SettingsEntry(
+        "api_keys", "API keys",
+        "Keys that let your own programs talk to your agents or manage the engine.", "variables",
+        (("Manage API keys", "/admin/api-keys", ""),),
+        # The chat API a key opens is not served on a partner build
+        # (main.deployment_gate), so the screen is not offered there.
+        staff_only=True,
+    ),
+    SettingsEntry(
         "voice_budgets", "Voice budgets",
         "How many minutes of voice calls each business can use per day.", "voice",
         (("Set voice budgets", "/admin/voice-budgets", ""),),
+    ),
+    SettingsEntry(
+        "model_keys", "Model keys",
+        "The keys your agents use to reach each AI provider. Stored encrypted and never shown again.", "variables",
+        (("Manage model keys", "/admin/model-keys", ""),),
     ),
     SettingsEntry(
         "releases", "Releases",
@@ -422,6 +443,19 @@ def install_template_globals(templates: Any) -> None:
     g["search_quick_actions"] = search_quick_actions
     g["agent_palette"] = agent_palette
     g["agent_channel_filter_options"] = agent_channel_filter_options
+    g["agent_type_options"] = agent_type_options
+
+
+def agent_type_options() -> List[Dict[str, Any]]:
+    """The user-defined agent categories, in display order, for a category
+    picker (admin/services/agent_types.py). Empty on any failure: a picker
+    must not take a page down."""
+    try:
+        from admin.services.agent_types import list_types
+
+        return list_types(with_counts=False)
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def agent_channel_filter_options() -> List[Tuple[str, str]]:

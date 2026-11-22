@@ -166,13 +166,23 @@ def state_token_from_sse(body: str) -> Optional[str]:
     return token
 
 
-def voice_target(profile: Dict[str, Any]) -> Optional[Dict[str, str]]:
+def voice_target(profile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Where a voice eval reaches a demo agent on THIS build: the duplex WS
     path (``/agents/voice/live`` on the agents build, ``/voice/live`` on the
-    full engine) and the case the call plays. None for other kinds."""
+    full engine) and the case the call plays; a generic agent's own address
+    (``/v1/agents/{slug}/voice``). None for other kinds."""
     shape = own_body_shape(profile)
     if not shape or not shape.get("supported"):
         return None
+    if str((profile or {}).get("agent_kind") or "") == "custom":
+        # A generic agent's call has its own address, like its chat. `auth`
+        # makes the driver send the operator's token as the first frame (the
+        # socket takes no anonymous caller), and the pin lets a draft be
+        # called (endpoints/agents_v1.py `profileId`).
+        out = {"ws_path": f"/v1/agents/{profile['slug']}/voice", "auth": {}}
+        if shape.get("pin_profile"):
+            out["profile_id"] = str(shape["pin_profile"])
+        return out
     from core.deployment import active_scope
 
     client = active_scope()

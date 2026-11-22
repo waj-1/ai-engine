@@ -54,6 +54,15 @@
   <p>No conversations in the {{ p.label|lower }} ({{ env_label }}).</p>
   <a class="btn" href="/admin/agents">Test an agent &rarr;</a>
 </div>
+{% elif ov.sources.tracing_off %}
+{# No tracing store on this install: say what turning it on adds. Not an outage. #}
+<div class="empty-state mt-l" data-testid="tracing-off">
+  <p><strong>Tracing is off.</strong> Every conversation is still saved and can be read under Conversations.</p>
+  <p class="caption">Turning the tracing stack on adds: how each agent is doing, the Needs attention list
+    (failed actions and errors, grouped by cause), response times, token and cost charts, and
+    step-by-step detail inside each conversation.</p>
+  <a class="btn" href="/admin/observability?hours={{ p.hours }}">Read conversations &rarr;</a>
+</div>
 {% elif not ov.sources.outcomes %}
 {# Source down: the status strip above already says so — no empty boxes. #}
 {% else %}
@@ -284,6 +293,7 @@
 
   <div class="advanced-body stack-l">
     <div>
+      {% if ov.sources.tracing_off %}{{ hint_text('Tracing is off on this install: these numbers and charts are drawn from traces, so they stay empty until the tracing stack is running.') }}{% endif %}
       <h3 class="advanced-h">Engineering KPIs · {{ p.label|lower }}</h3>
       <section class="kpi-grid">
         {{ kpi('Tool-call success %', kpis.tool_success_pct, target='≥ 95%') }}
@@ -343,7 +353,7 @@
         </table>
       </div>
       {% else %}
-      <p class="caption">{{ 'No traces in this period.' if analytics_ok else 'Unavailable right now.' }}</p>
+      <p class="caption">{{ 'No traces in this period.' if analytics_ok else ('Needs the tracing stack.' if ov.sources.tracing_off else 'Unavailable right now.') }}</p>
       {% endif %}
     </div>
 

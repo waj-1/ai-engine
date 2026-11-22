@@ -18,7 +18,7 @@ You can usually leave **Run against another server** as it is.
 
 1. Click **New voice check**.
 2. Give it a **Title** that says what should happen, for example "Demo — Rami says who he is and why he is calling".
-3. Pick the **Agent type** and the **Language**.
+3. Pick the **Agent type** and the **Language**. For an agent you built with **New agent**, the agent type is `custom`, and under **Advanced** the **Call path** is the agent's own address, `/v1/agents/<slug>/voice` (shown on its Voice tab).
 4. **Steps** list, in order, what the caller says and what the agent's reply should contain. They are written in a technical format: copy the steps of a similar check, or ask your portal administrator to write them with you. Keep each check to two to four steps.
 5. Leave **On** ticked, click **Save voice check**, then run it once to make sure it passes.
 

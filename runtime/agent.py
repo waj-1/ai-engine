@@ -92,6 +92,17 @@ class RuntimeAgent:
         # what traffic gets (runtime.action_tools_check).
         self.profile_pinned: bool = bool(_pinned) or _pinned_profile is not None
         self.binding_fn = get_binding(agent_kind)
+        # A profile pinned to the Automatic model row runs on whichever model
+        # this install can use right now (core.model_resolver). Resolved per
+        # request, on a COPY: the cached profile keeps the Automatic pin, so a
+        # model added later is picked up without an edit or a cache flush.
+        self.model_unresolved: bool = False
+        from core.model_resolver import is_auto_model, resolve_auto_model
+        if is_auto_model(getattr(self.profile, "model_main", None)):
+            import dataclasses
+            _resolved = resolve_auto_model(self.profile.model_main, self.profile.environment)
+            self.model_unresolved = _resolved is None
+            self.profile = dataclasses.replace(self.profile, model_main=_resolved)
         self.llm = self._build_llm(self.profile)
         logger.info(
             "RuntimeAgent ready: kind=%s profile=%s fallback=%s tools=%d",

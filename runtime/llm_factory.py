@@ -46,9 +46,42 @@ _LLM_CACHE: Dict[str, Any] = {}
 
 
 def _cache_key(model: Dict[str, Any]) -> str:
-    return hashlib.sha256(
-        json.dumps(model, sort_keys=True, default=str).encode("utf-8")
-    ).hexdigest()
+    payload = json.dumps(model, sort_keys=True, default=str)
+    # A key stored in the portal is not part of the model row, so the cached
+    # client would outlive a replaced key. The token changes with the stored
+    # keys and is empty when none is stored, which leaves the key as it was.
+    from core.provider_keys import cache_token
+
+    token = cache_token()
+    if token:
+        payload += "|keys:" + token
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _provider_key(provider: str, env_var: str, extra: Dict[str, Any],
+                  *, default_stored: bool = True) -> str:
+    """The provider key for a model row: stored in the portal, else ``env_var``.
+
+    ``extra_config.credential`` names a stored key other than the provider's
+    default one (two OpenAI-compatible endpoints, two keys). A row that names
+    a credential nobody stored does not fall back to another key: that would
+    send one endpoint's key to a different endpoint.
+    """
+    from core.provider_keys import resolve_key, stored_key
+
+    credential = str(extra.get("credential") or "").strip()
+    if credential:
+        key = stored_key(provider, credential)
+        if not key:
+            raise UnsupportedProviderError(
+                f"extra_config.credential names the {provider} key "
+                f"'{credential}', and no key is stored under that name. Add it "
+                f"on Settings > Model keys, or remove `credential` from the model."
+            )
+        return key
+    if not default_stored:
+        return os.getenv(env_var, "")
+    return resolve_key(provider, env_var)
 
 
 def clear_llm_cache() -> None:
@@ -81,6 +114,14 @@ def build_chat_model(model: Dict[str, Any]) -> Optional[Any]:
         return None
     if not model.get("model_string"):
         return None
+
+    if (model.get("provider") or "").lower() == "auto":
+        # The Automatic row names no model: build whichever one this install
+        # can use right now (core.model_resolver). Never cached under the
+        # Automatic row's key, so a model added later is picked up.
+        from core.model_resolver import resolve_auto_model
+
+        return build_chat_model(resolve_auto_model(model, model.get("environment")) or {})
 
     key = _cache_key(model)
     cached = _LLM_CACHE.get(key)
@@ -232,7 +273,7 @@ def _build_google_genai(model: Dict[str, Any]) -> Any:
     if "top_k" in extra:
         kwargs["top_k"] = int(extra["top_k"])
     kwargs.update(_google_thinking_kwargs(extra))
-    kwargs["google_api_key"] = os.getenv("GOOGLE_API_KEY", "")
+    kwargs["google_api_key"] = _provider_key("google_genai", "GOOGLE_API_KEY", extra)
     # Opt-in per model row: a row without it builds the stock class, unchanged.
     timeout = _first_chunk_timeout(extra)
     if timeout is not None:
@@ -333,8 +374,17 @@ def _build_openai(model: Dict[str, Any]) -> Any:
     # are untouched; a Foundry row sets e.g. "AZURE_AI_FOUNDRY_API_KEY". Named
     # rather than inlined because a key is a secret and must not live in
     # extra_config, which the admin portal renders in plain text.
+    #
+    # A key stored in the portal wins over the variable. The provider's
+    # default stored key stands in for OPENAI_API_KEY only: a row that names
+    # its own `api_key_env`, or an Ollama row, is a different endpoint and
+    # takes a stored key only by name (`extra_config.credential`).
     key_env = (extra.get("api_key_env") or "OPENAI_API_KEY").strip()
-    kwargs["api_key"] = os.getenv(key_env, "")
+    kwargs["api_key"] = _provider_key(
+        "openai", key_env, extra,
+        default_stored=(key_env == "OPENAI_API_KEY"
+                        and (model.get("provider") or "openai").lower() != "ollama"),
+    )
     if base_url and not kwargs["api_key"]:
         if _is_local_endpoint(base_url):
             # A model server on this machine or network (Ollama, vLLM, LM
@@ -385,7 +435,7 @@ def _build_azure_openai(model: Dict[str, Any]) -> Any:
         "AZURE_OPENAI_API_VERSION", "2024-06-01"
     )
     kwargs["azure_endpoint"] = extra.get("endpoint") or os.getenv("AZURE_OPENAI_ENDPOINT", "")
-    kwargs["api_key"] = os.getenv("AZURE_OPENAI_API_KEY", "")
+    kwargs["api_key"] = _provider_key("azure_openai", "AZURE_OPENAI_API_KEY", extra)
     _apply_openai_family_knobs(kwargs, extra)
     if not kwargs["azure_endpoint"]:
         raise UnsupportedProviderError(
@@ -417,7 +467,7 @@ def _build_anthropic(model: Dict[str, Any]) -> Any:
     # a temperature, defaulting to 0.2.
     if extra.get("omit_temperature"):
         kwargs.pop("temperature", None)
-    kwargs["api_key"] = os.getenv("ANTHROPIC_API_KEY", "")
+    kwargs["api_key"] = _provider_key("anthropic", "ANTHROPIC_API_KEY", extra)
     # `''` is `ChatAnthropic.api_key`'s OWN default, so an empty key CONSTRUCTS
     # FINE and 401s on every call instead. That turned "unset key → smoke-only
     # degrade" in admin/e2e_runner.py into "a judge that fails every scenario":
@@ -429,7 +479,8 @@ def _build_anthropic(model: Dict[str, Any]) -> Any:
     # `_build_openai` does for a base_url row with no credential.
     if not kwargs["api_key"]:
         raise UnsupportedProviderError(
-            "anthropic requires ANTHROPIC_API_KEY — it is unset/empty, and "
+            "anthropic requires a key (Settings > Model keys, or "
+            "ANTHROPIC_API_KEY) — none is set, and "
             "ChatAnthropic accepts an empty key and 401s on every call rather "
             "than failing at build time"
         )

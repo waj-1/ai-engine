@@ -120,6 +120,22 @@ async def observability_explorer(
 # ---------------------------------------------------------------------------
 # JSON endpoints
 # ---------------------------------------------------------------------------
+#
+# With no tracing store on the install (core.lmnr_clickhouse.tracing_configured
+# is False) the id in these paths is a chat SESSION id and each pane is built
+# from the saved chat (admin/screens/saved_chats.py). With tracing configured
+# every pane reads the tracing store, unchanged.
+
+
+def _saved_chats():
+    """The saved-chats loaders when this install has no tracing store, else None."""
+    from core.lmnr_clickhouse import tracing_configured
+
+    if tracing_configured():
+        return None
+    from admin.screens import saved_chats
+
+    return saved_chats
 
 
 @router.get(
@@ -132,6 +148,9 @@ async def observability_explorer_spans_json(
 ) -> JSONResponse:
     """Return ``{trace, tree, found, unavailable, notice}`` for the Technical
     view's steps waterfall."""
+    saved = _saved_chats()
+    if saved is not None:
+        return JSONResponse(saved.load_steps_json(trace_id))
     from admin.screens.observability import load_span_tree_json
 
     return JSONResponse(load_span_tree_json(trace_id))
@@ -147,6 +166,9 @@ async def observability_explorer_span_detail_json(
     _ctx: dict = Depends(require_superuser),
 ) -> JSONResponse:
     """Return ``{span, notice}`` for the right pane."""
+    saved = _saved_chats()
+    if saved is not None:
+        return JSONResponse({"span": None, "notice": saved.STEPS_NOTE})
     from admin.screens.observability import load_span_detail_json
 
     return JSONResponse(load_span_detail_json(trace_id, span_id))
@@ -169,6 +191,10 @@ async def observability_explorer_transcript_json(
     when the operator toggles to "Transcript" — no reload."""
     from fastapi.concurrency import run_in_threadpool
 
+    saved = _saved_chats()
+    if saved is not None:
+        return JSONResponse(
+            await run_in_threadpool(saved.load_transcript_json, trace_id, env=env))
     from admin.screens.observability import load_transcript_json
 
     return JSONResponse(
@@ -189,6 +215,10 @@ async def observability_explorer_overview_json(
     and a per-tool call/error rollup (consolidates the old Sessions page)."""
     from fastapi.concurrency import run_in_threadpool
 
+    saved = _saved_chats()
+    if saved is not None:
+        return JSONResponse(
+            await run_in_threadpool(saved.load_overview_json, trace_id, env=env))
     from admin.screens.observability import load_trace_overview_json
 
     return JSONResponse(
@@ -214,6 +244,10 @@ async def observability_explorer_audio_json(
     the control-plane app for the duration."""
     import asyncio
 
+    saved = _saved_chats()
+    if saved is not None:
+        return JSONResponse(
+            await asyncio.to_thread(saved.load_audio_json, trace_id, env=env))
     from admin.screens.observability import load_voice_audio_json
 
     return JSONResponse(

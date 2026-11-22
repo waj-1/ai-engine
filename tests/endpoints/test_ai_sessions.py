@@ -56,9 +56,19 @@ def test_list_sessions_requires_auth(client):
     assert r.status_code == 401
 
 
-def test_list_sessions_requires_business_id(client, auth):
-    r = client.get("/ai/sessions", headers=auth)
-    assert r.status_code == 422  # missing required query param
+def test_list_sessions_without_a_business_lists_the_callers_own_unowned_sessions(client, auth):
+    """A generic agent's sessions carry no business. Omitting business_id
+    lists those, still scoped to the token's user and nobody else's."""
+    with patch("endpoints.ai_sessions.chat_persistence.list_sessions",
+               new=AsyncMock(return_value=[{"id": "s9", "user_id": "test-user-123"}])) as m:
+        r = client.get("/ai/sessions", headers=auth)
+    assert r.status_code == 200
+    assert r.json() == {"sessions": [{"id": "s9", "user_id": "test-user-123"}]}
+    m.assert_awaited_once_with("test-user-123", None, source=None)
+
+
+def test_list_sessions_without_a_business_still_requires_auth(client):
+    assert client.get("/ai/sessions").status_code == 401
 
 
 def test_list_sessions_returns_sessions_scoped_to_token_user(client, auth):

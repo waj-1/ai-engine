@@ -174,7 +174,7 @@
   (function () {
     var table = $("[data-agents-table]");
     if (!table) return;
-    var state = { q: "", type: "live", status: "", channel: "" };
+    var state = { q: "", type: "live", status: "", channel: "", category: "" };
     var rows = $$("[data-agent-row]", table);
     var collapsed = {};
 
@@ -185,6 +185,11 @@
       if (state.type === "main" && type === "sub") return false;
       if (state.status && r.getAttribute("data-status") !== state.status) return false;
       if (state.channel && (" " + r.getAttribute("data-channels") + " ").indexOf(" " + state.channel + " ") === -1) return false;
+      // Category: "__none__" is the Uncategorised choice.
+      if (state.category) {
+        var cat = r.getAttribute("data-category") || "";
+        if (state.category === "__none__" ? cat !== "" : cat !== state.category) return false;
+      }
       if (state.q && (r.getAttribute("data-search") || "").indexOf(state.q) === -1 && !viaFamily) return false;
       return true;
     }
@@ -233,6 +238,8 @@
       });
     });
     $$("[data-filter-select]").forEach(function (s) {
+      // A select can arrive preselected (?category=<slug> from the Categories screen).
+      if (s.value) state[s.getAttribute("data-filter-select")] = s.value;
       s.addEventListener("change", function () { state[s.getAttribute("data-filter-select")] = s.value; apply(); });
     });
     document.addEventListener("click", function (e) {
@@ -245,7 +252,7 @@
         apply();
       }
       if (e.target.closest("[data-clear-filters]")) {
-        state = { q: "", type: "live", status: "", channel: "" };
+        state = { q: "", type: "live", status: "", channel: "", category: "" };
         if (search) search.value = "";
         $$("[data-filter]").forEach(function (g) {
           $$("button", g).forEach(function (x, i) { var on = i === 0; x.classList.toggle("active", on); x.setAttribute("aria-pressed", on ? "true" : "false"); });

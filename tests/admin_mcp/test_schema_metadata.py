@@ -32,7 +32,7 @@ MIXED_TOOLS = {"models", "tools", "mcp_servers", "kb_sources", "env_vars",
                "eval_schedules", "deployment_targets", "jobs", "audit",
                "templates", "prompts", "profile_mcp_attachments",
                "users", "profile_attachments", "skills", "profile_versions",
-               "chat", "prompt_optimize"}
+               "chat", "prompt_optimize", "api_keys", "agent_types"}
 
 
 def test_users_is_not_annotated_destructive(tools_by_name):
@@ -88,6 +88,7 @@ def test_mixed_tools_never_claim_read_only(tools_by_name):
     ("traces", {"search", "get", "span", "transcript", "overview",
                 "session", "audio"}),
     ("audit", {"list", "get", "probe_write", "verify"}),
+    ("api_keys", {"list", "create", "revoke"}),
     ("profile_attachments", {"list", "add", "remove"}),
     ("models", {"list", "get", "create", "update", "promote"}),
     ("env_vars", {"list", "get", "create", "update", "delete"}),

@@ -1,6 +1,6 @@
 {% extends "_base.html" %}
 {% from "_components/chip.html" import chip %}
-{% from "_components/callout.html" import hint, hint_text, info %}
+{% from "_components/callout.html" import alert, hint, hint_text, info %}
 {% block title %}{{ row.name }} · Knowledge bases · {{ brand().title }}{% endblock %}
 {% block page_title %}{{ row.name }}{% endblock %}
 {% block page_subtitle %}{{ kb_kind_label(row.kind) }}{% if row.agent_kind %} · used by {{ agent_label(row.agent_kind) }}{% endif %}{% endblock %}
@@ -9,11 +9,26 @@
 {% set uploaded = request.query_params.get('uploaded') %}
 {% set upload_error = request.query_params.get('error') %}
 {% set job_id = request.query_params.get('job_id') %}
-{% if uploaded or upload_error %}
+{% if uploaded %}
 <div style="margin-bottom:var(--space-m);display:flex;gap:var(--space-xs);flex-wrap:wrap;">
-  {% if uploaded %}{{ chip('Uploaded — ' ~ uploaded ~ ' chunks added', variant='ok', dot=True) }}{% endif %}
-  {% if upload_error %}{{ chip(upload_error, variant='warn', dot=True) }}{% endif %}
+  {{ chip('Uploaded — ' ~ uploaded ~ ' chunks added', variant='ok', dot=True) }}
 </div>
+{% endif %}
+{% if upload_error %}
+{% call alert('warning') %}<strong>Nothing was uploaded.</strong> {{ upload_error }}{% endcall %}
+{% endif %}
+{% if row.kind == 'pgvector' %}
+  {% if embedding and not embedding.ready and not upload_error %}
+  {% call alert('warning') %}<strong>Documents cannot be added or searched yet.</strong>
+  They are made searchable by an embedding model, and none is set up. {{ embedding.problem }}{% endcall %}
+  {% endif %}
+  {% if embedding_mismatch %}
+  {% call alert('warning') %}<strong>This knowledge base needs re-embedding.</strong>
+  Its documents were made searchable by <span class="technical">{{ embedding_mismatch.stored }}</span>, and the engine now uses
+  <span class="technical">{{ embedding_mismatch.current }}</span>. Vectors from two models cannot be compared, so searches here
+  return the wrong passages or none, with no error. Run <code>{{ reembed_command }}</code> on the server, or switch the
+  embedding settings back.{% endcall %}
+  {% endif %}
 {% endif %}
 {% if job_id %}
 {# Live-progress panel: KB ingestion now runs on a background daemon thread
@@ -143,7 +158,7 @@
               </select>
             </label>
           </div>
-          <div><button class="primary" type="submit">Upload</button></div>
+          <div><button class="primary" type="submit" {% if embedding and not embedding.ready %}disabled title="Set up an embedding model first"{% endif %}>Upload</button></div>
         </div>
       </form>
 
@@ -319,6 +334,14 @@
       {% if row.kind == 'pgvector' and pages is not none %}
       <dt>Documents</dt><dd class="num">{{ pages_total }}</dd>
       <dt>Passages</dt><dd class="num">{{ chunks_total }}</dd>
+      {% endif %}
+      {% if row.kind == 'pgvector' and embedding %}
+      <dt>Embedding model</dt>
+      <dd>{% if embedding.ready %}<span class="technical">{{ embedding.model }}</span><br><span class="caption">{{ embedding.label }}{% if embedding.base_url %} · {{ embedding.base_url }}{% endif %}</span>
+        {% else %}{{ chip('Not set up', variant='warn') }}{% endif %}</dd>
+      {% if cfg.get('embedded_with') %}
+      <dt>Built with</dt><dd><span class="technical">{{ cfg.get('embedded_with') }}</span></dd>
+      {% endif %}
       {% endif %}
       {% if synced %}
       <dt>Last synced</dt><dd class="num">{{ (row.last_refreshed_at or 'never')[:16]|replace('T', ' ') }}</dd>

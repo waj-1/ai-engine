@@ -98,6 +98,30 @@ def clear_last_failure() -> None:
         _last_failure = None
 
 
+def tracing_configured() -> bool:
+    """False when this install runs with no tracing store at all.
+
+    That is the case when tracing is switched off (``LMNR_DISABLED``) and no
+    ClickHouse address was given (``LMNR_CLICKHOUSE_URL`` unset): nothing
+    writes spans and there is nothing to read. The portal then lists
+    conversations from the saved chats instead (admin/screens/saved_chats.py)
+    and says plainly what tracing would add, rather than reporting an outage.
+
+    An explicit ``LMNR_CLICKHOUSE_URL`` always counts as configured, so a
+    reader that exports no spans of its own (a control plane) still reads the
+    shared store exactly as before.
+    """
+    if (os.getenv("LMNR_CLICKHOUSE_URL") or "").strip():
+        return True
+    return (os.getenv("LMNR_DISABLED") or "").strip().lower() not in ("1", "true", "yes", "on")
+
+
+TRACING_OFF_NOTE = (
+    "Tracing is off on this install. Conversations are saved and shown from the database; "
+    "step-by-step detail (timings, each model call, tool inputs and outputs) needs the tracing stack."
+)
+
+
 def _config() -> Dict[str, str]:
     return {
         "url": os.getenv("LMNR_CLICKHOUSE_URL", "http://lmnr-clickhouse:8123").rstrip("/"),
@@ -119,6 +143,10 @@ def query(
     ``sql`` and pass ``{"name": value}`` here. Raises
     :class:`ClickHouseUnavailable` on any failure.
     """
+    if not tracing_configured():
+        # Not an outage: no network call, and not recorded as a failure, so no
+        # screen reports "could not be reached" for a store that is not there.
+        raise ClickHouseUnavailable("tracing is off on this install", kind="off")
     cfg = _config()
     http_params: Dict[str, str] = {
         "database": cfg["database"],
