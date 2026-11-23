@@ -44,6 +44,7 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+import time
 
 from admin.auth import ADMIN_TOKEN_COOKIE, require_superuser
 from admin.services import first_run
@@ -55,6 +56,7 @@ from admin.screens import agents_views
 from core.agent_profile import AgentProfileLoader
 from core.auth import get_service_client, get_main_client, admin_service_client
 from core.prompt_resolver import PromptResolver
+from core.database import get_db_connection
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +173,38 @@ try:
     templates.env.globals["demo_tenant_build"] = _demo_tenant_build()
 except Exception:
     templates.env.globals["demo_tenant_build"] = False
+
+# Database readiness check endpoint
+@router.get("/ready", status_code=200)
+async def readiness_check():
+    """Check if the database is available for serving requests.
+    
+    Returns 200 if the database is healthy, 503 if not.
+    Intended for use in container health checks.
+    """
+    try:
+        # Get a database connection with a short timeout
+        start_time = time.time()
+        with get_db_connection() as conn:
+            # Execute a simple query to check database connectivity
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            result = cursor.fetchone()
+            cursor.close()
+            
+            # Check if the query completed within a reasonable time
+            query_time = time.time() - start_time
+            if query_time > 1.0:  # Query took too long
+                raise HTTPException(status_code=503, detail="Database query timeout")
+                
+            if result[0] != 1:
+                raise HTTPException(status_code=503, detail="Database health check failed")
+                
+            return {"status": "ready", "database": "healthy"}
+    except Exception as e:
+        # Log the error for debugging
+        logger.error(f"Readiness check failed: {str(e)}")
+        raise HTTPException(status_code=503, detail="Database not available")
 
 # NOTE: there are deliberately no `lmnr_*_url` Jinja globals any more. The
 # `lmnr_trace_url()` / `lmnr_dataset_url()` deep-link helpers needed a project id
