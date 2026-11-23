@@ -66,10 +66,46 @@
     <dt>Greeting</dt>
     <dd>{{ (voice_block.get('greeting_trigger') or 'Default greeting')|truncate(140) }}</dd>
     <dt>Persona</dt>
-    <dd>{% if persona_versions and persona_versions.served_known %}Callers hear v{{ persona_versions.served.version_number }}{% if persona_versions.diverged %} <span class="chip chip-warn">v{{ persona_versions.latest.version_number }} saved, not live yet</span>{% endif %}{% elif voice_block.get('persona_prompt_slug') %}{{ voice_block.get('persona_prompt_slug') }}{% else %}<span class="muted">None</span>{% endif %}</dd>
+    <dd>{% if persona_versions and persona_versions.served_known %}Callers hear v{{ persona_versions.served.version_number }}{% if persona_versions.diverged %} <span class="chip chip-warn">v{{ persona_versions.latest.version_number }} saved, not live yet</span>{% endif %}{% elif voice_block.get('persona_prompt_slug') %}{{ voice_block.get('persona_prompt_slug') }}{% elif generic_voice %}Built-in{% else %}<span class="muted">None</span>{% endif %}</dd>
   </dl>
   <p class="caption mt-s">Voice settings are saved on <strong>{{ owner.display_name or owner.agent_kind }}</strong>{% if specialist %}; the answers come from <strong>{{ specialist.display_name or specialist.agent_kind }}</strong>{% endif %}. Every Save below goes to the right one automatically.</p>
 </section>
+
+{# --- A generic agent is called at its own address: say where, say whether a
+     call can start on THIS server (a realtime key may be missing), and let the
+     operator place one from here. Rendered only for a slug-addressed kind. #}
+{% if generic_voice %}
+<section class="section" id="voice-call">
+  <h2>Call this agent</h2>
+  <dl class="kv mt-s">
+    <dt>Address</dt>
+    <dd><code>WS {{ generic_voice.path }}</code>{% if not generic_voice.published %} <span class="chip chip-neutral">draft: only a test call from here reaches it</span>{% endif %}</dd>
+    <dt>Daily call budget</dt>
+    <dd>Counted per agent, under <code>{{ generic_voice.budget_id }}</code>. Give it its own allowance on the speech model's page{% if model_row %} (<a href="/admin/agent-models/{{ model_row.model_id }}">{{ model_row.name }}</a>){% endif %}; otherwise the server default applies.</dd>
+  </dl>
+  {% if generic_voice.problem %}
+  {% call alert('warning') %}
+    <strong>A call cannot start yet.</strong> {{ generic_voice.problem }}
+  {% endcall %}
+  {% else %}
+  <div class="row mt-s" style="gap:var(--space-s);align-items:center;">
+    <button type="button" class="btn" data-voice-call-start>Call</button>
+    <button type="button" class="ghost" data-voice-call-end hidden>End call</button>
+    <span class="caption" data-voice-call-status role="status">Uses your microphone. The call is answered by the settings saved below.</span>
+  </div>
+  <div class="mt-s" data-voice-call-log aria-live="polite" style="max-height:260px;overflow:auto;"></div>
+  <script>
+    window.__voice_call_config = {
+      path: {{ generic_voice.path | tojson }},
+      profile_id: {{ generic_voice.profile_id | tojson }},
+      token: "{{ ctx.user_token }}",
+    };
+  </script>
+  <script src="/static/shared/voice-live.js?v={{ asset_version }}" defer></script>
+  <script src="/admin/static/voice-call.js?v={{ asset_version }}" defer></script>
+  {% endif %}
+</section>
+{% endif %}
 
 <div data-tab-root>
 <div class="accordion voice-accordion">
@@ -116,9 +152,13 @@
       {% else %}
       <div style="font-weight:600;margin-top:var(--space-xxs);">{{ owner.display_name or owner.agent_kind }}</div>
       <div class="caption" style="margin-top:var(--space-xxs);">
+        {% if generic_voice %}
+        This agent answers its own calls: <code>agent_profile_slug</code> is unset.
+        {% else %}
         No separate voice specialist: <code>agent_profile_slug</code> is unset
         (or names no row in this environment), so calls fall back to the active
         profile of this <code>agent_kind</code>.
+        {% endif %}
       </div>
       {% endif %}
     </div>
@@ -215,6 +255,8 @@
     <code>{{ owner.agent_kind }}</code> — with duplex voice enabled every
     connect closes rather than speaking without a persona.
   {% endcall %}
+  {% elif generic_voice %}
+  {{ hint_text('This agent speaks with the built-in voice persona: it sends every question to the agent and says the answer. To write your own, create a prompt for this agent kind, put its slug in "Persona prompt slug" in the Session section below and save; the editor then appears here.') }}
   {% else %}
   {{ hint_text('No persona prompt slug is set — fill "Persona prompt slug" in the Session section below and save, then the editor appears here.') }}
   {% endif %}
@@ -407,6 +449,8 @@
     <strong>No realtime model assigned.</strong> With duplex voice enabled every
     connect raises <code>LookupError</code> at handshake and the socket closes —
     a misconfiguration the runtime surfaces loudly rather than defaulting.
+    {% if not realtime_models %}There is no realtime model on this server yet: add one under
+    <a href="/admin/agent-models">Models</a> with <code>"realtime": true</code> in its extra settings.{% endif %}
   {% endcall %}
   {% endif %}
   </div>

@@ -87,7 +87,9 @@ def sweep_enabled() -> bool:
 
 
 def classifier_available() -> bool:
-    return bool(os.getenv("GOOGLE_API_KEY"))
+    from core.provider_keys import has_key
+
+    return has_key("google_genai")
 
 
 # ---------------------------------------------------------------------------

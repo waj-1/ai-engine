@@ -43,6 +43,11 @@ class SnapshotCompileError(RuntimeError):
 # Shallow fields copied verbatim from the live profile row. Kept for
 # audit / display purposes — the loader uses the resolved fields below
 # for actual runtime behaviour.
+# `agent_type_id` (the user-defined category, admin/services/agent_types.py)
+# is deliberately NOT here. It is organisational metadata the runtime never
+# reads: freezing it would make a category rename or a move between
+# categories wait for a re-promote, and restoring an older version would
+# move the agent back to a category that may no longer exist.
 _SHALLOW_FIELDS = (
     "agent_kind", "slug", "display_name", "description",
     "model_main_id",

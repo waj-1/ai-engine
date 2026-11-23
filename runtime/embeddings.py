@@ -221,8 +221,11 @@ def embed_texts(
     """Batch-embed ``texts``, returning one 1536-dim vector each.
 
     Dispatches through :mod:`core.embedding_provider`: Gemini's
-    ``gemini-embedding-001`` by default, or the in-region Azure OpenAI
-    ``text-embedding-3-small`` when ``EMBED_PROVIDER=azure``. Either way the
+    ``gemini-embedding-001`` by default, the in-region Azure OpenAI
+    ``text-embedding-3-small`` when ``EMBED_PROVIDER=azure``, or any
+    OpenAI-compatible server (``EMBED_BASE_URL`` + ``EMBED_MODEL``), whose
+    narrower vectors are zero-padded and whose wider ones are refused unless
+    the server shortens them. Either way the
     width is ``_OUTPUT_DIM`` (1536), matching both the
     ``ai_kb_embeddings.embedding vector(1536)`` column and what
     :func:`runtime.tools.business._embed_query_for_search` asks for at query
@@ -239,8 +242,8 @@ def embed_texts(
     to the Gemini path only; the Azure deployment is named by
     ``AZURE_EMBED_DEPLOYMENT``.
 
-    Raises :class:`ConfigError` when the selected provider's credentials are
-    missing. Transient API failures are retried with exponential backoff.
+    Raises :class:`ConfigError` when the selected provider's settings are
+    missing or its model does not fit the column. Transient API failures are retried with exponential backoff.
     """
     if not texts:
         return []

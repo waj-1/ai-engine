@@ -99,6 +99,8 @@ SYNONYMS: Dict[str, Tuple[str, ...]] = {
     "docs": ("developer docs", "docs", "architecture", "data model", "api reference",
              "engineering docs"),
     "voice_budgets": ("voice budget", "minutes", "daily cap", "voice seconds", "call minutes"),
+    "model_keys": ("model keys", "provider keys", "api key", "openai key", "gemini key",
+                   "anthropic key", "azure key", "credentials"),
 }
 
 _SECTION_LABEL = {item.key: item.label for item in nav.PRIMARY + (nav.SETTINGS,)}
@@ -116,6 +118,10 @@ EXTRA_PAGES: Tuple[Entry, ...] = (
     Entry("Agent templates", "Tab", GROUP_AGENTS, "/admin/templates?env={env}", "agents",
           "In Agents — start a new agent from a ready-made template",
           ("templates", "templates tab", "molds", "new agent", "create agent", "gallery")),
+    Entry("Agent categories", "Tab", GROUP_AGENTS, "/admin/agent-types?env={env}", "agents",
+          "In Agents — your own groups for agents, such as Support or Sales",
+          ("categories", "category", "agent types", "types", "groups", "group agents",
+           "labels", "tags", "organise", "organize")),
     Entry("Agent memory settings", "Screen", GROUP_AGENTS, "/admin/agents/memory?env={env}", "agents",
           "What each agent type remembers about people, and for how long",
           ("memory settings", "agent memory", "memory config", "remember", "retention",
@@ -247,6 +253,9 @@ ROUTE_EXCLUSIONS: Dict[str, str] = {
     "/admin": "redirects to the default screen",
     "/admin/": "redirects to the default screen",
     "/admin/login": "sign-in page, not a destination",
+    "/admin/setup": "first-run page; exists only until the admin account is created",
+    "/admin/setup/model-key": "first-run walkthrough step, shown once to the admin who set up",
+    "/admin/setup/api-key": "first-run walkthrough step, shown once to the admin who set up",
     "/admin/configure": "retired; redirects to Agents",
     "/admin/agent-data-sources": "old URL; redirects to Knowledge",
     "/admin/data-sources": "old URL; redirects to Knowledge",

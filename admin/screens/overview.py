@@ -315,11 +315,24 @@ def _fmt_seconds(sec: Optional[float]) -> str:
 
 def build_tiles(cur: Optional[Dict[str, Any]], prev: Optional[Dict[str, Any]],
                 *, previous_label: str, fallback_conversations: Optional[int] = None,
-                env: Optional[str] = None) -> List[Dict[str, Any]]:
+                env: Optional[str] = None, tracing_off: bool = False) -> List[Dict[str, Any]]:
     """The five headline tiles. ``cur is None`` = ClickHouse did not answer:
     every tile shows "—" with "Unavailable", except Conversations, which may
     show the conversation-log count — explicitly labelled as covering all
     environments, because that table has no environment column."""
+    if cur is None and tracing_off:
+        # No tracing store on this install (not an outage): the conversation
+        # count comes from the saved chats, and the rest say what they need.
+        return [{
+            "key": "conversations", "label": "Conversations",
+            "value": "{:,}".format(fallback_conversations) if fallback_conversations is not None else "—",
+            "caption": "From saved conversations", "unavailable": fallback_conversations is None,
+            "href": "/admin/observability",
+        }] + [
+            {"key": k, "label": label, "value": "—", "caption": "Needs tracing", "unavailable": True}
+            for k, label in (("attention", "Needs attention"), ("handoffs", "Handed to a person"),
+                             ("failed_actions", "Failed actions"), ("response", "Avg response time"))
+        ]
     if cur is None:
         conv_tile: Dict[str, Any] = {
             "key": "conversations", "label": "Conversations", "value": "—",
@@ -550,16 +563,23 @@ def build_overview(*, env: str, period_key: Optional[str], client) -> Dict[str, 
     kinds = _client_kinds()
     agent_names = pl.load_agent_display_names(env)
 
-    sources = {"outcomes": False, "attention": False, "voice_usage": False}
+    from core.lmnr_clickhouse import tracing_configured
+
+    # No tracing store on this install: these numbers were never collected.
+    # Say so plainly instead of reporting an outage (see the status strip).
+    tracing_off = not tracing_configured()
+    sources = {"outcomes": False, "attention": False, "voice_usage": False,
+               "tracing_off": tracing_off}
 
     # --- outcomes (current + previous) --------------------------------------
     outcome_rows: Optional[List[Dict[str, Any]]] = None
-    try:
-        sql, params = outcome_sql(env, kinds)
-        outcome_rows = _ch(sql, {**params, "hours": hours, "hours2": 2 * hours})
-        sources["outcomes"] = True
-    except Exception as exc:  # noqa: BLE001 - degrade to "—"
-        logger.warning("overview: outcome rollup unavailable (%s)", exc)
+    if not tracing_off:
+        try:
+            sql, params = outcome_sql(env, kinds)
+            outcome_rows = _ch(sql, {**params, "hours": hours, "hours2": 2 * hours})
+            sources["outcomes"] = True
+        except Exception as exc:  # noqa: BLE001 - degrade to "—"
+            logger.warning("overview: outcome rollup unavailable (%s)", exc)
 
     cur_rows = [r for r in (outcome_rows or []) if r.get("period") == "cur"]
     prev_rows = [r for r in (outcome_rows or []) if r.get("period") == "prev"]
@@ -570,7 +590,7 @@ def build_overview(*, env: str, period_key: Optional[str], client) -> Dict[str, 
     if cur is None:
         fallback = conversation_log_count(client, hours)
     tiles = build_tiles(cur, prev, previous_label=period["previous"],
-                        fallback_conversations=fallback, env=env)
+                        fallback_conversations=fallback, env=env, tracing_off=tracing_off)
 
     # --- per agent ------------------------------------------------------------
     series: Dict[str, List[int]] = {}
@@ -644,7 +664,14 @@ def build_overview(*, env: str, period_key: Optional[str], client) -> Dict[str, 
 
     # --- status strip ---------------------------------------------------------
     cause = _ch_cause()
-    if not sources["outcomes"]:
+    if tracing_off:
+        status = {
+            "state": "off",
+            "headline": "Tracing is off on this install, so live statistics are not collected. "
+                        "Conversations are saved: open Conversations to read them.",
+            "detail": None,
+        }
+    elif not sources["outcomes"]:
         status = {
             "state": "down",
             "headline": "Live statistics are temporarily unavailable — conversations "

@@ -206,6 +206,16 @@ def build_conversations_context(
         list_tool_names_from_db, load_traces_list, tool_filter_notice,
     )
 
+    from core.lmnr_clickhouse import tracing_configured
+
+    if not tracing_configured():
+        # No tracing store on this install: list the saved chats instead of
+        # reporting an outage (admin/screens/saved_chats.py).
+        from admin.screens.saved_chats import build_list_context
+
+        return build_list_context(env=env, hours=hours, search=search, outcome=outcome,
+                                  channel_slug=channel_slug, agent_kind=agent_kind)
+
     include_background = bool(background) or (agent_kind in _BACKGROUND_AGENT_KINDS)
     unavailable = False
     try:

@@ -2404,6 +2404,61 @@ def _recordings_client(env: Optional[str]) -> Any:
     return admin_service_client()
 
 
+def _session_recordings(lookup_id: str, candidate_envs: List[Optional[str]],
+                        trace_call_id: Optional[str]) -> List[Dict[str, Any]]:
+    """Every call recording of one chat session, newest first, from the
+    first of `candidate_envs` that has any. `trace_call_id` flags the
+    recording of the call being viewed. Best-effort: [] on failure."""
+    rows: List[Dict[str, Any]] = []
+    found_env: Optional[str] = None
+    for e in candidate_envs:
+        try:
+            rows = (
+                _recordings_client(e)
+                .table("ai_voice_recordings")
+                .select(
+                    "recording_id, call_id, provider, simulated, "
+                    "sample_rate, duration_ms, size_bytes, status, note, started_at"
+                )
+                .eq("session_id", lookup_id)
+                .order("started_at", desc=True)
+                .limit(50)
+                .execute()
+                .data or []
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("voice audio fetch failed for %s in env=%s: %s",
+                         lookup_id, e, exc)
+            rows = []
+        if rows:
+            found_env = e
+            break
+
+    recordings: List[Dict[str, Any]] = []
+    for r in rows:
+        rid = r.get("recording_id")
+        url = f"/admin/observability/explorer/recording/{rid}.wav"
+        if found_env:
+            url += f"?env={found_env}"
+        recordings.append({
+            "id": rid,
+            "call_id": r.get("call_id"),
+            # Plain name for the realtime provider slug ("google_genai" →
+            # "Gemini Live"); an unknown slug shows nothing rather than raw.
+            "provider": _VOICE_PROVIDER_LABELS.get(str(r.get("provider") or "")),
+            "simulated": bool(r.get("simulated")),
+            "duration_ms": r.get("duration_ms"),
+            "size_bytes": r.get("size_bytes"),
+            "status": r.get("status"),
+            "note": r.get("note"),
+            "started_at": r.get("started_at"),
+            "is_current_trace": bool(trace_call_id) and r.get("call_id") == trace_call_id,
+            "url": url if r.get("status") == "complete" else None,
+        })
+
+    return recordings
+
+
 def load_voice_audio_json(trace_id: str, env: Optional[str] = None) -> Dict[str, Any]:
     """Call recordings for the explorer's "Audio" tab.
 
@@ -2437,52 +2492,7 @@ def load_voice_audio_json(trace_id: str, env: Optional[str] = None) -> Dict[str,
         if e not in candidate_envs:
             candidate_envs.append(e)
 
-    rows: List[Dict[str, Any]] = []
-    found_env: Optional[str] = None
-    for e in candidate_envs:
-        try:
-            rows = (
-                _recordings_client(e)
-                .table("ai_voice_recordings")
-                .select(
-                    "recording_id, call_id, provider, simulated, "
-                    "sample_rate, duration_ms, size_bytes, status, note, started_at"
-                )
-                .eq("session_id", lookup_id)
-                .order("started_at", desc=True)
-                .limit(50)
-                .execute()
-                .data or []
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("voice audio fetch failed for %s in env=%s: %s",
-                         lookup_id, e, exc)
-            rows = []
-        if rows:
-            found_env = e
-            break
-
-    recordings = []
-    for r in rows:
-        rid = r.get("recording_id")
-        url = f"/admin/observability/explorer/recording/{rid}.wav"
-        if found_env:
-            url += f"?env={found_env}"
-        recordings.append({
-            "id": rid,
-            "call_id": r.get("call_id"),
-            # Plain name for the realtime provider slug ("google_genai" →
-            # "Gemini Live"); an unknown slug shows nothing rather than raw.
-            "provider": _VOICE_PROVIDER_LABELS.get(str(r.get("provider") or "")),
-            "simulated": bool(r.get("simulated")),
-            "duration_ms": r.get("duration_ms"),
-            "size_bytes": r.get("size_bytes"),
-            "status": r.get("status"),
-            "note": r.get("note"),
-            "started_at": r.get("started_at"),
-            "is_current_trace": bool(trace_call_id) and r.get("call_id") == trace_call_id,
-            "url": url if r.get("status") == "complete" else None,
-        })
+    recordings = _session_recordings(lookup_id, candidate_envs, trace_call_id)
 
     notice = None
     if not recordings:

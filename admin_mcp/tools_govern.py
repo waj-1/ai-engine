@@ -10,9 +10,11 @@ deliberate deviation.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
-from admin_mcp._common import (READ_ONLY, Env, actor_audit, client_for_env,
+from pydantic import Field
+
+from admin_mcp._common import (READ_ONLY, Confirm, Env, actor_audit, client_for_env,
                                err, get_row, not_confirmed, rows, tool_errors,
                                use_env, validate_env)
 from admin_mcp.context import current_actor
@@ -77,6 +79,65 @@ def users(action: Literal["list", "set_superuser"] = "list",
                     after={"is_superuser": grant})
         return {"updated": True, "user_id": user_id, "is_superuser": grant}
     return err(f"unknown action {action!r}", hint="list | set_superuser")
+
+
+@mcp.tool()
+@tool_errors
+def api_keys(
+    action: Annotated[Literal["list", "create", "revoke"], Field(
+        description="list | create | revoke.")] = "list",
+    name: Annotated[str, Field(
+        description="create: what will use the key (shown in lists, 1-120 characters).")] = "",
+    scopes: Annotated[Optional[List[Literal["chat", "admin"]]], Field(
+        description="create: `chat` (call agents over the chat API) and/or `admin` "
+                    "(chat plus this MCP server: full control). Default [\"chat\"].")] = None,
+    expires_in_days: Annotated[int, Field(
+        description="create: days until the key stops working (1-3650). 0 = never expires.")] = 0,
+    key_id: Annotated[str, Field(description="revoke: the key's id (from list).")] = "",
+    include_revoked: Annotated[bool, Field(
+        description="list: also return revoked keys (default true).")] = True,
+    confirm: Confirm = False,
+) -> Dict[str, Any]:
+    """Portal-issued API keys (`api_keys` table; mirrors Settings > API keys,
+    via admin.services.api_keys). A key is sent as `Authorization: Bearer
+    wae_...` to POST /v1/agents/{slug}/chat (scope chat or admin) or to this
+    MCP server (scope admin only).
+
+    action: list (name, key_prefix, scopes, created_at, last_used_at,
+    expires_at, status = active|expired|revoked; never the key) | create
+    (name, scopes, expires_in_days) | revoke (key_id; confirm required, takes
+    effect on the key's next request and cannot be undone).
+
+    create returns the key ONCE, in `key`. Only a SHA-256 digest is stored, so
+    it can never be read again: hand it to the user straight away, and do not
+    write it to a file, a log or a commit. Keys are per engine instance, not
+    per environment, so there is no `env`. Creating an `admin` key hands out
+    full control of this engine. Both writes are audited under the caller."""
+    from admin.services import api_keys as service
+
+    actor_id = current_actor()["user_id"]
+    if action == "list":
+        found = service.list_keys(include_revoked=include_revoked)
+        return {"api_keys": found, "count": len(found)}
+    if action == "create":
+        row, key = service.create_key(
+            name, scopes or ["chat"], created_by=actor_id,
+            expires_at=service.expiry_from_days(expires_in_days))
+        return {"created": True, "api_key": row, "key": key,
+                "note": "This is the only time the key is shown. Store it now; "
+                        "it cannot be retrieved later."}
+    if action == "revoke":
+        if not key_id:
+            return err("revoke needs key_id", hint="api_keys action=list")
+        existing = service.get_key(key_id)
+        if existing is None:
+            return err("API key not found")
+        if not confirm:
+            return not_confirmed(
+                f"revoke API key {existing['name']!r} ({existing['key_prefix']}...): "
+                "anything using it is refused from its next request", api_key=existing)
+        return {"revoked": True, "api_key": service.revoke_key(key_id, revoked_by=actor_id)}
+    return err(f"unknown action {action!r}", hint="list | create | revoke")
 
 
 @mcp.tool()

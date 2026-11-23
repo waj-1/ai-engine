@@ -673,6 +673,11 @@ def load_analytics(
             {"hours": hours, **filter_params},
         )
     except ClickHouseUnavailable as exc:
+        if getattr(exc, "kind", "") == "off":
+            # No tracing store on this install: an honest empty state, not an outage.
+            return _empty_payload(hours, agent_kind, channel, status, environment, ok=False,
+                                  notice="Tracing is off on this install. These charts are "
+                                         "drawn from traces, so they need the tracing stack.")
         logger.warning("load_analytics: ClickHouse unavailable: %s", exc)
         # Name the cause: "unavailable" alone read as a network outage even
         # when ClickHouse was up and rejecting the query.

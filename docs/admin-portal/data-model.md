@@ -35,6 +35,7 @@ rows — see [Architecture](./00-architecture.md) for how they compose.
 |-------|---------|-------------|
 | `ai_user_memory` | Per-user durable memory facts (long-term memory) | [Configure → Memory](./02-configure.md#memory) |
 | `agent_profiles` | One row per agent kind/env: the runtime config | [Configure → Agent Profiles](./02-configure.md#agent-profiles) |
+| `agent_types` | User-defined agent categories (name, colour, order); organisational only | [Configure → Categories](./02-configure.md#categories--adminagent-types) |
 | `agent_profile_versions` | Version snapshots (promotion + on-demand save/restore) | [Deploy → Environments](./05-deploy.md#environments), [Configure → Agent Profiles](./02-configure.md#agent-profiles) (version bar) |
 | `agent_prompts` | Prompt slots per agent kind | [Configure → Agent Profiles](./02-configure.md#agent-profiles) |
 | `agent_prompt_versions` | Immutable versioned prompt bodies | [Configure → Agent Profiles](./02-configure.md#agent-profiles) |
@@ -60,6 +61,7 @@ rows — see [Architecture](./00-architecture.md) for how they compose.
 | `test_fixtures` | Named test inputs (per env) | [Test → Test Fixtures](./03-test.md#test-fixtures) |
 | `agent_deployment_targets` | Deploy targets (engine base URLs, e.g. `https://engine.example.com`) | [Deploy → Deploy (Targets tab)](./05-deploy.md#targets-tab) |
 | `agent_env_vars` | Per-env variable registry | [Deploy → Environments (Variables tab)](./05-deploy.md#variables-tab) |
+| `provider_keys` | Model provider keys, stored encrypted | [Configure → Model keys](./02-configure.md#model-keys-settings--model-keys) |
 | `agent_audit_log` | Append-only change log | [Govern → Audit Log](./04-govern.md#audit-log) |
 | `admin_jobs` | Background job tracking | [Operate → Background jobs](./01-operate.md#background-jobs) |
 | `agent_traces` | Per-request observability summary | [Operate → Traces](./01-operate.md#conversations) |
@@ -67,6 +69,8 @@ rows — see [Architecture](./00-architecture.md) for how they compose.
 | `ai_background_leases` | One-process-at-a-time lease + last result for background sweeps | [Operate → Overview](./01-operate.md#overview) |
 | `ai_voice_usage_daily` | Per-tenant daily duplex-voice audio-second budget | [Configure → Duplex voice](./02-configure.md#duplex-voice-voice_config) |
 | `ai_voice_budgets` | Per-tenant daily allowance overriding the engine default | [Configure → Duplex-voice budgets](./02-configure.md#duplex-voice-budgets-settings--voice-budgets) |
+| `api_keys` | Portal-issued API keys: a digest and a display prefix, never the key | [Govern → API keys](./04-govern.md#api-keys) |
+| `engine_setup` | First-run setup state (one row): a digest of the setup code, never the code | [Govern → First-run setup](./04-govern.md#first-run-setup) |
 | `ai_voice_scenarios` / `ai_voice_scenario_runs` | Live-call acceptance scenarios + their executions | [Test → Voice scenarios](./03-test.md#voice-scenarios--live-call-acceptance) |
 | `ai_voice_recordings` / `ai_voice_recording_chunks` | Per-call duplex-voice audio, playable from the explorer's Audio tab | [Operate → Traces](./01-operate.md#conversations) |
 | `user` | Accounts + superuser flag | [Govern → Users & Roles](./04-govern.md#users--roles) |
@@ -104,6 +108,16 @@ for `(agent_kind, environment)` so the pin (or its removal) takes effect on the 
 request. See [Architecture → Served-version
 pin](./00-architecture.md#served-version-pin-agent_profilesserved_version_id) for the
 read-side resolution order and its ownership guard.
+
+**`agent_type_id`** (nullable FK → [`agent_types`](#agent_types)`.agent_type_id`,
+`ON DELETE SET NULL`, added in `20261123040000_agent_types.sql`) — the agent's
+user-defined **category**, or `NULL` for uncategorised (the default for every row).
+It is organisational only: the runtime never reads it, and it is **not** part of an
+`agent_profile_versions` snapshot. Written by `admin.services.profiles.update_profile_row`
+(the Settings tab's Category picker / MCP `update_profile(agent_type=...)`), which
+checks the category exists and writes every row of the same `(agent_kind, slug)` in
+that database, and by `admin.services.templates.use_template` (the New agent wizard).
+A fork copies it; promote carries it (matched by slug across two databases).
 
 `agent_kind` is the `ai_agent_kind` Postgres enum. The engine's own values are
 **`custom`** (the generic, configuration-only agent: many profiles told apart by
@@ -204,6 +218,43 @@ are promote-governed like the brain model), falling back to a live read of the
 row named by `model_id` where there is no snapshot. It and the persona lookup
 both raise `LookupError` (closing the socket with `CLOSE_FORBIDDEN`) on a
 missing/unknown reference rather than silently defaulting.
+
+### `agent_types`
+
+User-defined agent **categories** ("Support", "Sales", "Internal tools"): groups for
+the agent table, its filter and reporting. Migration `20261123040000_agent_types.sql`;
+service-role RLS like every other engine table (`db-functions/rls/agent_tables.ts`).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `agent_type_id` | `uuid` PK | |
+| `slug` | `text`, unique | Stable handle (`^[a-z][a-z0-9-]{0,47}$`, enforced in `admin/services/agent_types.py`). Fixed after creation; it is what the MCP tools take and what `db_snapshot` and a cross-database promote match on. |
+| `display_name` | `text` | The name shown on chips and pickers. Unique ignoring case (service-level). |
+| `description` | `text`, nullable | At most 280 characters. |
+| `color` | `text`, default `slate` | One of a fixed palette, checked by the table: `slate`, `teal`, `blue`, `violet`, `pink`, `red`, `amber`, `green`. The portal maps each key to a chip style (`.chip-cat-<key>`). |
+| `sort_order` | `integer`, default `0` | Position in pickers, the filter and the Categories screen (ascending, then by name). |
+| `created_at` / `created_by` / `updated_at` / `updated_by` | | Audit columns, as on the other config tables. |
+
+Referenced by `agent_profiles.agent_type_id` (`ON DELETE SET NULL`): deleting a
+category leaves its agents uncategorised, never deletes them.
+
+**What it is not.** A category is not an `agent_kind`. `agent_kind` (the
+`ai_agent_kind` enum) names the *code* that runs a profile and is not
+user-editable; a category is a row a user makes, selects no code and changes nothing
+about how an agent runs. A generic agent is resolved by `(custom, slug, environment)`
+whatever its category.
+
+**Seeding.** None. A fresh database has no rows here and no seeder adds any.
+
+**Promotion and snapshots.** Not frozen: `agent_type_id` is absent from
+`runtime.compiler._SHALLOW_FIELDS`, so it is in no `agent_profile_versions.snapshot`
+and `restore_version` never touches it. See
+[Configure → Categories](./02-configure.md#categories--adminagent-types).
+
+**`db_snapshot`.** `python -m admin.db_snapshot export` includes this table (before
+`agent_profiles`), and `restore` matches categories by `slug` and remaps each
+profile's `agent_type_id` to the target's id, so a category re-created after a
+reset is reused rather than duplicated and no profile is lost to the foreign key.
 
 ### `agent_prompts`
 Logical prompt slots per agent kind. Key columns: `(agent_kind, slug)` unique,
@@ -325,6 +376,13 @@ For dashboard-created pgvector KBs, `config` defaults to
 `{"table": "ai_kb_embeddings", "pages_table": "ai_kb_pages"}` — the shared
 source-scoped tables described below. Deleting an `agent_data_sources` row cascades to
 both `ai_kb_pages` and `ai_kb_embeddings` (FK `ON DELETE CASCADE`).
+
+`config.embedded_with` (`provider:model`, for example
+`openai_compatible:nomic-embed-text`) records which embedding model wrote a shared
+source's vectors. Ingestion sets it on the first upload and `scripts/reembed.py` after
+a `kb` run; the Knowledge screens compare it with the model in force. No column on
+`ai_kb_embeddings` records the model, so this key is the only such record, and a source
+without it is treated as unknown, not as mismatched.
 
 ---
 
@@ -776,6 +834,9 @@ Snapshot schema lineage: v4 added `mcp_attachments`; v5 added `skill_attachments
 denormalized — profile id, slug, display name, description, agent kind) plus the
 shallow `delegatable` flag, so production can build `ask_<slug>` delegation tools
 without a live join. Legacy snapshots read as empty lists — backward-compatible.
+The profile's **category** (`agent_type_id`) is deliberately **not** in the
+snapshot: it is organisational, the runtime never reads it, and a rename or a move
+between categories must not wait for a re-promote.
 
 **Two writers now, not just promotion.** Written on **Staging → Production**
 promotion into the production branch (unchanged) — the production runtime reads
@@ -921,6 +982,41 @@ Key columns: `(environment, label)` unique, `base_url`, `auth_env_var`, `is_defa
 Key columns: `(environment, name)` unique, `value` (nullable), `source`
 (`db` / `secret_manager:…` / `supabase_vault:…`), `is_secret`, `description`. Resolved
 by `core.env_resolver` (process env wins).
+
+### `api_keys`
+Portal-issued API keys (migration `20261123010000_api_keys.sql`). One row per key;
+rows are never deleted. Key columns: `id` (also the `user_id` of the chat sessions the
+key creates and the audit actor of its MCP calls), `name`, `key_prefix` (the first 12
+characters, for display), `key_hash` (SHA-256 hex of the key, **unique**; the key itself
+is not stored), `scopes` (`text[]`, a non-empty subset of `chat` / `admin`, enforced by
+a check constraint), `created_by`, `created_at`, `last_used_at` (throttled, may lag a
+minute), `expires_at` (nullable), `revoked_at` / `revoked_by`. RLS: service role only,
+and `anon` / `authenticated` hold no privilege on the table at all. Not
+environment-scoped. See [Govern → API keys](./04-govern.md#api-keys).
+### `provider_keys`
+Model provider keys entered on Settings › Model keys. Key columns:
+`(environment, provider, name)` unique; `provider` (`google_genai` / `openai` /
+`anthropic` / `azure_openai`); `name` (`''` = the provider's default key, anything
+else a named credential a model selects with `extra_config.credential`);
+`ciphertext` (a Fernet token made with a key derived from the server's
+`SECRET_KEY`; never returned by the portal or the MCP); `hint` (last four
+characters); `created_by` / `created_at` / `updated_by` / `updated_at`.
+Service-role RLS, and table privileges for `service_role` only. Written by
+`admin/services/provider_keys.py`; read by `core/provider_keys.py`, which
+prefers a stored key over the environment variable. Added by migration
+`20261123020000_provider_keys.sql`.
+
+### `engine_setup`
+First-run setup state, one row (`id = 1`, enforced by a check). `code_hash` (SHA-256
+digest of the current one-time setup code; the code itself is only printed in the
+engine's log), `code_expires_at`, `failed_attempts` (setup locks at 5), `claimed_at`
+(the lock one submission takes, with a conditional `UPDATE`, to create the admin),
+`completed_at` / `completed_by` (set when the first admin exists; from then on setup
+never opens again, and `code_hash` is cleared), `finished_at` (the first admin finished
+or left the model-key and API-key steps). Service-role RLS and table privileges for
+`service_role` only. Read and written by `admin/services/first_run.py`, only in a build
+with no product plugin. Not in `db_snapshot`: it is install state, not configuration.
+Added by migration `20261123070000_engine_setup.sql`.
 
 ### `agent_audit_log`
 Append-only. Key columns: `entity_type`, `entity_id` (**nullable** — global / bulk

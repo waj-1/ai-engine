@@ -15,8 +15,9 @@ only via a **Staging → Production** promote.
 > Build group in the sidebar, so the screen was removed; the route 307-redirects to
 > `/admin/agents`.
 
-- [Agent Profiles](#agent-profiles) (`Agents | Models | Templates` · agent table · tabbed agent page: Overview · Instructions · Tools & knowledge · Sub-agents · Voice · Versions · Settings · one Save per tab · fork · compare · promote (confirm) · prompt optimize, A/B)
+- [Agent Profiles](#agent-profiles) (`Agents | Models | Templates | Categories` · agent table · tabbed agent page: Overview · Instructions · Tools & knowledge · Sub-agents · Voice · Versions · Settings · one Save per tab · fork · compare · promote (confirm) · prompt optimize, A/B)
   - [Models tab](#models-tab) (list · New model drawer · detail · copy to env)
+  - [Categories](#categories--adminagent-types) (`/admin/agent-types` — your own groups for agents: create · rename · recolour · reorder · delete; picked in the New agent wizard and on an agent's Settings tab; chip + filter on the agent table)
   - [Voice cockpit](#the-voice-cockpit--adminagentsprofile_idvoice) (`/admin/agents/{id}/voice` — the agent's **Voice tab**: every duplex key with effective values, the brain panel, the persona editor; the single portal writer of `voice_config`)
   - [Templates / New agent](#sub-views--popups) (template gallery · two-step "New agent" dialog → draft fork)
 - [MCP & Tools](#mcp--tools) (server list · searchable tool catalog per server · connect / bundle · in-bundle HTTP-tool builder · dry-run)
@@ -32,8 +33,9 @@ only via a **Staging → Production** promote.
 `router.py:agents_view()` + `screens/agents.py` (data) + `screens/agents_views.py`
 (view models) + `screens/agents_present.py` (plain-language labels) · `static/agents.js`
 
-The Agents area has three section tabs: **Agents** (the agent table), **[Models](#models-tab)**
-and **Templates** (`/admin/templates`). Redesigned 2026-10-11 (portal revamp PR B1) from
+The Agents area has four section tabs: **Agents** (the agent table), **[Models](#models-tab)**,
+**Templates** (`/admin/templates`) and **[Categories](#categories--adminagent-types)**
+(`/admin/agent-types`). Redesigned 2026-10-11 (portal revamp PR B1) from
 one 9–10k px scroll with four independent Save buttons and a right rail into a list
 plus a tabbed agent page. Every POST handler kept its contract — only the forms
 regrouped; the capability map is in the PR.
@@ -99,7 +101,11 @@ counts as Voice), **Model** (display name, never the UUID), **Can use** ("44 act
 (Open, Test in chat, Versions, Compare with…, Make a draft copy). Sub-agents
 (`parent_profile_id`) nest under their parent with a collapse caret. Search + filters
 are client-side: Type (All agents / Main agents / Templates — **templates are hidden by
-default**), Status (Active incl. specialists / Draft / Archived), Channel. "New agent"
+default**), Status (Active incl. specialists / Draft / Archived), Channel, and
+**Category** (each of your [categories](#categories--adminagent-types), plus
+*Uncategorised*; shown only once a category exists; `?category=<slug>` opens the
+table already filtered). An agent in a category carries its coloured chip next to
+its name, and the search box matches the category name. "New agent"
 opens the template dialog; "Compare agents" opens a two-agent picker →
 `/admin/agents/diff`. Below 1280px Type/Model columns hide.
 
@@ -217,7 +223,10 @@ the section (`LEGACY_ANCHORS`).
   `tool_ids` / `mcp_server_ids` lists move under "Legacy lists (not used when the agent
   runs)". The same `toolsets` / `skills` keys come back from the MCP `diff_profiles` /
   `profile_versions diff`, and the promote preview lists action-level changes.
-- **Settings** — Basics (name, description, status), Model (main + light, by name;
+- **Settings** — Basics (name, description, status, and **Category**: a picker of
+  your [categories](#categories--adminagent-types) with *Uncategorised* as the blank
+  choice; posted as `agent_type_id` with the rest of the form, and applied to every
+  environment's row of the same agent at once), Model (main + light, by name;
   link to the model page), Channel address (`endpoint_path`, marked technical), and
   *Advanced*: IDs, the endpoint's expected request body (Pydantic schema) and the
   operator notes / example payloads JSON (`POST …/input-validators`).
@@ -347,6 +356,35 @@ effective-value warnings). The persona, brain and voice forms share one sticky
 **Save voice settings** bar (each changed form posts to its own unchanged route);
 the persona's "Save anyway" checkbox appears only after a validation refusal.
 Previously reached from a *Voice settings →* chip / Duplex voice link card.
+
+**For an agent built in the portal (a generic agent)** the page adds a **Call this
+agent** section under the summary and reads a few fields differently:
+
+- **Address**: `WS /v1/agents/{slug}/voice`, and the id its daily call budget is
+  counted under (one bucket per agent; see
+  [Voice for generic agents](./00-architecture.md#voice-for-generic-agents)).
+- **Call**: places a test call from the browser to the profile being viewed, draft or
+  published, with the shared duplex client (`static/shared/voice-live.js`, driven by
+  `admin/static/voice-call.js`). The operator's token goes in the first `auth` frame.
+- **A call cannot start yet**: shown instead of the button, with the reason in the
+  words the socket would close with: the generic agents API is off, voice is not
+  turned on, no realtime model is set, or the server does not hold the realtime
+  model's key (it names the variable to set).
+- **Persona** and **Greeting trigger** may stay blank: the built-in persona and
+  greeting are used, and the page says so instead of warning. Naming a persona prompt
+  of this agent kind replaces the built-in one and brings up the persona editor.
+- **Serve calls with profile slug** blank means the agent answers its own calls. A
+  slug names another generic agent as the brain; one that does not exist refuses the
+  call. Every generic agent owns its own voice settings, even one that another agent
+  borrows as a brain.
+
+To turn voice on for such an agent: Settings › *set up voice for this agent*, then in
+**Session** tick **Duplex voice enabled**, pick the **Realtime model**, set **Voice ID** and
+**Language** (and **Voice by language** / **Caller languages** for more than one), and
+leave **Barge-in enabled** ticked under **Turn behaviour** so callers can interrupt.
+A realtime model is an `agent_models` row with `"realtime": true` in its extra
+settings; the engine seeds Gemini Live rows, and an Azure Voice Live row needs
+`endpoint` and `auth_env_var` there too.
 
 It exists because a fieldset structurally could not be it. The old Agents
 mapping-form fieldset had controls for 26 of the keys
@@ -805,9 +843,10 @@ sub-agent templates), each card showing what it is for and what it includes
 only action is **Use template**, a two-step dialog: (1) pick a template, (2) name it,
 optionally **Make it a sub-agent of** an agent chosen from a picker (Staging agents —
 `use_template` only accepts a staging parent; this used to be a pasted `profile_id`),
-and under Advanced an optional technical **slug**. It posts the unchanged
-`POST /admin/agents/from-template` (`template_id`, `display_name`, `slug`,
-`as_subagent_of`). An explicit slug is used *verbatim* (no uniqueness suffix) — set it
+an optional **Category** (shown once a category exists; the new agent and the
+sub-agents made with it start in it), and under Advanced an optional technical
+**slug**. It posts `POST /admin/agents/from-template` (`template_id`,
+`display_name`, `slug`, `as_subagent_of`, `model_id`, `agent_type_id`). An explicit slug is used *verbatim* (no uniqueness suffix) — set it
 to give a delegation specialist a stable `ask_<slug>` tool name; a genuine
 `(agent_kind, slug, environment)` collision fails loudly. On success it forks the
 template (recursively for a team, rewiring the new root's sub-agent ids) into a named
@@ -819,6 +858,73 @@ its row. ("Mold" is now "template" everywhere in the UI.)
 
 **Backing table** — `agent_profiles` (`status='template'` rows are the catalog; a
 "use" always inserts a fresh `status='draft'` row, never mutates the template).
+
+#### Categories — `/admin/agent-types`
+
+`GET /admin/agent-types` · `agent_types.html` · `agent_type_handlers.py` ·
+`services/agent_types.py` (the rules, shared with the admin MCP `agent_types` tool)
+
+The **Categories** section tab: your own groups for agents, such as *Support*,
+*Sales* or *Internal tools*. With thirty agents this is how you tell them apart,
+filter the agent table and see at a glance what each one is for.
+
+**A category is data, not an agent kind, and it does not change how an agent
+runs.** `agent_kind` still names the code that runs a profile; a generic agent is
+still resolved by `(custom, slug, environment)`, whatever category it is in. The
+runtime never reads the category. Any agent can carry one, whatever its kind
+(a deployment's own code-backed kinds included), or none.
+
+- **Fresh install: none.** Nothing is seeded; the screen starts empty and the
+  category pickers and the table's filter stay hidden until you add one.
+- **New category** — name, optional description, a **colour** from a fixed palette
+  of eight (slate, teal, blue, violet, pink, red, amber, green) and, under Advanced,
+  a technical **slug**. Left blank the slug is made from the name ("Internal tools" →
+  `internal-tools`; a name with no Latin letters gets `category-<n>`). The slug is
+  how an assistant refers to the category over MCP and **does not change** when the
+  category is renamed. Two categories cannot share a slug or a name.
+- **Edit** — rename, re-describe, recolour. Agents keep pointing at the same row,
+  so the new name and colour show everywhere at once.
+- **Order** — the ↑ / ↓ buttons move a category one place; the order is the order
+  of the pickers, the filter and this table.
+- **Delete** — the confirm dialog says how many agents are in the category.
+  Deleting it **never deletes or changes an agent**: those agents become
+  uncategorised (`agent_profiles.agent_type_id` is `ON DELETE SET NULL`, and the
+  service clears the column itself first). The page then reports how many agents
+  were left uncategorised.
+- **Agents** column — how many agents are in the category, linking to the agent
+  table filtered by it. An agent promoted to a second environment is counted once;
+  templates never carry a category; a scoped build counts only the kinds it shows.
+
+**Putting an agent in a category** — the **Category** picker on the agent's
+Settings tab, the optional **Category** step in the New agent wizard, or over MCP
+(`update_profile(agent_type=...)`, `templates(action="use", agent_type=...)`). A
+draft copy (**Make a draft copy**) starts in the original's category.
+
+**Publishing.** A category is **not part of a version or a promote snapshot**
+(`runtime/compiler.py` leaves `agent_type_id` out of `_SHALLOW_FIELDS`). Renaming or
+recolouring a category, or moving an agent between categories, takes effect at once
+and needs no re-publish; restoring an older version of an agent leaves its category
+alone. Because a promoted agent is two rows (one per environment), setting the
+category writes every row of the same `(agent_kind, slug)` in that database, so the
+Staging and Production tables never disagree. Where each environment has its own
+database, **Promote** carries the category across by slug and creates it in the
+target if it is not there yet; a category problem never fails a promote (the
+promoted agent is then left uncategorised).
+
+**Not here.** Conversations, Overview and Testing group and filter by agent, not by
+category.
+
+| Route | Does |
+|-------|------|
+| `GET /admin/agent-types` | The screen |
+| `POST /admin/agent-types` | Create (`display_name`, `description`, `color`, `slug`) |
+| `POST /admin/agent-types/{id}/update` | Rename, re-describe, recolour |
+| `POST /admin/agent-types/{id}/move` | `direction=up\|down`, one place |
+| `POST /admin/agent-types/{id}/delete` | Delete; its agents become uncategorised |
+
+Every write is audited (`agent_audit_log`, entity `agent_types`: `create`, `update`,
+`reorder`, `delete` with `agents_uncategorised`). **Backing tables** —
+[`agent_types`](./data-model.md#agent_types) and `agent_profiles.agent_type_id`.
 
 **Compare two agents** — `GET /admin/agents/diff?a=…&b=…` · `agents_diff.html` · `profile_fork_handlers.py:agents_diff()`
 Titled "Compare: <A> ↔ <B>". Side headers, a **Settings** table with plain labels
@@ -861,6 +967,30 @@ page. **New model** opens the create form (name, env, provider, model string,
 penalties, pricing, extra-config JSON) in a side drawer — it used to be an always-open form above the
 list; it still posts `POST /admin/agent-models`.
 
+**The Automatic model.** A row with provider **Automatic** (`auto`,
+"Automatic (first usable model)") names no model. An agent pinned to it runs,
+on each request, on the first model of its environment the install can use:
+a local provider (Ollama, or OpenAI with a Base URL on this machine or
+network), or a cloud provider whose key is set (`core/model_resolver.py`,
+`model_unusable_reason`). The engine's default chat model (`AGENT_MAIN_MODEL`)
+is preferred, then the oldest row. With none usable a generic agent replies
+with a plain message saying where to add a model; once one is added it
+answers with no edit to the agent. The row is created with the demo agent
+(below) and can be chosen for any agent. Its usage, cost and traces record the
+model that actually ran.
+
+**The demo agent.** On a build with no product plugin that serves the generic
+agents API, the first boot seeds one generic agent, **Demo agent** (address
+`demo`, `POST /v1/agents/demo/chat`), marked with a *Demo* chip in the Agents
+list (`admin/seed_demo_agent.py`). It is Active, pinned to the Automatic model,
+has no tools and no knowledge, and its instructions explain what the engine is
+and how to build an agent. It is seeded **once**: a row named
+`DEMO_AGENT_SEEDED` under Settings › Environment remembers it, so edits are
+never overwritten and an archived, deleted or renamed demo agent does not come
+back. Delete that row to have it seeded again on the next start.
+`SEED_DEMO_AGENT=true|false` overrides where it seeds (a product build gets
+none unless it sets `true`).
+
 **Local and OpenAI-compatible models.** Provider **Ollama** reaches a local
 Ollama server through its OpenAI-compatible API (`extra_config.base_url`, else
 `OLLAMA_BASE_URL`, else `http://127.0.0.1:11434/v1`). For any other compatible
@@ -869,6 +999,71 @@ A server on this machine or a private network needs no API key; a hosted one
 still does. Behind a Base URL the engine asks for token counts on streamed
 replies (`extra_config.stream_usage: false` turns that off for a server that
 rejects `stream_options`). Providers the runtime cannot build are not offered.
+
+**Whether the provider has a key.** Under the Provider select the form says
+where the chosen provider's key comes from (stored in the portal, its
+environment variable, or nowhere) and links to
+[Settings › Model keys](#model-keys-settings--model-keys). It reads
+`GET /admin/model-keys/status.json`.
+
+#### Model keys (Settings › Model keys)
+
+`GET /admin/model-keys` · `model_keys.html` · `model_keys_handlers.py` ·
+`admin/services/provider_keys.py` · table `provider_keys`
+
+Where an admin enters a provider's key instead of setting an environment
+variable. One row per provider (Google Gemini, OpenAI, Anthropic, Azure OpenAI):
+
+- **Key in use**: *Stored key*, *Environment variable* or *No key*, plus whether
+  the provider's variable (`GOOGLE_API_KEY`, `OPENAI_API_KEY`,
+  `ANTHROPIC_API_KEY`, `AZURE_OPENAI_API_KEY`) is set.
+- **Stored key**: its last four characters and when it was last saved. A stored
+  key is never shown again, anywhere.
+- **Set or replace** (`POST /admin/model-keys`), **Remove**
+  (`POST /admin/model-keys/delete`) and **Test** (`POST /admin/model-keys/test`,
+  JSON). Test asks the provider for its model list with the key in use: one free
+  call, no message sent. On failure it shows the provider's own error with the
+  key taken out. Azure OpenAI needs `AZURE_OPENAI_ENDPOINT` or a model with an
+  `endpoint`.
+
+The first-run page's second step (`/admin/setup/model-key`) is the same two calls
+behind one button: `set_key`, then `check_key`. See
+[Govern → First-run setup](./04-govern.md#first-run-setup).
+
+**Named keys** are a second key for the same provider, for a model that talks
+to a different endpoint (two OpenAI-compatible servers, two keys). A model uses
+one when its extra config carries `"credential": "<name>"`. A model that names
+a credential nobody stored fails to build; it never falls back to another key.
+
+**Resolution order** (`core/provider_keys.py`, used by every chat-model builder
+in `runtime/llm_factory.py`): the key stored here for the provider (or the named
+credential) wins; with none stored, the environment variable is used exactly as
+before. The provider's stored default key stands in for the provider's own
+variable only: an OpenAI row with its own `extra_config.api_key_env`, and an
+Ollama row, take a stored key only by name. Besides the chat models, the stored
+Gemini and Azure OpenAI keys are used for embeddings
+(`core/embedding_provider.py`), the Gemini speech and live-voice providers, the
+E2E judge and the conversation-insights check. Azure Speech and Azure Voice
+Live keep their own variables.
+
+**Encryption.** Keys are encrypted (Fernet, AES-128-CBC with HMAC-SHA256) with a
+key derived from the server secret `SECRET_KEY`. With no `SECRET_KEY` the page
+says so, the forms are disabled and a save is refused: a key is never stored
+as plain text. To rotate, set `SECRET_KEY=new,old` (the first entry encrypts,
+every entry decrypts), restart, save each key again, then drop the old value.
+A row encrypted with a secret this server does not have shows *Cannot be read*
+and the provider falls back to its variable. `deploy/local/gen_env.py` and the
+root compose stack's setup step generate `SECRET_KEY`.
+
+**Caching.** The runtime keeps the decrypted keys in memory for 60 seconds and
+never reads the table inside a request. A save or removal reloads them in the
+process that made it, so the next message uses the new key; other engine
+instances on the same database follow within a minute. With `SECRET_KEY` unset
+the table is not read at all.
+
+Every save and removal is recorded in the audit log (`provider_keys`, actions
+`set` / `replace` / `delete`) with the provider, name and hint, never the key.
+Over MCP: the `provider_keys` tool.
 
 **Thinking controls** (Gemini reasoning depth, stored in `extra_config`, applied by
 `runtime.llm_factory._google_thinking_kwargs`): **Thinking level** (`minimal` / `low` /
@@ -1131,7 +1326,14 @@ flagged), source type, documents, last updated, status. Status is per source typ
 (`router.py:_attach_kb_document_stats()`): uploaded files → **Ready** / **No
 documents yet** from `ai_kb_pages`; synced sources (GitBook / Drive / URL) →
 **Synced** / **Never synced**; a database table → **Live table**. "Never refreshed"
-no longer shows on upload KBs, where refreshing means nothing.
+no longer shows on upload KBs, where refreshing means nothing. An uploaded-files
+source whose documents were embedded by a different model than the one in force
+shows **Needs re-embedding** (see *Embedding model* below).
+
+Above the form, one line names the embedding model in force ("Documents are made
+searchable by **nomic-embed-text** (OpenAI-compatible server at
+`http://127.0.0.1:11434/v1`)"). When none is set up, a warning says so and names
+the settings to add, so the first sign is not a failed upload.
 
 ### Sub-views & popups
 
@@ -1144,7 +1346,8 @@ agent; `_additional_kinds_form` marker lets "none ticked" clear it, the old
 newline-textarea shape still parses), sync schedule / SLA for synced kinds only,
 active; source type, config JSON and the pgvector `information_schema` inspector
 under Advanced; ③ **Danger zone** last. One **Details** rail (status, type, agent,
-documents, passages, last sync, id).
+documents, passages, **Embedding model** in force, **Built with** — the model that
+wrote this source's vectors — last sync, id).
 
 **Documents list** — for shared source-scoped pgvector KBs (i.e. sources whose
 `config.table == "ai_kb_embeddings"` / `config.pages_table == "ai_kb_pages"`), the
@@ -1158,11 +1361,68 @@ kinds — show nothing in this card.
 
 **Async ingestion** — `POST /admin/kb/{source_id}/upload`
 Uploads stage parent page rows, then a background worker chunks (≈512 tokens, 64
-overlap), embeds via Gemini, and inserts pgvector rows. The detail page polls
+overlap), embeds with the embedding model in force, and inserts pgvector rows. The detail page polls
 `/admin/jobs/{job_id}.json` for live progress (files done, chunk count, embed time)
 and reloads on completion. Per-file errors don't fail the whole job. (5MB/file cap.)
 Accepted file types: `.md`, `.txt`, `.html`, `.pdf`, `.docx` (`.docx` parsed via
 `python-docx`; requires the package to be installed in the runtime environment).
+
+**Embedding model** — `core/embedding_provider.py`. Documents and questions are turned
+into vectors by one of three providers, chosen by environment variables on the engine
+(not in the portal; restart the engine after changing them):
+
+| Provider | Settings | Notes |
+|---|---|---|
+| Gemini (default) | `GOOGLE_API_KEY` | `gemini-embedding-001`. |
+| Azure OpenAI | `EMBED_PROVIDER=azure`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY` | Deployment named by `AZURE_EMBED_DEPLOYMENT` (default `text-embedding-3-small`). |
+| Any OpenAI-compatible server | `EMBED_BASE_URL`, `EMBED_MODEL` | Ollama, vLLM, LM Studio, or a hosted catalog. Calls `POST {EMBED_BASE_URL}/embeddings`. No cloud key needed for a server on this machine or network. |
+
+For the OpenAI-compatible provider:
+
+- `EMBED_BASE_URL` falls back to `OLLAMA_BASE_URL`, so a stack that already points at
+  Ollama needs only `EMBED_MODEL` (for example `nomic-embed-text`, after
+  `ollama pull nomic-embed-text`).
+- Setting `EMBED_MODEL` (with a base URL) selects this provider. `EMBED_PROVIDER`,
+  when set, wins: `openai_compatible` names it explicitly, `google` or `azure` keep
+  the others. The choice does not depend on which cloud keys are present, so adding a
+  Gemini key for a chat model later does not move the knowledge bases to Gemini.
+- A hosted server needs a key. It is read from the environment variable **named** by
+  `EMBED_API_KEY_ENV` (default `EMBED_API_KEY`), so the key itself never sits in a
+  setting the portal shows.
+- **Width.** The knowledge column is 1536 numbers wide and the memory column 768. A
+  model's own width is checked the first time it is used for each. Equal: stored as
+  is. Narrower (`nomic-embed-text` is 768): padded with zeros, which leaves every
+  cosine similarity exactly as it was. Wider: the engine asks the server for the
+  column's width (`dimensions`); if the server does not shorten the vectors, the call
+  fails with a message naming the model and both widths, and nothing is stored or
+  searched. The engine never cuts a vector itself.
+- **Match threshold.** `KB_MATCH_THRESHOLD` (default 0.4 here) was measured on Gemini.
+  A local model may score related text lower; if questions the documents answer come
+  back as "nothing covers this", lower it and restart.
+
+When no provider is usable (no `GOOGLE_API_KEY`, no endpoint), the list and detail
+pages say what to set, the **Upload** button is disabled, and `POST …/upload` answers
+with the same message without staging a page or starting a job.
+
+**Changing the embedding model is a migration, not a setting.** Vectors from two
+models cannot be compared, and a search never errors: it returns the wrong passages or
+none. To move a corpus, run the re-embed script with the NEW settings in its
+environment, then leave them set:
+
+```bash
+EMBED_BASE_URL=http://127.0.0.1:11434/v1 EMBED_MODEL=nomic-embed-text \
+    python -m scripts.reembed --target kb --apply      # then --target memory
+```
+
+It is a dry run without `--apply`, can be re-run after an interruption, and stops
+before writing anything when the model does not fit the column. To catch a corpus that
+was left behind, each uploaded-files source records the model that wrote its vectors
+in `config.embedded_with` (`provider:model`), set by the first upload and by the
+re-embed script. When that differs from the model in force and the source has
+passages, the list shows **Needs re-embedding**, the detail page explains why and
+gives the command, and uploads are refused (adding passages from a second model would
+mix two spaces in one search). A source created before this record existed has none
+and is not flagged.
 
 **Segmentation & bulk ingestion** — documentation lives in the shared,
 source-scoped pgvector tables (`ai_kb_pages` / `ai_kb_embeddings`, in the **AI/config

@@ -161,6 +161,30 @@ def resolve_people(main_client: Any, ids: Iterable[Optional[str]]) -> Dict[str, 
     return out
 
 
+def label_api_key_actors(people: Dict[str, Dict[str, Any]], client: Any) -> Dict[str, Dict[str, Any]]:
+    """Name the actors that are API keys, in place.
+
+    A change made over the MCP server with an API key is recorded with the
+    key's own id as the actor (admin_mcp/auth.py), which `public.user` knows
+    nothing about. Without this the log would say "Unknown user"; with it, it
+    says which key. Best effort: a failed lookup leaves the labels as they are.
+    """
+    unknown = [i for i, p in people.items()
+               if _is_uuid(i) and not p.get("is_system") and not p.get("email")
+               and str(p.get("label") or "").startswith("Unknown user")]
+    if not unknown or client is None:
+        return people
+    try:
+        found = _rows(client.table("api_keys").select("id, name, key_prefix").in_("id", unknown))
+    except Exception:  # noqa: BLE001
+        return people
+    for row in found:
+        if isinstance(row, dict) and str(row.get("id")) in people:
+            people[str(row["id"])] = {"label": f"API key: {row.get('name') or row.get('key_prefix')}",
+                                      "email": None, "is_system": False, "is_api_key": True}
+    return people
+
+
 def actor_display(actor_id: Optional[str], people: Mapping[str, Dict[str, Any]],
                   me: Optional[str] = None) -> Dict[str, Any]:
     if not actor_id:
@@ -190,6 +214,8 @@ ENTITY_TYPES: Dict[str, Tuple[str, Optional[str], Optional[str], Tuple[str, ...]
     "agent_profile_skills": ("agent skill", None, None, (), None, "agents"),
     "agent_profile_mcp_servers": ("agent integration", None, None, (), None, "agents"),
     "ai_voice_budgets": ("voice budget", None, None, (), "/admin/voice-budgets", "settings"),
+    "api_keys": ("API key", "api_keys", "id", ("name",), "/admin/api-keys", "settings"),
+    "provider_keys": ("model key", None, None, (), "/admin/model-keys", "settings"),
     "agent_tools": ("tool", "agent_tools", "tool_id", ("display_name", "python_name"),
                     "/admin/tools/{id}", "connections"),
     "agent_mcp_servers": ("integration", "agent_mcp_servers", "mcp_server_id", ("name",),
@@ -233,7 +259,7 @@ AREA_PAGES = {
 # a phrase without `{noun}` is followed by the noun automatically.
 ACTION_VERBS: Dict[str, str] = {
     "create": "created", "update": "updated", "delete": "deleted", "upsert": "saved",
-    "edit": "edited", "set": "set", "archive": "archived", "deprecate": "deprecated",
+    "edit": "edited", "set": "set", "archive": "archived", "revoke": "revoked", "deprecate": "deprecated",
     "fork": "copied", "use_template": "created from a template the", "upload": "uploaded files to",
     "export": "exported", "reveal": "revealed the values of", "run": "ran", "cancel": "cancelled",
     "fire": "started", "due_fire": "ran on schedule", "manual_add": "added",
@@ -272,7 +298,7 @@ WHAT_FILTERS: Dict[str, Tuple[str, Tuple[str, ...], Tuple[str, ...]]] = {
     "knowledge": ("Knowledge", tuple(k for k, v in ENTITY_TYPES.items() if v[5] == "knowledge"), ()),
     "connections": ("Connections", tuple(k for k, v in ENTITY_TYPES.items() if v[5] == "connections"), ()),
     "testing": ("Testing", tuple(k for k, v in ENTITY_TYPES.items() if v[5] == "testing"), ()),
-    "team": ("Team & settings", ("user", "agent_audit_log", "ai_voice_budgets"), ()),
+    "team": ("Team & settings", ("user", "agent_audit_log", "ai_voice_budgets", "api_keys", "provider_keys"), ()),
 }
 
 WHEN_FILTERS: Dict[str, Tuple[str, Optional[int]]] = {

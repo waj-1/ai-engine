@@ -256,7 +256,9 @@ def _models(client, env: str) -> List[Dict[str, Any]]:
 def pick_brain_model(rows: List[Dict[str, Any]]) -> Optional[str]:
     from core.config import AGENT_CONFIG
 
-    if os.getenv("AZURE_OPENAI_API_KEY"):
+    from core.provider_keys import has_key
+
+    if has_key("azure_openai"):
         azure = next((r for r in rows if r.get("provider") == "azure_openai"
                       and r.get("model_string") == "gpt-5-mini"), None)
         if azure:
@@ -353,13 +355,16 @@ def run() -> None:
 
         if not serves_agents_portal():
             return
-        if not (os.getenv("GOOGLE_API_KEY") or os.getenv("AZURE_OPENAI_API_KEY")):
+        from core.provider_keys import has_key
+
+        if not (has_key("google_genai") or has_key("azure_openai")):
             # The demo's brain is a Gemini or Azure OpenAI row (pick_brain_model).
             # Seeded without either key, a fresh install got four "Active"
             # agents in its list that could not answer (2026-11-22). Insert-only,
-            # so they appear on the first boot after a key is set.
-            logger.info("seed_agents_demo: no GOOGLE_API_KEY or AZURE_OPENAI_API_KEY — "
-                        "demo agents not seeded")
+            # so they appear on the first boot after a key is set. A key counts
+            # whether it is in the environment or stored on Settings > Model keys.
+            logger.info("seed_agents_demo: no Gemini or Azure OpenAI key (environment "
+                        "or Settings > Model keys) — demo agents not seeded")
             return
         from core.agent_profile import _default_environment
         from runtime.tools.agents_demo.data import AGENTS

@@ -146,6 +146,15 @@ class CustomRuntimeAgent(RuntimeAgent, BaseStreamingAgent):
 
         try:
             if self.llm is None:
+                if getattr(self, "model_unresolved", False):
+                    # Pinned to the Automatic model and the install has no
+                    # usable model yet (a fresh install with no key and no
+                    # local model): say what to do, in words a new user can act on.
+                    from core.model_resolver import NO_MODEL_MESSAGE
+
+                    logger.info("custom agent %s: no usable model on this install yet", self.slug)
+                    yield {"type": "error", "message": NO_MODEL_MESSAGE}
+                    return
                 logger.error("custom agent %s: profile has no usable model", self.slug)
                 yield {"type": "error", "message": "This agent has no model configured."}
                 return

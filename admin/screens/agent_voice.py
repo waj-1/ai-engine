@@ -617,6 +617,7 @@ def describe_effective_overrides(
     *,
     model_row: Optional[Dict[str, Any]] = None,
     capabilities: Optional[Dict[str, Any]] = None,
+    agent_kind: Optional[str] = None,
 ) -> Dict[str, List[Dict[str, str]]]:
     """`{voice_config key: [{level, text}, …]}` — what actually happens.
 
@@ -643,7 +644,18 @@ def describe_effective_overrides(
     `level` is `"off"` (the value is not used at all), `"warn"` (an incident
     lever is disengaged) or `"info"` (a default worth stating). The caller
     renders; nothing here decides anything.
+
+    `agent_kind` matters for a kind that registers voice defaults or a
+    built-in persona (a generic agent): a blank greeting or persona slug is
+    then a default in use, not a misconfiguration.
     """
+    from runtime.agents.voice_registry import (voice_agent_slug_addressed,
+                                               voice_config_defaults,
+                                               voice_persona_fallback)
+
+    kind_defaults = voice_config_defaults(agent_kind or "")
+    builtin_persona = voice_persona_fallback(agent_kind or "") is not None
+    slug_addressed = voice_agent_slug_addressed(agent_kind or "")
     extra = (model_row or {}).get("extra_config") or {}
     if not isinstance(extra, dict):
         extra = {}
@@ -922,15 +934,31 @@ def describe_effective_overrides(
             "Unset while duplex voice is enabled — every connect raises "
             "LookupError at handshake and the socket closes. This is a "
             "misconfiguration the runtime surfaces loudly rather than defaulting.")
-    if value("enabled") and not str(value("persona_prompt_slug") or "").strip():
-        add("persona_prompt_slug", "warn",
-            "Unset while duplex voice is enabled — the connect has no persona "
-            "to speak and closes.")
-    if value("enabled") and not str(value("greeting_trigger") or "").strip() \
-            and not text_only:
-        add("greeting_trigger", "info",
-            "Blank — the assistant stays silent until the caller speaks first. "
-            "On a phone-shaped deployment that reads as a dead line.")
+    if not str(value("persona_prompt_slug") or "").strip():
+        if builtin_persona:
+            add("persona_prompt_slug", "info",
+                "Blank: this agent speaks with the built-in voice persona, which "
+                "sends every question to the agent and says its answer. Name a "
+                "prompt here only to replace it with your own.")
+        elif value("enabled"):
+            add("persona_prompt_slug", "warn",
+                "Unset while duplex voice is enabled — the connect has no persona "
+                "to speak and closes.")
+    if not str(value("greeting_trigger") or "").strip() and not text_only:
+        if kind_defaults.get("greeting_trigger"):
+            add("greeting_trigger", "info",
+                "Blank: the built-in greeting is used "
+                f"(\"{kind_defaults['greeting_trigger']}\"). Write your own to "
+                "replace it.")
+        elif value("enabled"):
+            add("greeting_trigger", "info",
+                "Blank — the assistant stays silent until the caller speaks first. "
+                "On a phone-shaped deployment that reads as a dead line.")
+    if slug_addressed and not str(value("agent_profile_slug") or "").strip():
+        add("agent_profile_slug", "info",
+            "Blank: this agent answers its own calls. A slug here must be "
+            "another agent of the same kind; one that does not exist refuses "
+            "the call instead of falling back.")
 
     return notes
 
@@ -1302,9 +1330,15 @@ def resolve_voice_pair(
       specialist  the row that supplies the brain (may be None, or == owner)
       viewing     "owner" | "specialist"
     """
+    from runtime.agents.voice_registry import voice_agent_slug_addressed
+
     slug = (profile_row.get("slug") or "").strip()
     kind = profile_row.get("agent_kind")
     own_block = promote_legacy_voice_config(_safe_voice_config(profile_row))
+    # A slug-addressed kind (generic agents): every agent has its own address
+    # and so owns its own voice settings, even when another agent of the kind
+    # borrows it as a brain.
+    self_owned = voice_agent_slug_addressed(str(kind or ""))
 
     siblings: List[Dict[str, Any]] = []
     try:
@@ -1321,7 +1355,7 @@ def resolve_voice_pair(
 
     # Is another row in this kind serving its calls THROUGH this one?
     owner_row: Optional[Dict[str, Any]] = None
-    if slug:
+    if slug and not self_owned:
         for sib in siblings:
             if sib.get("profile_id") == profile_row.get("profile_id"):
                 continue
@@ -1441,7 +1475,9 @@ def load_voice_context(env: str, profile_id: str) -> Optional[Dict[str, Any]]:
         "values": render_values(block),
         "defaults": field_defaults(),
         "notes": describe_effective_overrides(
-            block, model_row=model_row, capabilities=caps),
+            block, model_row=model_row, capabilities=caps,
+            agent_kind=owner.get("agent_kind")),
+        "generic_voice": generic_voice_panel(owner, block, model_row),
         "sections": VOICE_SECTIONS,
         "fields_by_section": {
             sid: fields_for_section(sid) for sid, _t, _b in VOICE_SECTIONS
@@ -1458,6 +1494,52 @@ def load_voice_context(env: str, profile_id: str) -> Optional[Dict[str, Any]]:
         # Derived, never hand-counted: the "N settings" copy drifted twice
         # (38 in the docs while the registry held 40) before it was derived.
         "voice_key_count": len(_VOICE_FIELDS),
+    }
+
+
+def generic_voice_panel(
+    owner: Dict[str, Any], block: Dict[str, Any], model_row: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """What the page shows for an agent called at its own address (a generic
+    agent): where to call it, whether a call can start on THIS server, and
+    the id its calls are metered under. None for every other kind.
+
+    `problem` is the reason a call would be refused right now, in the same
+    words the socket closes with, so a missing realtime key reads as "set
+    this key" here instead of as a failed call.
+    """
+    from runtime.agents.voice_registry import voice_agent_slug_addressed
+
+    kind = str(owner.get("agent_kind") or "")
+    slug = str(owner.get("slug") or "")
+    if not voice_agent_slug_addressed(kind) or not slug:
+        return None
+    from endpoints.agents_v1 import generic_agents_enabled
+    from endpoints.voice_live import agent_budget_id
+    from voice.live.readiness import realtime_problem
+
+    enabled = bool(block.get("enabled"))
+    api_on = generic_agents_enabled()
+    live = bool(owner.get("is_active")) and owner.get("status") in ("active", "specialist")
+    if not api_on:
+        problem = ("The generic agents API is switched off on this server "
+                   "(ENABLE_GENERIC_AGENTS), so this agent has no address to call.")
+    elif not enabled:
+        problem = "Voice is not turned on for this agent."
+    elif not model_row:
+        problem = "No realtime voice model is set for this agent."
+    else:
+        problem = realtime_problem(model_row.get("provider"), model_row.get("extra_config"))
+    return {
+        "path": f"/v1/agents/{slug}/voice",
+        "slug": slug,
+        "profile_id": owner.get("profile_id"),
+        "problem": problem,
+        "can_call": problem is None,
+        # A draft is reached by pinning it; say so rather than let an API
+        # caller wonder why the address refuses.
+        "published": live,
+        "budget_id": agent_budget_id(kind, slug),
     }
 
 

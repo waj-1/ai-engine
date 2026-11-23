@@ -32,6 +32,9 @@
     <div class="row mt-xs agent-pills">
       <span class="chip chip-{{ agent.status.variant }}"><span class="chip-dot"></span>{{ agent.status.label }}</span>
       {% for c in agent.channels %}<span class="chip chip-neutral" title="{{ c.description }}">{{ c.label }}</span>{% endfor %}
+      {# The user-defined category, when the agent has one (links to the list filtered by it). #}
+      {% set _hp = (active_profile if active_profile is defined and active_profile else (header_profile if header_profile is defined else None)) %}
+      {% if _hp and _hp.agent_type_id %}{% for c in agent_type_options() if c.agent_type_id == _hp.agent_type_id %}<a class="chip chip-cat chip-cat-{{ c.color }}" href="/admin/agents?env={{ current_env }}&category={{ c.slug }}" title="Category" data-category-chip><span class="chip-dot"></span>{{ c.display_name }}</a>{% endfor %}{% endif %}
       {% if agent.parent %}<span class="caption">Sub-agent of <a href="/admin/agents?env={{ current_env }}&profile_id={{ agent.parent.id }}">{{ agent.parent.label }}</a></span>{% endif %}
       {% if agent.updated_rel %}<span class="caption">· changed {{ agent.updated_rel }}{% if agent.updated_by_you %} by you{% endif %}</span>{% endif %}
     </div>

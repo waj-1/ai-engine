@@ -1087,6 +1087,17 @@ The classic two-run view (`?a=…&b=…`) shows three header cards (Run A, B−A
 
 ## Voice scenarios — live-call acceptance
 
+**Targeting an agent built in the portal.** A generic agent is called at its own
+address, so a check for one sets **Agent type** `custom` and **Call path**
+`/v1/agents/<slug>/voice` (Advanced). The run connects as the operator who started
+it: their token is sent as the bearer header, only to this engine's own edge (with a
+Target override, pass `Authorization` in the run's headers instead). A `voice_live`
+test suite needs no path: the runner derives the address from the agent's slug and
+pins the profile under test (`admin/services/test_chat.voice_target`), so a draft can
+be tested. The agent's Voice tab also has a **Call** button for a call by hand. In
+`sim` mode no realtime key is needed, but the agent must still have voice turned on
+and a realtime model picked.
+
 Voice-check runs also appear in Testing › **Runs** (newest-first with text runs, a
 **Voice** chip, score = share of checked steps passed against a 100% target, change vs
 the check's previous call; filter **Type: Text tests / Voice checks**, and each check is

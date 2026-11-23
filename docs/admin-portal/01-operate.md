@@ -39,6 +39,22 @@ Answers "how are my agents doing?" for one **period** (last 24 hours / 7 days /
 30 days — the segmented picker at the top drives the whole page) compared with
 the period before it.
 
+**With tracing off.** On an install with no tracing store
+(`core.lmnr_clickhouse.tracing_configured()` is False: `LMNR_DISABLED` set and no
+`LMNR_CLICKHOUSE_URL`) the page does not report an outage. The status strip
+says *Tracing is off on this install, so live statistics are not collected.
+Conversations are saved: open Conversations to read them*; the **Conversations**
+tile shows the count of saved conversations (`ai_chat_sessions`) and links to
+the list, and the other four tiles read *Needs tracing*. In place of the
+per-agent table and **Needs attention** one card says what turning the tracing
+stack on adds (per-agent numbers, the Needs attention list, response times,
+token and cost charts, step-by-step detail) and links to Conversations.
+**Technical details** carries the same note, and the charts' notice reads
+*Tracing is off on this install*. These sections are not rebuilt on Postgres.
+No ClickHouse query is sent (`core.lmnr_clickhouse.query` raises `kind="off"`
+at once and records no failure). What happened in conversations and Voice
+calls have their own sources and are unchanged.
+
 1. **Status strip** — the single place the page says whether its numbers are
    live: *all agents running normally* / *N problems found* / *some statistics are
    delayed* (failure list unavailable) / *live statistics are temporarily
@@ -370,6 +386,57 @@ When the list itself can't be read, one status strip says *Conversations are
 temporarily unavailable — they are still being recorded* (staff Details show the
 ClickHouse cause). The engineering reference below still applies to the list
 query, filters and JSON endpoints.
+
+### With tracing off: the saved chats
+
+`admin/screens/saved_chats.py` · used only when
+`core.lmnr_clickhouse.tracing_configured()` is False (`LMNR_DISABLED` set and no
+`LMNR_CLICKHOUSE_URL`: the local compose stack). With a tracing store configured
+nothing below runs and the screen is exactly as described above.
+
+Every conversation is saved in Postgres whether or not tracing runs, so the
+screen is built from those rows instead of reporting an outage:
+
+- **List** (`saved_chats.build_list_context`) — one row per `ai_chat_sessions`
+  row that was created or active in the period (soft-deleted ones excluded),
+  newest activity first, 100 at most: the agent (for a generic agent, the
+  display name of the agent whose slug the session saved as
+  `metadata.agent_slug`), the channel where the session recorded one
+  (`metadata.channel_slug`), else where it came from (`metadata.source`, e.g.
+  *API*), started / last activity, the message count (counted from
+  `ai_chat_messages`; the stored `message_count` column has no writer), the
+  customer's first message, and an outcome chip: *Needs attention* when a
+  reply failed (`agent_traces.status = 'error'`), else *No problems*.
+- **Filters** — period, agent, channel (only sessions that recorded one match),
+  outcome, and **Search**, which looks in message text and the session title
+  (case-insensitive, the words taken literally). **More filters** is hidden:
+  action used, technical status, one row per reply and background activity are
+  questions only the tracing store can answer.
+- **A note, not a banner** — a neutral strip above the list: *Tracing is off on
+  this install, so this list comes from the saved conversations. Step-by-step
+  detail (timings, each model call) needs the tracing stack.*
+- **Opening one** — the id in the URL hash and in the pane endpoints is the
+  chat **session id** (`#trace=<session id>`); `observability_explorer_handlers`
+  sends each pane to the saved-chats loader. **Conversation**: the messages in
+  order (`observability._persisted_conversation`, the function the
+  tracing-backed transcript reads). An action chip appears where the reply's
+  metadata carries tool calls; a reply saved by `common.chat_session.run_turn`
+  carries the NAMES of the tools it ran (`metadata.tools_used`), shown as a
+  neutral chip that says the result and the sent/received data need tracing.
+  **Technical**: totals for the whole conversation summed from its
+  `agent_traces` rows (tokens in/out, cache, cost, total response time, replies,
+  failed replies, model) and, under *Per reply*, each reply's tokens, response
+  time and model (the turn rows paired with the replies in order; a failed
+  turn's row is skipped because it wrote no reply). **Steps** shows one plain
+  sentence: step-by-step detail is recorded by the tracing stack, which is off.
+  **Call audio** lists the session's recordings as before.
+- **Access.** The same superuser gate, and the same content: the transcript is
+  the saved messages and nothing else, for every agent kind. A kind whose
+  telemetry is exported redacted (`core/sensitive_content.py`) is shown by the
+  tracing-backed screen from these same rows, so nothing appears here that
+  does not appear there.
+- `/admin/sessions/{id}` and `/admin/observability/sessions/{id}` open the saved
+  chat directly.
 
 ### Engineering reference — list query and panes
 

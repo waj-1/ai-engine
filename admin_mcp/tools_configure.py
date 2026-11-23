@@ -23,22 +23,36 @@ logger = logging.getLogger(__name__)
 def list_profiles(env: Env = "staging",
                   agent_kind: Optional[str] = None,
                   status: str = "",
+                  agent_type: Annotated[str, Field(
+                      description="Only agents in this category: a category "
+                                  "slug from agent_types(action='list'), or "
+                                  "'none' for uncategorised agents. '' = no "
+                                  "filter.")] = "",
                   limit: int = 100, offset: int = 0) -> Dict[str, Any]:
     """List agent profiles in an environment (staging|prod), optionally
-    filtered by agent_kind and/or status (active|draft|specialist|archived|
-    template). Returns id, kind, slug, status, model ids, endpoint, served
-    version pin — paged by limit/offset (`total`, `has_more` say what was
-    cut)."""
+    filtered by agent_kind, status (active|draft|specialist|archived|
+    template) and/or category (`agent_type`). Returns id, kind, slug, status,
+    model ids, endpoint, served version pin and `agent_type` (the agent's
+    category slug, or null) — paged by limit/offset (`total`, `has_more` say
+    what was cut)."""
     client = client_for_env(env)
     profiles = list_rows(
         client, "agent_profiles",
         select="profile_id, agent_kind, slug, display_name, environment, "
                "status, is_active, model_main_id, model_light_id, "
-               "endpoint_path, served_version_id",
+               "endpoint_path, served_version_id, agent_type_id",
         filters={"environment": env, "agent_kind": agent_kind,
                  "status": status or None},
         order_by="agent_kind", desc=False, limit=1000,
     )
+    from admin.services import agent_types as _types
+    slug_by_id = {tid: t.get("slug") for tid, t in _types.types_by_id(client).items()}
+    for prof in profiles:
+        prof["agent_type"] = slug_by_id.get(prof.get("agent_type_id"))
+    if agent_type:
+        wanted = _types.resolve_type_id(agent_type, client)
+        profiles = [prof for prof in profiles
+                    if prof.get("agent_type_id") == wanted]
     paged = page(profiles, limit, offset, max_limit=500)
     return {"env": env, "count": len(paged["items"]), "total": paged["total"],
             "offset": paged["offset"], "has_more": paged["has_more"],
@@ -67,7 +81,8 @@ def get_profile(profile_id: str = "", agent_kind: str = "", slug: str = "",
     the flag-on resolver reads — see
     core/agent_profile.py::_fetch_mcp_attachments). The two can disagree
     during the #1222 dark-launch window; `mcp_attachments` is the
-    forward-looking source of truth.
+    forward-looking source of truth. `agent_type` is the agent's
+    user-defined category ({slug, display_name, color}) or null.
 
     `fields` trims the raw `profile` row to the named columns (the row
     carries large JSON blobs — voice_config, memory_config,
@@ -122,7 +137,17 @@ def get_profile(profile_id: str = "", agent_kind: str = "", slug: str = "",
                                        profile.get("model_light_id")) if m],
                           "name"),
         "prompt_pins": profile.get("prompt_version_ids") or {},
+        "agent_type": _agent_type_label(client, profile.get("agent_type_id")),
     }
+
+
+def _agent_type_label(client, agent_type_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The agent's category as {slug, display_name, color}, or None."""
+    if not agent_type_id:
+        return None
+    row = get_row(client, "agent_types", "agent_type_id", agent_type_id)
+    return ({k: row.get(k) for k in ("slug", "display_name", "color")}
+            if row else None)
 
 
 @mcp.tool()
@@ -145,6 +170,12 @@ def update_profile(profile_id: str,
                    data_source_ids: Optional[List[str]] = None,
                    mcp_server_ids: Optional[List[str]] = None,
                    downstream_profile_ids: Optional[List[str]] = None,
+                   agent_type: Annotated[Optional[str], Field(
+                       description="Put the agent in this category: a "
+                                   "category slug from "
+                                   "agent_types(action='list'). '' or 'none' "
+                                   "takes it out of its category. Omit to "
+                                   "leave the category unchanged.")] = None,
                    env: Env = "staging") -> Dict[str, Any]:
     """Update an agent profile's config. Only supplied fields change; list
     fields REPLACE the stored list (to add/remove ONE tool, KB source, MCP
@@ -164,6 +195,11 @@ def update_profile(profile_id: str,
 
     `delegatable`: opt this profile in (or out) of being exposed to its
     parent as an ask_<slug> delegation tool at runtime.
+
+    `agent_type`: the agent's user-defined category, by slug (manage the
+    list with agent_types). Organisational only — it does not change how
+    the agent runs, takes effect at once in every environment's row of the
+    same agent, and needs no promote.
 
     `voice_config` is a FLAT block of voice settings since 2026-08-17 (the
     duplex keys — barge_in_enabled, answer_watchdog_sec, agent_profile_slug,
@@ -232,6 +268,11 @@ def update_profile(profile_id: str,
         "data_source_ids": data_source_ids, "mcp_server_ids": mcp_server_ids,
         "downstream_profile_ids": downstream_profile_ids,
     }.items() if v is not None}
+    if agent_type is not None:
+        # '' / 'none' clears it, so this one cannot ride the "None means not
+        # supplied" filter above. An unknown slug is refused (ValueError).
+        from admin.services.agent_types import resolve_type_id
+        payload["agent_type_id"] = resolve_type_id(agent_type, client_for_env(env))
     if not payload:
         return err("no fields supplied")
     try:
@@ -1155,6 +1196,76 @@ def models(action: Literal["list", "get", "create", "update", "promote"],
 
 @mcp.tool()
 @tool_errors
+async def provider_keys(
+        action: Annotated[Literal["list", "set", "remove", "test"], Field(
+            description="list = where each provider's key comes from; set = "
+                        "store or replace a key; remove = delete a stored key; "
+                        "test = one free call to the provider with the key in use.")],
+        provider: Annotated[str, Field(
+            description="google_genai | openai | anthropic | azure_openai. "
+                        "Required for set, remove and test.")] = "",
+        value: Annotated[str, Field(
+            description="set: the key to store. It is encrypted and never "
+                        "returned by any tool.")] = "",
+        name: Annotated[str, Field(
+            description="'' = the provider's default key. A name stores a second, "
+                        "named credential that a model selects with "
+                        "extra_config.credential.")] = "",
+        env: Env = "staging",
+        confirm: Confirm = False) -> Dict[str, Any]:
+    """Model provider keys stored encrypted (table provider_keys; the portal's
+    Settings > Model keys). A stored key is used before the provider's
+    environment variable (GOOGLE_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY,
+    AZURE_OPENAI_API_KEY). No action ever returns a key: only its hint (last
+    four characters), who set it and when.
+    action: list (per provider: source = portal | environment | none, the
+    stored default key and named credentials; `can_store` is false, with the
+    reason in `problem`, when the server has no SECRET_KEY) | set (provider +
+    value, optional name; refused when SECRET_KEY is unset: a key is never
+    stored as plain text) | remove (provider, optional name, confirm=true;
+    the provider falls back to its environment variable) | test (provider,
+    optional name: asks the provider for its model list and returns
+    {ok, source, detail}, with the provider's own error on failure)."""
+    import asyncio
+
+    from admin.services import provider_keys as service
+    from core import provider_keys as store
+
+    validate_env(env)
+    client = client_for_env(env)
+    if action == "list":
+        return await asyncio.to_thread(service.key_status, env=env, client=client)
+    if not provider.strip():
+        return err("provider is required for set | remove | test",
+                   hint=" | ".join(sorted(store.PROVIDERS)))
+    actor = current_actor()["user_id"]
+    try:
+        if action == "set":
+            row = await asyncio.to_thread(
+                service.set_key, provider, value, actor, name or None, env=env, client=client)
+            return {"stored": True, "key": row}
+        if action == "remove":
+            if not confirm:
+                return not_confirmed(
+                    f"remove the stored {provider} key"
+                    + (f" named {name!r}" if name else "")
+                    + "; the provider falls back to its environment variable, if set")
+            removed = await asyncio.to_thread(
+                service.remove_key, provider, actor, name or None, env=env, client=client)
+            return {"removed": True, "provider": provider, "name": name} if removed else err(
+                "no stored key for this provider" + (f" under the name {name!r}" if name else ""))
+        if action == "test":
+            return await asyncio.to_thread(
+                service.check_key, provider, name or None, env=env, client=client)
+    except store.SecretKeyMissing as exc:
+        return err(str(exc), hint="Nothing was stored. Set SECRET_KEY on the engine and restart it.")
+    except service.ProviderKeyError as exc:
+        return err(str(exc))
+    return err(f"unknown action {action!r}", hint="list | set | remove | test")
+
+
+@mcp.tool()
+@tool_errors
 def voice_budgets(action: Literal["list", "get", "set", "delete"],
                   business_id: str = "",
                   daily_seconds: Optional[int] = None,
@@ -1759,11 +1870,15 @@ def kb_sources(action: Literal["list", "get", "create", "update", "delete",
     confirm=true — detaches from every profile's data_source_ids, then
     hard-deletes) | upload_document (source_id, filename, content — stages
     a page row and queues background chunk/embed ingestion; pgvector
-    sources only)."""
-    from admin.kb_handlers import KB_KINDS, _is_shared_kb
+    sources only; refused with what to set when no embedding model is
+    configured). `list` also returns `embedding`: the model in force."""
+    from admin.kb_handlers import KB_KINDS, _is_shared_kb, embedding_status, upload_blocker
     client = client_for_env(env)
     if action == "list":
-        return {"sources": list_rows(client, "agent_data_sources", limit=200)}
+        return {"sources": list_rows(client, "agent_data_sources", limit=200),
+                # The model that makes documents searchable on THIS engine,
+                # and what to set when there is none.
+                "embedding": embedding_status()}
     if action == "get":
         row = get_row(client, "agent_data_sources", "source_id", source_id)
         return {"source": row} if row else err("source not found")
@@ -1829,6 +1944,9 @@ def kb_sources(action: Literal["list", "get", "create", "update", "delete",
         if src.get("kind") != "pgvector":
             return err("uploads only apply to pgvector sources")
         cfg = src.get("config") or {}
+        blocker = upload_blocker(client, source_id, cfg)
+        if blocker:
+            return err(blocker)
         pages_table = cfg.get("pages_table", "ai_kb_pages")
         embeddings_table = cfg.get("table", "ai_kb_embeddings")
         page = {"title": title or filename, "type": page_type,
@@ -2043,6 +2161,11 @@ def mentionables(profile_id: str, env: Env = "staging") -> Dict[str, Any]:
 def templates(action: Literal["list", "get", "use"] = "list",
               template_id: str = "", display_name: str = "",
               slug: str = "", as_subagent_of: str = "", model_id: str = "",
+              agent_type: Annotated[str, Field(
+                  description="use: put the new agent (and the sub-agents "
+                              "made with it) in this category — a category "
+                              "slug from agent_types(action='list'). '' = "
+                              "uncategorised.")] = "",
               env: Env = "staging") -> Dict[str, Any]:
     """Protected catalog of forkable agent templates ("architecture molds").
     action: list (browse the molds) | get (template_id → full config) |
@@ -2051,7 +2174,9 @@ def templates(action: Literal["list", "get", "use"] = "list",
     as_subagent_of=<profile_id> wires the new agent into that parent's
     sub-agents; optional model_id sets the new agent's model instead of the
     template's; slug, left blank where generic agents are on, is made from
-    the name — "Support desk" -> support-desk). Templates are read-only —
+    the name — "Support desk" -> support-desk; optional agent_type=<category
+    slug> files the new agent under that category, and an unknown category
+    refuses the call before anything is created). Templates are read-only —
     there is no create/edit/delete."""
     client = client_for_env(env)
     if action == "list":
@@ -2073,12 +2198,101 @@ def templates(action: Literal["list", "get", "use"] = "list",
                     template_id=template_id, display_name=display_name,
                     slug=slug or None, as_subagent_of=as_subagent_of or None,
                     model_id=model_id or None,
+                    agent_type=agent_type or None,
                     actor_user_id=current_actor()["user_id"])
         except TemplateNotFoundError:
             return err("not a template", hint="templates action=list shows valid ids")
         except ProfileNotFoundError as exc:
             return err(str(exc))
     return err(f"unknown action {action!r}", hint="list | get | use")
+
+
+@mcp.tool()
+@tool_errors
+def agent_types(
+        action: Annotated[Literal["list", "create", "update", "delete"], Field(
+            description="list | create | update | delete.")] = "list",
+        agent_type: Annotated[str, Field(
+            description="The category to update or delete: its slug (or its "
+                        "agent_type_id).")] = "",
+        display_name: Annotated[Optional[str], Field(
+            description="create: the category's name (required). update: "
+                        "rename it; the slug stays the same.")] = None,
+        slug: Annotated[str, Field(
+            description="create only: the category's stable identifier "
+                        "(lowercase letters, digits, hyphens). Blank = made "
+                        "from the name. It cannot be changed later.")] = "",
+        description: Annotated[Optional[str], Field(
+            description="What kind of agents belong in the category "
+                        "(optional, at most 280 characters).")] = None,
+        color: Annotated[Optional[str], Field(
+            description="Chip colour, one of: slate, teal, blue, violet, "
+                        "pink, red, amber, green (default slate).")] = None,
+        sort_order: Annotated[Optional[int], Field(
+            description="Position in pickers and lists, ascending. create: "
+                        "default is last. update: set it to move the "
+                        "category.")] = None,
+        confirm: Confirm = False,
+        env: Env = "staging") -> Dict[str, Any]:
+    """User-defined agent categories ("Support", "Sales", "Internal
+    tools"): groups for the Agents list, its filter and reporting. A
+    category is data, not an agent kind — it never changes how an agent
+    runs, is not part of a promote snapshot, and a fresh install has none.
+    action: list (every category in order, each with `agent_count`) |
+    create (display_name; optional slug, description, color, sort_order) |
+    update (agent_type + any of display_name, description, color,
+    sort_order) | delete (agent_type, confirm=true — the agents in it are
+    NOT deleted, they become uncategorised; without confirm it reports how
+    many agents that is). Put an agent in a category with
+    update_profile(agent_type=...) or templates(action="use",
+    agent_type=...); filter with list_profiles(agent_type=...). Mirrors the
+    portal's Agents › Categories screen."""
+    from admin.services import agent_types as svc
+    client = client_for_env(env)
+    actor_id = current_actor()["user_id"]
+    with use_env(validate_env(env)):
+        if action == "list":
+            found = svc.list_types(client)
+            return {"count": len(found), "agent_types": found,
+                    "colors": list(svc.PALETTE)}
+        if action == "create":
+            if not (display_name or "").strip():
+                return err("create needs display_name")
+            row = svc.create_type(
+                display_name=display_name, slug=slug,
+                description=description or "", color=color or "",
+                sort_order=sort_order, actor_user_id=actor_id, client=client)
+            return {"created": True, "agent_type": row}
+        if action in ("update", "delete") and not agent_type:
+            return err(f"{action} needs agent_type (the category's slug)",
+                       hint="agent_types action=list shows the slugs")
+        if action == "update":
+            changes = {k: v for k, v in {
+                "display_name": display_name, "description": description,
+                "color": color, "sort_order": sort_order}.items()
+                if v is not None}
+            if slug:
+                return err("a category's slug cannot be changed; rename it "
+                           "with display_name")
+            row = svc.update_type(agent_type, changes,
+                                  actor_user_id=actor_id, client=client)
+            return {"updated": True, "changed": sorted(changes),
+                    "agent_type": row}
+        if action == "delete":
+            target = svc.get_type(agent_type, client)
+            count = svc.agent_counts(client).get(target["agent_type_id"], 0)
+            if not confirm:
+                return not_confirmed(
+                    f"delete the category {target['slug']!r}; {count} agent"
+                    f"{'' if count == 1 else 's'} in it would become "
+                    "uncategorised (no agent is deleted)",
+                    agents_uncategorised=count)
+            out = svc.delete_type(agent_type, actor_user_id=actor_id,
+                                  client=client)
+            return {"deleted": True, "agent_type": out["deleted"]["slug"],
+                    "agents_uncategorised": out["agents_uncategorised"]}
+    return err(f"unknown action {action!r}",
+               hint="list | create | update | delete")
 
 
 # ---------------------------------------------------------------------------

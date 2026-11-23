@@ -1,4 +1,5 @@
-"""The generic agent API: `POST /v1/agents/{slug}/chat`.
+"""The generic agent API: `POST /v1/agents/{slug}/chat` and
+`WS /v1/agents/{slug}/voice`.
 
 One route for every `agent_kind='custom'` profile (runtime/agents/custom.py),
 addressed by the profile's slug — so creating an agent in the portal or over
@@ -11,12 +12,19 @@ OFF by default. The route answers only where `ENABLE_GENERIC_AGENTS=1`, and
 an operator turns it on. It is also 404'd on every scoped build by
 `main.deployment_gate` (the `/v1/` entry, core.deployment.blocked_path_prefixes).
 
-Auth, for now: a signature-verified superuser token — the same trust boundary
-as the admin portal and the admin MCP server (`admin.auth.resolve_superuser`).
+Auth: `Authorization: Bearer <token>`, where the token is one of
+
+- a **portal-issued API key** (`wae_...`, Settings > API keys) with the `chat`
+  or `admin` scope: `core/api_keys.py`. The turn runs AS THE KEY: its row id
+  is the session's `user_id`, so a key can list, continue and read only the
+  conversations it started, and two keys never see each other's;
+- a signature-verified **superuser token**, the same trust boundary as the
+  admin portal (`admin.auth.resolve_superuser`). Unchanged; it is how the
+  portal's Test panel and the eval runners call this route.
+
 A custom agent can be attached to any MCP server or tool an operator
-configures, and portal-issued API keys with their own scopes do not exist yet;
-until they do, "anyone holding any valid login may call any agent by slug" is
-not a boundary worth shipping. API keys replace this check.
+configures, so "anyone holding any valid login may call any agent by slug" is
+not a boundary worth shipping: a caller needs a key someone issued on purpose.
 """
 from __future__ import annotations
 
@@ -25,7 +33,7 @@ import logging
 import os
 from typing import Any, AsyncGenerator, Dict, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request, WebSocket
 from pydantic import BaseModel, Field
 
 from common.sse import sse_response
@@ -57,12 +65,17 @@ class AgentChatRequest(BaseModel):
 
 
 async def _require_caller(authorization: Optional[str]) -> Dict[str, Any]:
-    if not authorization or not authorization.lower().startswith("bearer "):
+    from core import api_keys
+
+    is_bearer, token = api_keys.split_bearer(authorization)
+    if not is_bearer:
         raise HTTPException(status_code=401, detail="Missing bearer token")
+    if api_keys.looks_like_api_key(token):
+        return await api_keys.authenticate(token, api_keys.SCOPE_CHAT)
     from admin.auth import resolve_superuser
 
     # Synchronous Supabase round trip: never inline on the event loop.
-    return await asyncio.to_thread(resolve_superuser, authorization.split(" ", 1)[1].strip())
+    return await asyncio.to_thread(resolve_superuser, token)
 
 
 @router.post("/agents/{slug}/chat")
@@ -118,4 +131,54 @@ async def agent_chat(
         trace_name="custom.agent",
         trace_attributes=root_span_attrs(request, agent_kind=CUSTOM_AGENT_KIND,
                                          session_id=body.session_id),
+    )
+
+
+@router.websocket("/agents/{slug}/voice")
+async def agent_voice(
+    websocket: WebSocket,
+    slug: str,
+    sessionId: Optional[str] = Query(None),
+    locale: Optional[str] = Query(None),
+    provider: Optional[str] = Query(None),
+    simRun: Optional[str] = Query(None),
+    profileId: Optional[str] = Query(None),
+):
+    """A duplex voice call with the agent named `slug`.
+
+    The wire protocol and the whole call are the shared voice handler's
+    (`endpoints/voice_live.py`, `voice/live/protocol.py`); this route only
+    says WHICH agent and WHO may call. Same gates as the chat route: off
+    unless `ENABLE_GENERIC_AGENTS=1`, never on a scoped build, and the caller
+    check is `_require_caller`. A browser cannot set a header on a WebSocket,
+    so a caller without an `Authorization` header sends
+    `{"type": "auth", "token": "..."}` as its first frame.
+
+    `profileId` asks for a draft copy of this agent (the portal's test call);
+    it is honoured for an operator only.
+    """
+    import re
+
+    from core.deployment import active_scope
+
+    if (not generic_agents_enabled() or not re.match(_SLUG_PATTERN, slug)
+            or active_scope() is not None):
+        # Closed before accept: the handshake fails as if no such route.
+        await websocket.close(code=1008)
+        return
+
+    from endpoints.voice_live import VoiceRoute, serve_voice_route
+    from runtime.agents.custom import CUSTOM_AGENT_KIND
+
+    pin = (profileId or "").strip()
+    await serve_voice_route(
+        websocket,
+        VoiceRoute(
+            agent_slug=slug,
+            # Looked up at call time so the caller check stays the chat route's.
+            authenticate=lambda authorization: _require_caller(authorization),
+            profile_pin=pin if re.fullmatch(r"[0-9a-fA-F-]{32,36}", pin) else None,
+        ),
+        agent_kind=CUSTOM_AGENT_KIND,
+        session_id=sessionId, locale=locale, provider=provider, sim_run=simRun,
     )

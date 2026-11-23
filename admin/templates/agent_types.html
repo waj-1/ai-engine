@@ -1,0 +1,156 @@
+{% extends "_base.html" %}
+{# /admin/agent-types — Agents › Categories. User-defined groups for agents:
+   create, rename, recolour, reorder, delete. A category is data, not an
+   agent kind, and never changes how an agent runs. Rules live in
+   admin/services/agent_types.py; routes in admin/agent_type_handlers.py.
+   Dialogs open through agents.js ([data-open-dialog] / [data-close-dialog]). #}
+{% from "_components/tabs.html" import tabs %}
+{% from "_components/callout.html" import alert, hint_text %}
+{% block title %}Categories · Agents · {{ brand().title }}{% endblock %}
+{% block page_title %}Categories{% endblock %}
+{% block page_subtitle %}Your own groups for agents, such as Support, Sales or Internal tools.{% endblock %}
+{% block content %}
+{{ tabs([('agents', 'Agents', '/admin/agents?env=' ~ current_env),
+         ('models', 'Models', '/admin/agents?tab=models&env=' ~ current_env),
+         ('templates', 'Templates', '/admin/templates?env=' ~ current_env),
+         ('categories', 'Categories', '/admin/agent-types?env=' ~ current_env)], 'categories') }}
+
+{% if error %}
+<div class="mb-m">{% call alert('error') %}<strong>Could not save:</strong> {{ error }}{% endcall %}</div>
+{% elif notice %}
+<div class="mb-m" data-flash>{% call alert('success') %}{{ notice }}{% endcall %}</div>
+{% endif %}
+{% if load_error %}
+<div class="mb-m">{% call alert('error') %}Couldn't load the categories: {{ load_error }}{% endcall %}</div>
+{% endif %}
+
+{% macro color_picker(selected) -%}
+<fieldset class="cat-colors">
+  <legend class="field-label">Colour</legend>
+  <div class="chip-row">
+    {% for c in palette %}
+    <label class="cat-color">
+      <input type="radio" name="color" value="{{ c }}" {% if c == selected %}checked{% endif %}>
+      <span class="chip chip-cat chip-cat-{{ c }}"><span class="chip-dot"></span>{{ c|capitalize }}</span>
+    </label>
+    {% endfor %}
+  </div>
+</fieldset>
+{%- endmacro %}
+
+<div class="agents-toolbar-row">
+  <span class="caption">{{ categories|length }} categor{{ 'y' if categories|length == 1 else 'ies' }}</span>
+  <button type="button" class="primary" data-open-dialog="dlg-new-category">New category</button>
+</div>
+
+<section class="section">
+  <p class="caption" style="max-width:760px;">
+    A category only groups agents: use it to filter the Agents list and to see at a glance what each agent is for.
+    It does not change what an agent says or does, and changes here show at once, with nothing to publish again.
+  </p>
+  {% if categories %}
+  <div class="table-wrap mt-m">
+    <table class="table" data-categories-table>
+      <thead><tr>
+        <th>Category</th><th>Description</th><th class="num">Agents</th><th>Order</th><th><span class="sr-only">Actions</span></th>
+      </tr></thead>
+      <tbody>
+        {% for c in categories %}
+        <tr data-category-row="{{ c.slug }}">
+          <td>
+            <span class="chip chip-cat chip-cat-{{ c.color }}"><span class="chip-dot"></span>{{ c.display_name }}</span>
+            <div class="technical">{{ c.slug }}</div>
+          </td>
+          <td class="caption">{{ c.description or '' }}</td>
+          <td class="num">
+            {% if c.agent_count %}<a href="/admin/agents?env={{ current_env }}&category={{ c.slug }}">{{ c.agent_count }}</a>{% else %}0{% endif %}
+          </td>
+          <td class="nowrap">
+            <form method="post" action="/admin/agent-types/{{ c.agent_type_id }}/move?env={{ current_env }}" style="display:inline;margin:0;">
+              <input type="hidden" name="direction" value="up">
+              <button type="submit" class="ghost small" aria-label="Move {{ c.display_name }} up" {% if loop.first %}disabled{% endif %}>↑</button>
+            </form>
+            <form method="post" action="/admin/agent-types/{{ c.agent_type_id }}/move?env={{ current_env }}" style="display:inline;margin:0;">
+              <input type="hidden" name="direction" value="down">
+              <button type="submit" class="ghost small" aria-label="Move {{ c.display_name }} down" {% if loop.last %}disabled{% endif %}>↓</button>
+            </form>
+          </td>
+          <td class="nowrap">
+            <button type="button" class="ghost small" data-open-dialog="dlg-edit-{{ c.agent_type_id }}">Edit</button>
+            <button type="button" class="ghost small" data-open-dialog="dlg-delete-{{ c.agent_type_id }}">Delete</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state mt-m">No categories yet. Add one to start grouping your agents.
+    <button type="button" class="primary" data-open-dialog="dlg-new-category">New category</button></div>
+  {% endif %}
+</section>
+
+<dialog id="dlg-new-category" class="dialog" aria-labelledby="dlg-new-category-title">
+  <form method="post" action="/admin/agent-types?env={{ current_env }}" class="stack-m">
+    <h2 id="dlg-new-category-title">New category</h2>
+    <label class="field">Name
+      <input name="display_name" required maxlength="60" placeholder="e.g. Support">
+    </label>
+    <label class="field"><span class="field-label">Description <span class="muted">(optional)</span></span>
+      <input name="description" maxlength="280" placeholder="What kind of agents belong here">
+    </label>
+    {{ color_picker(default_color) }}
+    <details class="advanced">
+      <summary><span class="h3">Advanced</span></summary>
+      <label class="field mt-s"><span class="field-label">Technical name (slug) <span class="muted">(optional)</span></span>
+        <input name="slug" placeholder="e.g. support" pattern="[a-z][a-z0-9-]*" maxlength="48">
+      </label>
+      {{ hint_text('Leave blank to make it from the name. It is how an assistant refers to the category, and it stays the same when you rename the category.') }}
+    </details>
+    <div class="row end">
+      <button type="button" class="ghost" data-close-dialog>Cancel</button>
+      <button type="submit" class="primary">Add category</button>
+    </div>
+  </form>
+</dialog>
+
+{% for c in categories %}
+<dialog id="dlg-edit-{{ c.agent_type_id }}" class="dialog" aria-labelledby="dlg-edit-{{ c.agent_type_id }}-title">
+  <form method="post" action="/admin/agent-types/{{ c.agent_type_id }}/update?env={{ current_env }}" class="stack-m">
+    <h2 id="dlg-edit-{{ c.agent_type_id }}-title">Edit category</h2>
+    <label class="field">Name
+      <input name="display_name" required maxlength="60" value="{{ c.display_name }}">
+    </label>
+    <label class="field"><span class="field-label">Description <span class="muted">(optional)</span></span>
+      <input name="description" maxlength="280" value="{{ c.description or '' }}">
+    </label>
+    {{ color_picker(c.color) }}
+    <p class="caption">Technical name: <code>{{ c.slug }}</code> (does not change).</p>
+    <div class="row end">
+      <button type="button" class="ghost" data-close-dialog>Cancel</button>
+      <button type="submit" class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-delete-{{ c.agent_type_id }}" class="dialog" aria-labelledby="dlg-delete-{{ c.agent_type_id }}-title">
+  <form method="post" action="/admin/agent-types/{{ c.agent_type_id }}/delete?env={{ current_env }}" class="stack-m">
+    <h2 id="dlg-delete-{{ c.agent_type_id }}-title">Delete “{{ c.display_name }}”?</h2>
+    <p data-delete-impact>
+      {% if c.agent_count %}
+      <strong>{{ c.agent_count }} agent{{ '' if c.agent_count == 1 else 's' }}</strong>
+      {{ 'is' if c.agent_count == 1 else 'are' }} in this category. {{ 'It' if c.agent_count == 1 else 'They' }}
+      will not be deleted or changed: {{ 'it' if c.agent_count == 1 else 'they' }} will just have no category.
+      {% else %}
+      No agent is in this category, so nothing else changes.
+      {% endif %}
+    </p>
+    <div class="row end">
+      <button type="button" class="ghost" data-close-dialog>Cancel</button>
+      <button type="submit" class="danger">Delete category</button>
+    </div>
+  </form>
+</dialog>
+{% endfor %}
+<script src="/admin/static/agents.js?v={{ asset_version }}" defer></script>
+{% endblock %}

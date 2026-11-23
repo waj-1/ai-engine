@@ -38,7 +38,7 @@ def test_boot_seeder_registry_shape():
     a typo in _BOOT_SEEDERS would otherwise only surface as a boot-time
     warning."""
     mods = _seeder_modules()
-    assert len(main_mod._BOOT_SEEDERS) == 19
+    assert len(main_mod._BOOT_SEEDERS) == 20
     for path, mod in mods.items():
         assert callable(getattr(mod, "run", None)), f"{path} has no run()"
     # The incident seeder is registered, after the ones that used to shadow it.

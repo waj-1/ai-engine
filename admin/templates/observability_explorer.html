@@ -205,6 +205,8 @@
     <button type="submit">Search</button>
     <span class="cv-spacer"></span>
     <button type="button" class="ghost" onclick="OX.exportCsv()">Export CSV</button>
+    {# The saved-chats list (tracing off) cannot answer these: hidden, not ignored. #}
+    {% if not saved_chats %}
     <details class="cv-more" {% if more_filters_active %}open{% endif %}>
       <summary>More filters</summary>
       <div class="cv-more-body">
@@ -237,9 +239,20 @@
         </label>
       </div>
     </details>
+    {% endif %}
   </form>
 
-  {% if list_unavailable %}
+  {% if saved_chats and list_unavailable %}
+  <div class="status-strip status-down" role="status">
+    <span class="status-dot" aria-hidden="true"></span>
+    <span class="status-text">{{ list_detail }}</span>
+  </div>
+  {% elif saved_chats %}
+  <div class="status-strip status-off" role="note" data-testid="saved-chats-note">
+    <span class="status-dot" aria-hidden="true"></span>
+    <span class="status-text">{{ saved_chats_note }}</span>
+  </div>
+  {% elif list_unavailable %}
   <div class="status-strip status-down" role="status">
     <span class="status-dot" aria-hidden="true"></span>
     <span class="status-text">Conversations are temporarily unavailable — they are still being recorded. Try again in a few minutes.</span>
@@ -546,6 +559,13 @@
 
   // ---------------- Conversation view ----------------
   function actionChip(t) {
+    if (t.name_only) {
+      // Saved chat, tracing off: only the action's name was kept.
+      return '<details class="cv-action"><summary><span class="cv-mark" aria-hidden="true">•</span>' +
+        escapeHtml(t.label || t.name || "Action") + '</summary><div class="cv-action-body">' +
+        'The agent ran this action. Whether it succeeded, and what it sent and received, is recorded by the tracing stack, which is off on this install.' +
+        '<div class="technical">' + escapeHtml(t.name || "") + '</div></div></details>';
+    }
     const kind = t.is_error ? "is-err" : (t.is_handoff ? "is-handoff" : "is-ok");
     const mark = t.is_error ? "✕" : (t.is_handoff ? "→" : "✓");
     const label = escapeHtml(t.label || t.name || "Action");
@@ -646,7 +666,8 @@
       return;
     }
     const t = data.trace, sess = data.session;
-    let h = '<h4 class="advanced-h">This reply (trace)</h4><div class="ox-kv-grid">' +
+    const saved = !!data.saved_chat;
+    let h = '<h4 class="advanced-h">' + (saved ? 'This conversation (all replies)' : 'This reply (trace)') + '</h4><div class="ox-kv-grid">' +
       _kv("Errors recorded", t.status === "error" ? "Yes" : "No") +
       _kv("Duration", fmtSec(t.duration_ms)) +
       _kv("Tokens in", _fmtInt(t.input_tokens)) +
@@ -655,8 +676,10 @@
       _kv("Cache read", _fmtInt(t.cache_read_tokens)) +
       _kv("Cache write", _fmtInt(t.cache_creation_tokens)) +
       _kv("Cache hit", (t.input_tokens ? Math.round(100 * (t.cache_read_tokens || 0) / t.input_tokens) + "%" : "—")) +
-      _kv("Actions", _fmtInt(data.tool_calls)) +
-      _kv("Trace id", t.id) +
+      (saved ? _kv("Replies", _fmtInt(t.replies)) + _kv("Failed replies", _fmtInt(t.failed_replies)) +
+                 _kv("Model", (t.models || []).join(", "))
+             : _kv("Actions", _fmtInt(data.tool_calls))) +
+      _kv(saved ? "Conversation id" : "Trace id", t.id) +
       '</div>';
     if (sess) {
       h += '<h4 class="advanced-h">Chat session</h4><div class="ox-kv-grid">' +
@@ -780,12 +803,14 @@
   function renderRaw(data) {
     const root = document.getElementById("ox-raw");
     const turns = (data && data.turns) || [];
-    const rows = turns.filter(function (t) { return t.role === "assistant" && (t.tokens != null || t.reasoning || t.cache_read); });
+    const rows = turns.filter(function (t) { return t.role === "assistant" && (t.tokens != null || t.reasoning || t.cache_read || t.latency_ms != null); });
     if (!rows.length) { root.innerHTML = ""; return; }
     root.innerHTML = '<h4 class="advanced-h">Per reply</h4>' + rows.map(function (t) {
       return '<div class="ox-raw-turn"><div class="caption num">' + escapeHtml(fmtClockTime(t.ts)) +
         (t.tokens != null ? ' · ' + Number(t.tokens).toLocaleString() + ' tokens' : '') +
-        (t.cache_read ? ' · ' + Number(t.cache_read).toLocaleString() + ' cached' : '') + '</div>' +
+        (t.cache_read ? ' · ' + Number(t.cache_read).toLocaleString() + ' cached' : '') +
+        (t.latency_ms != null ? ' · ' + fmtSec(t.latency_ms) : '') +
+        (t.model ? ' · ' + escapeHtml(t.model) : '') + '</div>' +
         (t.reasoning ? '<details><summary class="caption">Model output (raw)</summary><pre class="ox-pre">' + escapeHtml(t.reasoning) + '</pre></details>' : '') +
         '</div>';
     }).join("");

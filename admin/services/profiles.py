@@ -121,6 +121,9 @@ ALLOWED_PROFILE_FIELDS = {
     "data_source_ids",
     "mcp_server_ids",
     "downstream_profile_ids",
+    # The agent's user-defined category (admin/services/agent_types.py), or
+    # None for uncategorised. Organisational only: the runtime never reads it.
+    "agent_type_id",
 }
 
 # Fields copied verbatim from the source row into a fork. Anything not in
@@ -154,6 +157,8 @@ _FORK_COPY_FIELDS = (
     "escalation_policy",
     "additional_agent_kinds",
     "is_active",
+    # A copy of an agent starts in the same category as the original.
+    "agent_type_id",
 )
 
 
@@ -256,7 +261,24 @@ def update_profile_row(*, profile_id: str, payload: Dict[str, Any],
                 "— deactivate or archive it before activating this one"
             )
 
+    # A category must exist before an agent is put in it. Checked here, not
+    # left to the foreign key, so the caller gets a sentence instead of a
+    # constraint name (and so it holds where the constraint is missing).
+    if payload.get("agent_type_id"):
+        found = _safe_list(
+            client.table("agent_types").select("agent_type_id")
+            .eq("agent_type_id", payload["agent_type_id"]).limit(1).execute()
+        )
+        if not found:
+            raise ValueError(f"no category with id {payload['agent_type_id']!r}")
+
     client.table("agent_profiles").update(payload).eq("profile_id", profile_id).execute()
+    if "agent_type_id" in payload:
+        # The category is about the agent, not one environment's row: its
+        # promoted sibling follows at once, with no re-promote.
+        from admin.services.agent_types import sync_profile_siblings
+
+        sync_profile_siblings(client, before, payload["agent_type_id"])
     invalidate_profile_loader(before["agent_kind"], before["environment"])
     if payload.get("environment") and payload["environment"] != before["environment"]:
         invalidate_profile_loader(before["agent_kind"], payload["environment"])

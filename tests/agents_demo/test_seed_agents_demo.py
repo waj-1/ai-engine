@@ -212,3 +212,33 @@ def test_nothing_is_seeded_without_a_key_the_demo_can_run_on(db, monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "k")
     seeder.run()
     assert len(_profiles(db)) == 4
+
+
+def test_a_key_stored_in_the_portal_counts_as_a_key(db, monkeypatch):
+    """"Has a key" means the same thing at boot as it does when a model is
+    built: a key stored on Settings > Model keys, or the variable."""
+    from core import provider_keys
+
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+    stored = {}
+    monkeypatch.setattr(provider_keys, "stored_key",
+                        lambda provider, name="": stored.get(provider_keys.canonical_provider(provider)))
+    seeder.run()
+    assert _profiles(db) == []
+    stored["google_genai"] = "a-key-entered-in-the-portal"
+    seeder.run()
+    assert len(_profiles(db)) == 4
+
+
+def test_brain_model_prefers_azure_when_its_key_is_stored_in_the_portal(monkeypatch):
+    from core import provider_keys
+
+    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+    rows = [{"model_id": "g", "provider": "google_genai", "model_string": "gemini-sample", "name": "G"},
+            {"model_id": "az", "provider": "azure_openai", "model_string": "gpt-5-mini", "name": "A"}]
+    monkeypatch.setattr(provider_keys, "stored_key", lambda provider, name="": None)
+    assert seeder.pick_brain_model(rows) != "az"
+    monkeypatch.setattr(provider_keys, "stored_key",
+                        lambda provider, name="": "k" if provider == "azure_openai" else None)
+    assert seeder.pick_brain_model(rows) == "az"

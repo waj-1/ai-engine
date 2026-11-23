@@ -34,6 +34,10 @@ You can usually leave **Advanced** as it is.
 5. Click **Upload**. A progress note appears while the file is read; the page refreshes when it's done, usually within a minute.
 6. Your document appears in the list below, with the number of **Passages** the agent can search.
 
+If the page says **Documents cannot be added or searched yet**, the engine has no embedding model set up. The message names the settings your portal administrator needs to add; **Upload** works once they are in place.
+
+If it says **This knowledge base needs re-embedding**, the engine's embedding model was changed after these documents were added, and the agent can no longer find them reliably. Your portal administrator fixes this with the command shown in the message; nothing needs uploading again.
+
 ## Check what's in it
 
 The list on a knowledge base page is everything the agent can find there. The numbers at the top show how many documents and searchable passages it holds. If a document shows 0 passages, upload it again.

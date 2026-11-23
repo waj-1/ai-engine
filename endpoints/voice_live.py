@@ -31,7 +31,8 @@ import time
 import unicodedata
 import uuid
 from urllib.parse import urlsplit
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
@@ -42,7 +43,10 @@ from core.prompt_resolver import PromptResolver
 from runtime.agents.voice_registry import (
     VoiceCredentialRefused,
     voice_agent_requires_auth,
+    voice_agent_slug_addressed,
     voice_client_context_keys,
+    voice_config_defaults,
+    voice_persona_fallback,
     voice_credential,
     voice_tenant_access,
     voice_identity_source,
@@ -75,6 +79,8 @@ from voice.live.dictation import (
 )
 from voice.live.metrics import VoiceLiveMetrics
 from voice.live.onset import SpeechOnsetDetector
+from voice.live.readiness import config_problem
+from core.agent_profile import MissingProfileError, MissingSnapshotError
 from voice.live.recorder import VoiceCallRecorder, recording_enabled
 from core.sensitive_content import enter_redacted_scope, is_sensitive_kind
 from voice.live.speech_hygiene import ToolSyntaxScrubber
@@ -475,6 +481,13 @@ def _apply_kind_voice_defaults(cfg: "LiveVoiceConfig", agent_kind: str) -> None:
     (azure_voice_live._session_payload); Gemini Live has no phrase-list
     support and ignores the field.
     """
+    # Values the kind uses where the profile sets none (a generic agent's
+    # greeting). A text-only session has no greeting to default.
+    for _key, _value in voice_config_defaults(agent_kind).items():
+        if _key == "greeting_trigger" and cfg.text_only:
+            continue
+        if not getattr(cfg, _key, None):
+            setattr(cfg, _key, _value)
     if cfg.phrase_list:
         return
     from runtime.agents.voice_registry import voice_default_phrase_list
@@ -640,11 +653,130 @@ def _active_profile_for(agent_kind: str):
     return None
 
 
+@dataclass
+class VoiceRoute:
+    """A slug-addressed way into `voice_live` (`WS /v1/agents/{slug}/voice`).
+
+    The plain socket picks its agent by KIND, which is enough while a kind
+    has one active profile. The generic `custom` kind has many, told apart by
+    slug, so its route parks one of these on `websocket.state` and calls the
+    same handler. It is the whole seam: the handler reads the owning profile,
+    the caller's identity and the budget bucket through it, and everything
+    else (the protocol, the turn machinery, the providers) is shared.
+
+    Never built from a query parameter: only a route that has already matched
+    a slug creates one, so a caller of the plain socket cannot supply it.
+
+    `authenticate(authorization_header)` is the route's own caller check (the
+    same function its HTTP chat uses). It returns the caller or raises
+    `HTTPException`; it is called with the handshake's `Authorization`
+    header, or with the token of the first `auth` frame as a bearer header.
+    `profile_pin` is a profile id an operator asked to test (a draft copy of
+    the addressed agent); `pin` is that id once the handler has checked the
+    caller may pin and that it names a copy of this very agent.
+    """
+
+    agent_slug: str
+    authenticate: Callable[[Optional[str]], Awaitable[Dict[str, Any]]]
+    profile_pin: Optional[str] = None
+    pin: Optional[str] = None
+
+
+def _voice_route(conn: Any) -> Optional[VoiceRoute]:
+    route = getattr(getattr(conn, "state", None), "voice_route", None)
+    return route if isinstance(route, VoiceRoute) else None
+
+
+async def serve_voice_route(
+    websocket: WebSocket, route: VoiceRoute, *, agent_kind: str,
+    session_id: Optional[str] = None, locale: Optional[str] = None,
+    provider: Optional[str] = None, sim_run: Optional[str] = None,
+) -> None:
+    """Serve one call addressed by slug through the shared handler."""
+    websocket.state.voice_route = route
+    await voice_live(
+        websocket, agentKind=agent_kind, businessId=None, sessionId=session_id,
+        locale=locale, provider=provider, simRun=sim_run, callCase=None,
+    )
+
+
+async def _route_caller(route: VoiceRoute, authorization: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The caller `route.authenticate` admits, or None. Never raises."""
+    try:
+        caller = await route.authenticate(authorization)
+    except HTTPException:
+        return None
+    except Exception:
+        logger.warning("voice.live: the route's caller check failed", exc_info=True)
+        return None
+    return caller if isinstance(caller, dict) else None
+
+
+def _caller_principal(caller: Dict[str, Any]) -> str:
+    """A stable id for an admitted caller. An API key has no user id."""
+    for key in ("user_id", "api_key_id", "key_id", "id"):
+        if caller.get(key):
+            return str(caller[key])
+    return "caller"
+
+
+def _is_operator_token(token: str) -> bool:
+    """True for a signature-verified superuser token (who may pin a profile)."""
+    try:
+        from admin.auth import resolve_superuser
+
+        resolve_superuser(token)
+        return True
+    except Exception:
+        return False
+
+
+def agent_budget_id(agent_kind: str, agent_slug: str) -> str:
+    """The id a slug-addressed agent's calls are metered and recorded under.
+
+    The daily audio budget and the call recording key off a business id, and
+    a generic agent has none: it is called with an admin token or an API key,
+    not on behalf of a tenant. Its calls are charged to ONE bucket per agent
+    instead. Not per caller: the realtime audio is the agent owner's cost
+    whoever dials, an API key carries no user id, and a per-caller bucket
+    would multiply the daily cap by the number of keys. The id is shown on
+    the agent's Voice tab, where an operator can give it its own allowance.
+    """
+    return str(uuid.uuid5(_ANON_BUDGET_NAMESPACE, f"voice-live-agent:{agent_kind}:{agent_slug}"))
+
+
+def _route_profile(route: VoiceRoute, agent_kind: str):
+    """The profile a slug-addressed call is configured by. FAILS CLOSED:
+    an unknown, inactive or unpublished slug raises, it never resolves to
+    another agent of the kind."""
+    from core.agent_profile import AgentProfileLoader, _default_environment
+
+    if route.pin:
+        pinned = AgentProfileLoader.load_pinned(route.pin, agent_kind)
+        if pinned is not None and getattr(pinned, "slug", None) == route.agent_slug:
+            return pinned
+        logger.warning(
+            "voice.live: profile pin %s is not a copy of agent %r; serving the "
+            "published agent", route.pin, route.agent_slug,
+        )
+        route.pin = None
+    return AgentProfileLoader.load_delegate(agent_kind, route.agent_slug, _default_environment())
+
+
+def _owner_profile_for(conn: Any, agent_kind: str):
+    """The profile that OWNS this call's voice settings: the kind's active
+    profile, or the one a slug-addressed route names."""
+    route = _voice_route(conn)
+    if route is None:
+        return _active_profile_for(agent_kind)
+    return _route_profile(route, agent_kind)
+
+
 def _live_config_for(conn: WebSocket, agent_kind: str):
     """Resolve voice_config.live for this connection, model row included."""
     from core.auth import get_service_client
 
-    profile = _active_profile_for(agent_kind)
+    profile = _owner_profile_for(conn, agent_kind)
     profile_voice = getattr(profile, "voice_config", None)
 
     channel = getattr(conn.state, "channel", None)
@@ -1247,6 +1379,12 @@ async def voice_live(
         and not _same_origin(websocket, origin_header)
     )
 
+    # Set only by a slug-addressed route (see VoiceRoute); None on the plain
+    # socket, where everything below behaves exactly as it always has.
+    route = _voice_route(websocket)
+    agent_slug = route.agent_slug if route else None
+    route_caller: Optional[Dict[str, Any]] = None
+
     authorization = websocket.headers.get("authorization")
     user_token, user_id = authenticate_optional(authorization)
     # `user_id` above is decoded WITHOUT verifying the signature, which is fine
@@ -1256,7 +1394,17 @@ async def voice_live(
     # separately and keep the two notions apart: a forged `{"sub": ...}` still
     # yields `user_id` (harmless) but never `verified_user_id`.
     verified_user_id = None
-    if user_token:
+    if route is not None:
+        # The route's own caller check decides, not a plain login: a generic
+        # agent's callers are operators and API keys.
+        user_token, user_id = None, None
+        if authorization:
+            route_caller = await _route_caller(route, authorization)
+        if route_caller is not None:
+            user_token = authorization.split(" ", 1)[1].strip()
+            user_id = route_caller.get("user_id")
+            verified_user_id = _caller_principal(route_caller)
+    elif user_token:
         try:
             # Function-local import on purpose: core.auth is the seam the
             # test suite monkeypatches for signature verification.
@@ -1363,6 +1511,15 @@ async def voice_live(
         )
         return
 
+    if voice_agent_slug_addressed(agentKind) and route is None:
+        # Many profiles share this kind, so "the kind's active profile" names
+        # no agent. It is only served where the route names the slug.
+        await websocket.close(
+            code=CLOSE_FORBIDDEN,
+            reason="This agent is called at /v1/agents/{slug}/voice.",
+        )
+        return
+
     # First-frame auth for kinds that demand a real identity. Runs after
     # accept() (frames can only be received once accepted) and BEFORE
     # config/budget/agent build so everything identity-scoped downstream —
@@ -1403,7 +1560,11 @@ async def voice_live(
     elif voice_agent_requires_auth(agentKind):
         auth_frame = await _receive_auth_frame(websocket)
         frame_sub = None
-        if auth_frame and auth_frame.get("token"):
+        if route is not None and auth_frame and auth_frame.get("token"):
+            route_caller = await _route_caller(route, f"Bearer {auth_frame['token']}")
+            if route_caller is not None:
+                frame_sub = _caller_principal(route_caller)
+        elif auth_frame and auth_frame.get("token"):
             try:
                 # Same function-local import as the header path above — one
                 # monkeypatch seam (core.auth) for signature verification.
@@ -1421,7 +1582,7 @@ async def voice_live(
             await websocket.close(code=CLOSE_FORBIDDEN, reason="Authentication required.")
             return
         user_token = auth_frame["token"]
-        user_id = frame_sub
+        user_id = route_caller.get("user_id") if route_caller is not None else frame_sub
         verified_user_id = frame_sub
         if kind_credential is not None:
             credential_value = auth_frame.get(kind_credential.name) or None
@@ -1485,11 +1646,41 @@ async def voice_live(
         tenant_params, tenant_ctx = tenant_access.frame_params(auth_frame_data)
         pinned_ctx = {"user_id": verified_user_id, **tenant_ctx}
 
+    if route is not None and route.profile_pin:
+        # A profile pin lets an operator call a draft copy of the agent. Only
+        # an operator may: a verified superuser token, or the trusted
+        # simulated-eval path (a loopback replica the operator controls).
+        if ((provider or "").strip().lower() == "simulated" and _sim_override_allowed(websocket)) or (
+            user_token and await asyncio.to_thread(_is_operator_token, user_token)
+        ):
+            route.pin = route.profile_pin
+        else:
+            logger.warning(
+                "voice.live: profile pin ignored for agent %r: the caller is not an operator",
+                agent_slug,
+            )
+
     try:
         # to_thread, like every other config/budget/profile call in this
         # handshake — see `_HANDSHAKE_OFF_LOOP` below for why.
         cfg = await asyncio.to_thread(_live_config_for, websocket, agentKind)
+    except (MissingProfileError, MissingSnapshotError) as exc:
+        # Only a slug-addressed route raises these here (the kind-addressed
+        # load is tolerant): no such agent, or one never published to this
+        # environment. Never answered by another agent.
+        logger.info("voice.live: no agent %r (%s)", agent_slug, exc)
+        await websocket.close(code=CLOSE_FORBIDDEN, reason="Agent not found.")
+        return
     except LookupError as exc:
+        if route is not None:
+            # hydrate_live_model: voice is on but no realtime model row is
+            # set, or the row is gone. Say what to do about it.
+            logger.info("voice.live: agent %r has no usable realtime model (%s)", agent_slug, exc)
+            await websocket.close(
+                code=CLOSE_FORBIDDEN,
+                reason="No realtime voice model is set for this agent. Pick one on its Voice tab.",
+            )
+            return
         # hydrate_live_model() raises when voice_config.live names a model_id
         # that isn't a real agent_models row -- a misconfigured tenant, same
         # bucket as the persona-prompt LookupError below.
@@ -1516,8 +1707,22 @@ async def voice_live(
         sim_override_applied = True
 
     if not cfg.enabled:
-        await websocket.close(code=CLOSE_FORBIDDEN, reason="Duplex voice is disabled for this tenant.")
+        await websocket.close(
+            code=CLOSE_FORBIDDEN,
+            reason=("Voice is not turned on for this agent." if route is not None
+                    else "Duplex voice is disabled for this tenant."),
+        )
         return
+
+    if route is not None:
+        # A realtime provider needs a key this server may not have. Refuse
+        # with the reason before opening anything, instead of a bare
+        # "provider unavailable" from inside session.start().
+        problem = config_problem(cfg)
+        if problem:
+            logger.warning("voice.live: agent %r cannot take a call: %s", agent_slug, problem)
+            await websocket.close(code=CLOSE_PROVIDER_ERROR, reason=problem[:120])
+            return
 
     _apply_text_only_overrides(cfg)
     _apply_kind_voice_defaults(cfg, agentKind)
@@ -1568,8 +1773,11 @@ async def voice_live(
     # drain) each other's. See `_budget_identity` for why the query param
     # alone is not evidence of who to charge, and `_budget_key` for the uuid
     # derivation.
+    # A slug-addressed agent has no tenant: its calls are metered (and
+    # recorded) under one bucket per agent. See `agent_budget_id`.
+    agent_bucket = agent_budget_id(agentKind, agent_slug) if agent_slug else None
     budget_key = _budget_key(
-        _budget_identity(
+        agent_bucket or _budget_identity(
             business_id_param=businessId,
             portal_session=portal_session,
             verified_user_id=verified_user_id,
@@ -1640,6 +1848,8 @@ async def voice_live(
                 "call_case": callCase,
                 # A tenant-access kind's frame params (VoiceTenantAccess).
                 **tenant_params,
+                # A slug-addressed call: which agent, and the operator's pin.
+                **({"agent_slug": agent_slug, "profile_pin": route.pin} if route else {}),
             },
         )
         # Pre-fetched-context mode (outbound simulations): the case file is in
@@ -1677,16 +1887,29 @@ async def voice_live(
         # version row. A lambda (not a partial) so the module globals are
         # resolved at call time and the test monkeypatches still bind.
         persona_vars = getattr(agent, "persona_variables", None)
-        persona = await asyncio.to_thread(
-            lambda: resolve_persona_prompt(
-                cfg, agentKind,
-                profile=_active_profile_for(agentKind),
-                specialist_profile=profile,
-                language=language_name(cfg.language),
-                # Test doubles are often MagicMocks: only a real dict counts.
-                extra_variables=persona_vars if isinstance(persona_vars, dict) else None,
+        # A kind whose agents are configuration only supplies a built-in
+        # persona for a profile that names none (a generic agent); every
+        # other kind keeps the rule that a missing persona slug is a
+        # misconfiguration.
+        persona_fallback = None if cfg.persona_prompt_slug else voice_persona_fallback(agentKind)
+        if persona_fallback is not None:
+            persona = await asyncio.to_thread(
+                lambda: persona_fallback(
+                    _owner_profile_for(websocket, agentKind),
+                    language=language_name(cfg.language),
+                )
             )
-        )
+        else:
+            persona = await asyncio.to_thread(
+                lambda: resolve_persona_prompt(
+                    cfg, agentKind,
+                    profile=_owner_profile_for(websocket, agentKind),
+                    specialist_profile=profile,
+                    language=language_name(cfg.language),
+                    # Test doubles are often MagicMocks: only a real dict counts.
+                    extra_variables=persona_vars if isinstance(persona_vars, dict) else None,
+                )
+            )
         session = _session_for(cfg, persona=persona)
         await session.start()
         # The session is real, so the handshake is now a genuine cost. Charged
@@ -1713,6 +1936,17 @@ async def voice_live(
     except (LookupError, HTTPException) as exc:
         await websocket.close(code=CLOSE_FORBIDDEN, reason=str(exc)[:120])
         return
+    except (MissingProfileError, MissingSnapshotError) as exc:
+        if route is None:
+            # Unchanged for a kind-addressed call: a setup failure.
+            logger.exception("voice.live: agent/persona/session setup failed for agent_kind=%s", agentKind)
+            await websocket.close(code=CLOSE_PROVIDER_ERROR, reason="Voice session setup failed.")
+            return
+        # The brain a generic agent names (voice_config.agent_profile_slug)
+        # does not exist here. Fail closed: no other agent answers.
+        logger.warning("voice.live: agent %r: brain profile not found (%s)", agent_slug, exc)
+        await websocket.close(code=CLOSE_FORBIDDEN, reason="Agent not found.")
+        return
     except RealtimeProviderError as exc:
         # The provider's own text stays server-side: it carries upstream
         # detail ("session.update rejected: 'session.voice' should be …",
@@ -1732,6 +1966,10 @@ async def voice_live(
         return
 
     session_metadata: Dict[str, Any] = {"channel": "voice"}  # read by core.conversation_insights
+    if agent_slug:
+        # Many agents share the kind: the slug is what says whose
+        # conversation this is (same key the HTTP chat route stamps).
+        session_metadata["agent_slug"] = agent_slug
     if portal_session:
         # Same tag the portal's HTTP chat sets, so a call placed BEFORE anything
         # is typed (the voice path creates the session row) still shows up in the
@@ -1803,7 +2041,7 @@ async def voice_live(
                 call_id=call_id,
                 session_id=coerce_session_id(str(identity.session_id)),
                 agent_kind=agentKind,
-                business_id=_uuid_or_none(resolved_business_id),
+                business_id=agent_bucket or _uuid_or_none(resolved_business_id),
                 provider=session.provider,
                 simulated=is_sim_conversation,
                 input_sample_rate=session.audio_format.input_sample_rate,

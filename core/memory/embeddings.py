@@ -1,10 +1,11 @@
 """Text-embedding helper for the memory layer.
 
 The provider is chosen by :mod:`core.embedding_provider` — Gemini's
-`gemini-embedding-001` by default, or the in-region Azure OpenAI
-`text-embedding-3-small` when `EMBED_PROVIDER=azure`. Both are asked for
-`EMBED_DIM` (768) directly, matching the `ai_user_memory.embedding
-vector(768)` column, so neither needs a schema change.
+`gemini-embedding-001` by default, the in-region Azure OpenAI
+`text-embedding-3-small` when `EMBED_PROVIDER=azure`, or an OpenAI-compatible
+server (`EMBED_BASE_URL` + `EMBED_MODEL`). All are asked for `EMBED_DIM` (768),
+matching the `ai_user_memory.embedding vector(768)` column, so none needs a
+schema change.
 
 Flipping the provider without re-embedding what is already stored makes
 recall return nothing at all — vectors from different models are not

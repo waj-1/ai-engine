@@ -330,9 +330,14 @@ def _aggregate_last_message_metadata(
 
 
 async def list_sessions(
-    user_id: str, business_id: str, source: Optional[str] = None
+    user_id: str, business_id: Optional[str], source: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """Return a user's active chat sessions for a business, newest first.
+
+    ``business_id=None`` returns the user's sessions that belong to NO
+    business: the ones a generic agent (``/v1/agents/{slug}/chat``) writes.
+    It never widens the scope: every row is still the caller's own
+    (``user_id``), and a business's sessions are only listed by naming it.
 
     When ``source`` is provided, restricts to rows whose ``metadata->>source``
     equals it (one client surface's sessions only). Each row carries
@@ -355,9 +360,10 @@ async def list_sessions(
     query = (
         client.schema("public").table("ai_chat_sessions").select("*")
         .eq("user_id", user_id)
-        .eq("business_id", business_id)
         .is_("deleted_at", "null")
     )
+    query = (query.eq("business_id", business_id) if business_id
+             else query.is_("business_id", "null"))
     if source is not None:
         query = query.eq("metadata->>source", source)
     query = query.order("updated_at", desc=True)

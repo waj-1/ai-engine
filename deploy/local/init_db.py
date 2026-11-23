@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Prepare the local stack's database: migrations, db-functions, the admin user.
+"""Prepare the local stack's database: migrations, db-functions, the admin user
+(when ADMIN_EMAIL and ADMIN_PASSWORD are set; otherwise the engine's first-run
+page creates it).
 
 Run from the repository root, with deploy/local/.env loaded and the stack up:
 
@@ -30,14 +32,27 @@ common.DBFUNC_DIR = REPO / "supabase" / "db-functions"
 common.RLS_TABLES_TS = common.DBFUNC_DIR / "rls" / "agent_tables.ts"
 
 
+def admin_login() -> tuple[str, str] | None:
+    """The admin login to create, or None when none is configured (the
+    account is then created on the engine's first-run page). Setting only one
+    of the two is a mistake worth stopping for."""
+    email = (os.getenv("ADMIN_EMAIL") or "").strip()
+    password = os.getenv("ADMIN_PASSWORD") or ""
+    if bool(email) != bool(password.strip()):
+        raise SystemExit("set both ADMIN_EMAIL and ADMIN_PASSWORD, or neither "
+                         "(with neither, the admin account is created on the first-run page)")
+    return (email, password) if email else None
+
+
 def main() -> int:
-    for name in ("AI_DATABASE_URL", "SUPABASE_URL", "SUPABASE_SERVICE_KEY", "ADMIN_EMAIL", "ADMIN_PASSWORD"):
+    for name in ("AI_DATABASE_URL", "SUPABASE_URL", "SUPABASE_SERVICE_KEY"):
         if not os.getenv(name):
             raise SystemExit(f"{name} is not set — load deploy/local/.env first (see the docstring)")
+    admin = admin_login()
     config = common.InitConfig(
         client_name="local", seed_script="", ingest_script="",
-        admin_email_default=os.environ["ADMIN_EMAIL"],
-        admin_password_default=os.environ["ADMIN_PASSWORD"],
+        admin_email_default=admin[0] if admin else "",
+        admin_password_default=admin[1] if admin else "",
         postgres_password_default="",
     )
     init = common.DBInitializer(config)
@@ -49,7 +64,11 @@ def main() -> int:
     init.ensure_user_table(conn)
     init.ensure_default_model(conn)
     init.reload_postgrest_schema(conn)
-    init.ensure_admin_user(conn)
+    if admin:
+        init.ensure_admin_user(conn)
+    else:
+        init.log("no ADMIN_EMAIL / ADMIN_PASSWORD: no admin account created here. "
+                 "The engine's first-run page creates it (the setup code is in the engine's log).")
     conn.close()
     init.log("done.")
     return 0

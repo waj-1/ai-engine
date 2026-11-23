@@ -23,8 +23,8 @@ seeders then re-create `agent_models`, `agent_prompts`/`agent_prompt_versions`,
 `agent_tools`, `agent_data_sources` and `agent_mcp_servers` with FRESH primary
 keys, while seed.json's `agent_profiles` rows still point at the OLD ones. A
 verbatim upsert of those rows fails closed on the FK columns
-(`model_main_id`, `parent_profile_id`, `agent_prompt_versions.prompt_id`,
-`agent_profile_versions.profile_id`) — `_write_row` swallows the violation, so
+(`model_main_id`, `parent_profile_id`, `agent_type_id`,
+`agent_prompt_versions.prompt_id`, `agent_profile_versions.profile_id`) — `_write_row` swallows the violation, so
 the profile is simply MISSING afterwards; three were lost that way on a local DB
 on 2026-08-17. The array/jsonb reference columns (`tool_ids`,
 `data_source_ids`, `mcp_server_ids`, `prompt_version_ids`,
@@ -35,7 +35,8 @@ quietly serves with no tools, no data sources and an unresolvable prompt pin.
 So `_build_id_map` resolves each referenced row by its NATURAL key — models by
 (name, environment), prompts by (agent_kind, slug), prompt versions by
 (agent_kind, slug, version_number), data sources / MCP servers by name, tools by
-python_name, profiles by (agent_kind, slug, environment) — and rewrites the
+python_name, categories (`agent_types`) by slug, profiles by
+(agent_kind, slug, environment) — and rewrites the
 references to the ids that exist in the TARGET database. A reference whose
 natural key is absent from the target is left as-is: the row it points at is
 almost always in this same payload and lands with its exported id, so the pair
@@ -60,6 +61,7 @@ The shape of seed.json:
     "agent_tools":            [...],
     "agent_data_sources":     [...],
     "agent_mcp_servers":      [...],
+    "agent_types":            [...],  // user-defined categories
     "agent_profiles":         [...],
     "agent_eval_suites":      [...],
     "agent_profile_versions": [...]   // promote snapshots
@@ -97,6 +99,9 @@ _TABLES: List[str] = [
     "agent_tools",
     "agent_data_sources",
     "agent_mcp_servers",
+    # User-defined categories. Before agent_profiles: a profile's
+    # agent_type_id is a real foreign key into this table.
+    "agent_types",
     "agent_profiles",
     "agent_eval_suites",
     "agent_profile_versions",
@@ -119,6 +124,7 @@ _NATURAL_KEYS: Dict[str, Tuple[str, ...]] = {
     "agent_tools": ("python_name",),
     "agent_data_sources": ("name",),
     "agent_mcp_servers": ("name",),
+    "agent_types": ("slug",),
     "agent_profiles": ("agent_kind", "slug", "environment"),
     "agent_eval_suites": ("name",),
     "agent_profile_versions": ("profile_id", "environment", "version_number"),
@@ -136,6 +142,7 @@ _PK: Dict[str, str] = {
     "agent_tools": "tool_id",
     "agent_data_sources": "source_id",
     "agent_mcp_servers": "mcp_server_id",
+    "agent_types": "agent_type_id",
     "agent_profiles": "profile_id",
     "agent_eval_suites": "suite_id",
     "agent_profile_versions": "version_id",
@@ -162,6 +169,10 @@ _REFERENCES: Dict[str, Tuple[Tuple[str, str, str], ...]] = {
         ("parent_profile_id", "agent_profiles", "id"),
         ("prompt_version_ids", "agent_prompt_versions", "id_map"),
         ("served_version_id", "agent_profile_versions", "id"),
+        # A real FK (ON DELETE SET NULL). Unmapped, a category that already
+        # exists in the target under another id would fail the constraint
+        # and the profile would be silently missing after the restore.
+        ("agent_type_id", "agent_types", "id"),
     ),
     "agent_profile_versions": (
         ("profile_id", "agent_profiles", "id"),
@@ -294,7 +305,8 @@ def _build_id_map(client, tables: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
     """{table: {exported id: target id}} for every table referenced by another."""
     id_map: Dict[str, Dict[str, str]] = {}
     for table in ("agent_models", "agent_prompts", "agent_tools",
-                  "agent_data_sources", "agent_mcp_servers", "agent_profiles"):
+                  "agent_data_sources", "agent_mcp_servers", "agent_types",
+                  "agent_profiles"):
         id_map[table] = _map_flat(client, table, tables.get(table) or [])
     id_map["agent_prompt_versions"] = _map_child(
         client, "agent_prompt_versions", "agent_prompts", "prompt_id",

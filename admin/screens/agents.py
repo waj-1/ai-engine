@@ -395,6 +395,12 @@ def resolve_voice_config_owner(
     active_slug = (active_profile or {}).get("slug")
     if not active_slug:
         return None
+    from runtime.agents.voice_registry import voice_agent_slug_addressed
+
+    if voice_agent_slug_addressed(str(active_profile.get("agent_kind") or "")):
+        # A generic agent is called at its own address and owns its own voice
+        # settings, even when another agent borrows it as a brain.
+        return None
     for p in profiles:
         if p.get("profile_id") == active_profile.get("profile_id"):
             continue

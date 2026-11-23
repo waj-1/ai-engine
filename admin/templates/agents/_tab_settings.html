@@ -30,6 +30,23 @@
     <label class="field span-2">Description
       <textarea name="description" rows="3" {% if readonly %}readonly{% endif %}>{{ active_profile.description or '' }}</textarea>
     </label>
+    {# Category (agent_types): a group for the Agents list. It does not change
+       how the agent runs and needs no publishing. Templates carry none. #}
+    {% set _categories = agent_type_options() %}
+    {% if not readonly %}
+    <div>
+      <label class="field">Category
+        <select name="agent_type_id" {% if not _categories %}disabled{% endif %}>
+          <option value="">— Uncategorised —</option>
+          {% for c in _categories %}
+          <option value="{{ c.agent_type_id }}" {% if c.agent_type_id == active_profile.agent_type_id %}selected{% endif %}>{{ c.display_name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <span class="caption">{% if _categories %}Groups this agent on the Agents list. It does not change what the agent does.{% else %}No categories yet.{% endif %}
+        <a href="/admin/agent-types?env={{ current_env }}">{{ 'Manage categories' if _categories else 'Add one' }}</a></span>
+    </div>
+    {% endif %}
   </div>
 </section>
 

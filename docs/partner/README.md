@@ -7,6 +7,7 @@ These guides show you how to look after your AI agents in the portal: change wha
 1. [Welcome to the portal](01-getting-started/01-welcome.md): what each part of the sidebar is for.
 2. [Your first 15 minutes](01-getting-started/02-first-15-minutes.md): look at an agent, test it and read a real conversation.
 3. [Find anything](01-getting-started/03-find-anything.md): jump to any screen, agent or guide with **Ctrl K** (**⌘ K** on a Mac).
+4. [Set up a new install](01-getting-started/04-set-up-a-new-install.md): only if you installed the engine yourself and nobody has an account yet.
 
 ## All guides
 
@@ -19,7 +20,7 @@ These guides show you how to look after your AI agents in the portal: change wha
 | [Monitor](05-monitor/01-overview.md) | See how your agents are doing and read real conversations. |
 | [Testing](06-testing/01-testing-overview.md) | Check each agent's quality with test suites and voice checks. |
 | [Publishing](07-publishing/01-publish-changes.md) | How your changes reach customers, and how to undo one. |
-| [Team & settings](08-team-and-settings/01-team.md) | Who can sign in, who changed what, and daily voice minutes. |
+| [Team & settings](08-team-and-settings/01-team.md) | Who can sign in, who changed what, daily voice minutes, API keys and model keys. |
 | [Reference](09-reference/01-glossary.md) | Words used in the portal, common questions, and working from an AI assistant. |
 
 ## Need a hand?

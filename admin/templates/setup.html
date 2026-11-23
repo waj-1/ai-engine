@@ -1,0 +1,231 @@
+{# admin/templates/setup.html — the first-run page (standalone, like login.html).
+   step 1: create the admin account   (no session; needs the setup code)
+   step 2: add a model key, or skip   (signed in)
+   step 3: the first API key          (signed in; the key is in this response only)
+   Never render the setup code or a password back into this page. #}
+{% from "_components/callout.html" import alert %}
+<!doctype html>
+{% set _brand = brand() %}
+<html lang="en"{% if _brand.key %} data-brand="{{ _brand.key }}"{% endif %}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Set up · {{ _brand.title }}</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('waj-admin-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/admin/static/portal.css?v={{ asset_version }}">
+  {% if _brand.css %}<style>{{ _brand.css|safe }}</style>{% endif %}
+  <style>
+    .setup-steps { display:flex; gap:var(--space-s); list-style:none; padding:0; margin:0 0 var(--space-m); }
+    .setup-steps li { flex:1; padding-top:var(--space-xs); border-top:3px solid var(--border, #ccc); font-size:13px; opacity:.6; }
+    .setup-steps li[aria-current="step"] { border-top-color:var(--accent); opacity:1; font-weight:600; }
+    .setup-steps li.done { border-top-color:var(--accent); }
+    .setup-field { display:block; margin-bottom:var(--space-m); }
+    .setup-field input, .setup-field select { width:100%; box-sizing:border-box; }
+    .setup-code { font-family:'SF Mono',ui-monospace,monospace; letter-spacing:1px; text-transform:uppercase; }
+    .setup-example { position:relative; }
+    .setup-example pre { white-space:pre-wrap; word-break:break-all; margin:0; padding:var(--space-s); background:var(--surface-sunken); border-radius:6px; font-size:12.5px; }
+    .setup-example button { position:absolute; top:6px; right:6px; }
+  </style>
+</head>
+<body style="display:grid;place-items:center;min-height:100vh;background:var(--surface-sunken);padding:var(--space-m) 0;">
+  <div class="card" style="width:100%;max-width:{{ '720px' if step == 3 else '520px' }};padding:var(--space-l);">
+
+    <div style="display:flex;align-items:center;gap:var(--space-s);margin-bottom:var(--space-m);">
+      <span style="width:28px;height:28px;background:var(--accent);border-radius:6px;flex:0 0 auto;"></span>
+      <span style="font-weight:700;font-size:18px;letter-spacing:-0.3px;">Set up {{ _brand.title }}</span>
+    </div>
+
+    <ol class="setup-steps" aria-label="Setup steps">
+      <li {% if step == 1 %}aria-current="step"{% else %}class="done"{% endif %}>1. Admin account</li>
+      <li {% if step == 2 %}aria-current="step"{% elif step > 2 %}class="done"{% endif %}>2. Model key</li>
+      <li {% if step == 3 %}aria-current="step"{% endif %}>3. Your API key</li>
+    </ol>
+
+    {% if error %}
+    {% call alert('error') %}{{ error }}{% endcall %}
+    {% endif %}
+
+    {# ------------------------------------------------------------- step 1 #}
+    {% if step == 1 %}
+    <p style="margin-top:0;">This engine has no admin account yet. Create it here. There is no default login.</p>
+    <form method="post" action="/admin/setup" autocomplete="off" id="setup-admin-form">
+      <label class="setup-field">
+        <span class="eyebrow" style="display:block;margin-bottom:var(--space-xxs);">Setup code</span>
+        <input id="code" name="code" type="text" class="setup-code" required autocomplete="off"
+               autocapitalize="characters" spellcheck="false" inputmode="text" maxlength="40"
+               placeholder="XXXX-XXXX-XXXX-XXXX" {% if locked %}disabled{% endif %}>
+        <span class="caption" style="display:block;margin-top:var(--space-xxs);">
+          Printed in the engine's log when it started, to prove this install is yours:
+          <code>docker compose logs engine</code>. Each start prints a new code and the older ones stop
+          working, so use the last one. It locks after {{ max_attempts }} wrong tries and expires after
+          24 hours; restarting the engine (<code>docker compose restart engine</code>) prints a new one.
+        </span>
+      </label>
+      <label class="setup-field">
+        <span class="eyebrow" style="display:block;margin-bottom:var(--space-xxs);">Email</span>
+        <input id="email" name="email" type="email" autocomplete="username" required value="{{ email or '' }}"
+               {% if locked %}disabled{% endif %}>
+      </label>
+      <label class="setup-field">
+        <span class="eyebrow" style="display:block;margin-bottom:var(--space-xxs);">Password</span>
+        <input id="password" name="password" type="password" autocomplete="new-password" required
+               minlength="{{ password_min }}" {% if locked %}disabled{% endif %}>
+        <span class="caption" style="display:block;margin-top:var(--space-xxs);">At least {{ password_min }} characters. Common and easy-to-guess passwords are refused.</span>
+      </label>
+      <label class="setup-field">
+        <span class="eyebrow" style="display:block;margin-bottom:var(--space-xxs);">Password again</span>
+        <input id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" required
+               {% if locked %}disabled{% endif %}>
+      </label>
+      <button type="submit" class="primary" style="width:100%;" {% if locked %}disabled{% endif %}>Create admin account</button>
+    </form>
+    {% endif %}
+
+    {# ------------------------------------------------------------- step 2 #}
+    {% if step == 2 %}
+    <p style="margin-top:0;">Your account is created and you are signed in. Agents need a model to answer with.
+      Add a provider's key now, or skip this and do it later under <strong>Settings › Model keys</strong>.</p>
+
+    {% if result %}
+      {% if result.ok %}
+      {% call alert('success') %}The {{ result.label }} key is stored and works: {{ result.detail }}{% endcall %}
+      {% else %}
+      {% call alert('warning') %}The {{ result.label }} key is stored, but the test failed: {{ result.detail }}
+        Paste another key, or continue and fix it later under Settings › Model keys.{% endcall %}
+      {% endif %}
+    {% endif %}
+
+    {% if not can_store %}
+    {% call alert('warning') %}<strong>A key cannot be stored on this server yet.</strong> {{ problem }}
+      You can skip this step: the engine also reads a provider's key from its environment variable,
+      and a local model needs no key.{% endcall %}
+    {% else %}
+    <form method="post" action="/admin/setup/model-key" autocomplete="off" id="setup-model-key-form">
+      <label class="setup-field">
+        <span class="eyebrow" style="display:block;margin-bottom:var(--space-xxs);">Provider</span>
+        <select name="provider" required>
+          {% for p in providers %}
+          <option value="{{ p.slug }}" {% if p.slug == provider %}selected{% endif %}>{{ p.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="setup-field">
+        <span class="eyebrow" style="display:block;margin-bottom:var(--space-xxs);">Key</span>
+        <input name="value" type="password" required autocomplete="off" spellcheck="false">
+        <span class="caption" style="display:block;margin-top:var(--space-xxs);">Stored encrypted and never shown again. Testing makes one free call to the provider.</span>
+      </label>
+      <button type="submit" class="{{ 'ghost' if result and result.ok else 'primary' }}" style="width:100%;">Save and test</button>
+    </form>
+    {% endif %}
+
+    <details style="margin-top:var(--space-m);" id="setup-local-model">
+      <summary style="cursor:pointer;">I will use a local model</summary>
+      <div class="caption" style="margin-top:var(--space-s);">
+        A model served on your own machine by Ollama needs no key. Pull one
+        (<code>ollama pull qwen2.5:3b</code>), then after setup open <strong>Agents › Models › New model</strong>,
+        choose provider <strong>Ollama</strong> and type the model's name. If the engine runs in Docker,
+        Ollama must listen on an address containers can reach (start it with <code>OLLAMA_HOST=0.0.0.0</code>).
+        Any other OpenAI-compatible server works with provider <strong>OpenAI</strong> and a Base URL.
+        Skip this step and continue.
+      </div>
+    </details>
+
+    <form method="post" action="/admin/setup/api-key" style="margin-top:var(--space-m);">
+      <button type="submit" class="{{ 'primary' if result and result.ok else 'ghost' }}" style="width:100%;" id="setup-continue">
+        {% if result and result.ok %}Continue{% else %}Skip for now{% endif %}
+      </button>
+    </form>
+    {% endif %}
+
+    {# ------------------------------------------------------------- step 3 #}
+    {% if step == 3 %}
+    {% if not new_key %}
+    <p style="margin-top:0;">Last step: an API key, so your programs and your AI assistant can use the engine
+      without signing in. It has <strong>Full access</strong>: the chat API and the MCP server.</p>
+    <form method="post" action="/admin/setup/api-key">
+      <button type="submit" class="primary" style="width:100%;">Create my API key</button>
+    </form>
+    <p class="caption" style="margin-top:var(--space-m);"><a href="/admin/">Skip and go to the portal</a>.
+      You can create keys later under Settings › API keys.</p>
+    {% else %}
+    {% call alert('warning') %}<strong>Copy this key now. You will not see it again.</strong>
+      Only a hash of it is stored. It has Full access, so treat it like the admin password. If you lose it,
+      revoke it under Settings › API keys and create a new one.{% endcall %}
+    <label class="setup-field" style="margin-top:var(--space-m);">
+      <span class="eyebrow" style="display:block;margin-bottom:var(--space-xxs);">Your API key</span>
+      <div class="row">
+        <input type="text" id="setup-api-key-value" class="technical" value="{{ new_key }}" readonly
+               autocomplete="off" spellcheck="false" style="flex:1;min-width:0;" onfocus="this.select();">
+        <button type="button" class="primary" data-copy="setup-api-key-value">Copy</button>
+      </div>
+    </label>
+
+    <h3 style="margin-bottom:var(--space-xs);">Talk to an agent</h3>
+    <div class="setup-example">
+      <button type="button" class="ghost small" data-copy="setup-curl">Copy</button>
+      <pre id="setup-curl">curl -N {{ base_url }}/v1/agents/{{ agent_slug or 'YOUR-AGENT' }}/chat \
+  -H "Authorization: Bearer {{ new_key }}" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What can you help me with?"}'</pre>
+    </div>
+    <p class="caption">
+      {% if not agent_slug %}Replace <code>YOUR-AGENT</code> with an agent's address: create one under
+      <strong>Agents › New agent</strong> and publish it; its page shows the address. {% endif %}
+      {% if not chat_enabled %}The chat API is off on this server: set <code>ENABLE_GENERIC_AGENTS=1</code> to serve it.{% endif %}
+    </p>
+
+    <h3 style="margin-bottom:var(--space-xs);">Connect your AI assistant (MCP)</h3>
+    <div class="setup-example">
+      <button type="button" class="ghost small" data-copy="setup-mcp">Copy</button>
+      <pre id="setup-mcp">{
+  "mcpServers": {
+    "ai-engine": {
+      "type": "http",
+      "url": "{{ base_url }}/mcp",
+      "headers": { "Authorization": "Bearer {{ new_key }}" }
+    }
+  }
+}</pre>
+    </div>
+    <p class="caption">Add this to your MCP client's configuration, then ask the assistant to build an agent.
+      {% if not mcp_enabled %}The MCP server is off on this server: set <code>ENABLE_ADMIN_MCP=1</code> to serve it.{% endif %}</p>
+
+    <a href="/admin/" class="button primary" id="setup-done"
+       style="display:block;text-align:center;margin-top:var(--space-m);">Go to the portal</a>
+    <script>
+    (function () {
+      document.querySelectorAll('[data-copy]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          var el = document.getElementById(button.getAttribute('data-copy'));
+          var text = el.value !== undefined ? el.value : el.textContent;
+          var done = function () { button.textContent = 'Copied'; };
+          if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(done, function () {});
+          } else {
+            var area = document.createElement('textarea');
+            area.value = text; document.body.appendChild(area); area.select();
+            try { if (document.execCommand('copy')) done(); } catch (e) {}
+            document.body.removeChild(area);
+          }
+        });
+      });
+    })();
+    </script>
+    {% endif %}
+    {% endif %}
+
+  </div>
+</body>
+</html>

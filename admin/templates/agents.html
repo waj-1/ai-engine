@@ -9,6 +9,7 @@
 {% block content %}
 {{ tabs([('agents', 'Agents', '/admin/agents?env=' ~ current_env),
          ('models', 'Models', '/admin/agents?tab=models&env=' ~ current_env),
-         ('templates', 'Templates', '/admin/templates?env=' ~ current_env)], 'models') }}
+         ('templates', 'Templates', '/admin/templates?env=' ~ current_env),
+         ('categories', 'Categories', '/admin/agent-types?env=' ~ current_env)], 'models') }}
 {% include "_tab_models.html" %}
 {% endblock %}

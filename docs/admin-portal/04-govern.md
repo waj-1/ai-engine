@@ -31,12 +31,177 @@ the flag still gets 403. See [Architecture → Auth](./00-architecture.md#auth-m
 `GET /admin/settings` · `settings.html` · `router.py:settings_hub()` · entries in `admin/nav.py:SETTINGS_ENTRIES`
 
 The sidebar's footer item. A plain-language list linking to Team & access
-(`/admin/users`), Releases (`/admin/env` promote + `/admin/deployments`),
+(`/admin/users`), API keys (`/admin/api-keys`), Releases (`/admin/env` promote + `/admin/deployments`),
 Environment variables (`/admin/env?tab=variables`), Voice budgets
-(`/admin/voice-budgets`, its own Settings page since 2026-10-11), Diagnostics (`/admin/drift`,
+(`/admin/voice-budgets`, its own Settings page since 2026-10-11), Model keys
+(`/admin/model-keys`, provider keys stored encrypted, see
+[Configure](./02-configure.md#model-keys-settings--model-keys)), Diagnostics (`/admin/drift`,
 `/admin/diagnostics/runtime`, `/admin/lmnr/diagnose`, `/admin/jobs`, `/admin/tests`) and Developer docs
-(`/admin/docs`). On a partner build only Team & access and Voice budgets are listed.
+(`/admin/docs`). On a partner build only Team & access, Voice budgets and Model keys are listed (API keys is
+staff-only: the chat API a key opens is not served there).
 Each member screen shows the Settings section tabs.
+
+---
+
+## First-run setup
+
+`GET /admin/setup` · `setup.html` · `first_run_handlers.py` · `admin/services/first_run.py`
+· table `engine_setup`
+
+A fresh install has no admin account and **no default login**. While that is true, `/`,
+`/admin` and `/admin/login` redirect to `/admin/setup`, where the first person creates
+the admin account. Every other `/admin` route still requires a signed-in superuser.
+
+**Only in a build with no product plugin.** `first_run.enabled()` is false whenever
+`core.plugins.has_product()` is true, and the whole module is then inert: no database
+read at boot, no code, no banner, and the setup routes redirect to the login page. A
+product build keeps its users in its own main database and must never offer to create
+one here. In a build without a plugin, `FIRST_RUN_SETUP=0` turns the page off.
+
+**What "first run" is.** The `engine_setup` row is not completed **and** no
+`public."user"` row has `permission.is_superuser = true`. Both are read once at boot,
+off the event loop (`first_run.on_boot`, called from the lifespan after the seeders). A
+superuser found at boot (a headless install made one from `ADMIN_EMAIL` /
+`ADMIN_PASSWORD`) completes the row, so setup stays closed even if every admin is
+removed later. A read error means "not first run": the page fails closed and the log
+says so. Per request the answer comes from memory; while in first run the database is
+re-read at most every 5 seconds (in a worker thread) to notice an admin made elsewhere.
+
+**The setup code.**
+
+- Made at boot while in first run: 16 characters from a 31-symbol alphabet without
+  look-alikes (about 79 bits), shown as `XXXX-XXXX-XXXX-XXXX`.
+- Printed **once per boot**, in a banner on the engine's standard output
+  (`docker compose logs engine`). It is not sent through the logging system, and it is
+  never stored, logged or returned anywhere else: the database holds its SHA-256
+  digest, its expiry (24 hours) and the count of wrong tries.
+- **Each boot replaces it.** The page says so. A restart between reading the log and
+  typing the code means reading the log again.
+- Compared with `hmac.compare_digest` on digests. 5 wrong tries lock setup; an expired
+  or locked code is replaced by restarting the engine.
+- Void once an admin exists: the row is completed and the digest removed.
+
+**The three steps.**
+
+1. `POST /admin/setup` (email, password twice, setup code). The password must be 10 to
+   72 characters and not obviously weak (a short deny-list, repeats, sequences, the
+   email). The account is made by `core.admin_account.ensure_admin_account`, the same
+   function the headless init step calls: an auth user (already confirmed) and a
+   `public."user"` row with `is_superuser`. A claim on the `engine_setup` row (a
+   conditional `UPDATE` on `claimed_at`) lets exactly one of two simultaneous
+   submissions create an account, in one engine process or several. The handler then
+   signs in with the new credentials and sets the portal cookie with the login
+   handler's own `_set_admin_cookie`.
+2. `GET` / `POST /admin/setup/model-key` (signed in). Choose a provider, paste a key,
+   **Save and test**: `provider_keys.set_key` then `check_key`
+   (see [Model keys](./02-configure.md#model-keys-settings--model-keys)). Optional:
+   **Skip for now**, or **I will use a local model** (Ollama instructions). With no
+   `SECRET_KEY` the form is replaced by the reason and the step can only be skipped.
+3. `GET` / `POST /admin/setup/api-key` (signed in). The POST creates a **Full access**
+   key with `api_keys.create_key` and answers with the page that shows it once (never a
+   redirect, as on [API keys](#api-keys)), with a copy button, a `curl` chat call and
+   the MCP client JSON. It closes the walkthrough (`finished_at`), so a reload cannot
+   mint a second key.
+
+Steps 2 and 3 are shown only to the admin who completed step 1 (`completed_by`) and
+only until the walkthrough is finished; anyone else is redirected to `/admin/`.
+
+**After setup** `GET` and `POST /admin/setup` redirect to `/admin/login`, permanently.
+
+**Request forgery.** The portal has no CSRF token. Step 1 is protected by the setup
+code, which a forged form cannot know; steps 2 and 3 by the `SameSite=Lax` session
+cookie. In addition every POST here refuses a request the browser marks as cross-site
+(`Sec-Fetch-Site`, or an `Origin` that is not this host), so a page on another site
+cannot use up the code's five tries on an engine that only listens on localhost.
+`POST /admin/setup` is also under the per-IP rate limiter, like the login.
+
+**Headless installs.** With `ADMIN_EMAIL` and `ADMIN_PASSWORD` set, the init step
+creates the admin and the page never appears. With neither, `deploy/compose/setup.py`
+writes no admin login and `deploy/compose/init.py` creates no account. Setting only one
+of the two stops the stack with a message.
+
+---
+
+## API keys
+
+Settings › **API keys** · `GET /admin/api-keys` · `api_keys.html` ·
+`admin/api_keys_handlers.py` · service `admin/services/api_keys.py` · request auth
+`core/api_keys.py` · table [`api_keys`](./data-model.md#api_keys)
+
+A key lets a program call the engine without a signed-in operator's token. It is sent
+as `Authorization: Bearer wae_…`.
+
+| Scope | Portal label | Opens |
+|---|---|---|
+| `chat` | Chat only | `POST /v1/agents/{slug}/chat` |
+| `admin` | Full access (stored with `chat`) | The chat API **and** the admin MCP server at `/mcp`: everything an admin can do, including creating more keys |
+
+A `chat` key on `/mcp` gets 403. The `X-WAJ-*-Override` / `X-WAJ-Profile-Id` operator
+headers on a chat request are honoured for an `admin` key only
+(`main._request_is_operator`). A key is never a portal session: `/admin/*` still needs
+a sign-in.
+
+**The screen**
+
+- **Keys** lists every key: name, the key's first 12 characters, access, created, last
+  used and status (Active, with its expiry date if it has one / Expired / Revoked).
+  Revoked keys stay in the list.
+- **Create a key** takes a name, the access level and an optional expiry (30 days,
+  90 days, 1 year or never). `POST /admin/api-keys` answers with the page itself,
+  showing the new key **once** with a **Copy** button and a "you will not see it again"
+  warning. It deliberately does not redirect: the key exists only in that response, so
+  nothing (query string, cookie, session) has to hold it for a second page. `/admin`
+  responses are `Cache-Control: no-store`.
+- **Revoke** (`POST /admin/api-keys/{key_id}/revoke`, behind a confirm) sets
+  `revoked_at`. It takes effect on the key's next request and cannot be undone.
+
+The writes are plain form POSTs under the portal's session cookie (`SameSite=Lax`),
+like every other portal write. Both are recorded in the [audit log](#audit-log)
+(`entity_type = api_keys`, actions `create` / `revoke`) with the key's name, prefix and
+scopes, never the key or its digest.
+
+**How a key is stored and checked**
+
+- A key is `wae_` + 32 random bytes (url-safe, 43 characters). Only its **SHA-256
+  digest** and the 12-character display prefix are stored. With 256 bits of entropy a
+  plain digest is enough, and there is no server secret whose rotation would break
+  every key. The management code never selects the digest column.
+- A request's key is hashed and looked up by digest (unique index), then the stored
+  digest is compared again with `hmac.compare_digest`.
+- Malformed, unknown, revoked and expired keys all get the **same 401** (`Invalid API
+  key`); a malformed one never reaches the database. A live key without the scope the
+  route needs gets 403. If the key store cannot be reached the answer is 503, never
+  access.
+- Nothing logs a key, a digest or a prefix; log lines name a key by its row id.
+- `last_used_at` is written from a background thread, at most once a minute per key
+  and engine process, so it never delays a request (and can lag by up to a minute).
+- There is no cache: every request checks the database, which is why revoking is
+  immediate on every engine process.
+- No limiter of its own: `/v1/*` and `/mcp` sit behind the engine's per-IP request
+  limit, and failed attempts count against it.
+
+**Who a key acts as**
+
+The key itself. A chat turn made with a key runs with `user_id` = the key's row id, so
+`ai_chat_sessions.user_id` holds the key's id: a key can continue only the sessions it
+started, two keys never see each other's conversations, and neither acts as the person
+who created them. Over MCP the key's id is the audit actor; the Activity screen shows
+it as *API key: \<name\>*.
+
+Keys belong to the engine instance, not to an environment: they are always read and
+written through the engine's own database (`core.auth.get_service_client`), and the
+environment switcher is hidden on this screen. On a partner build the screen is not
+listed (the chat API is not served there).
+
+**For code that issues a key** (a setup flow, a script):
+
+```python
+from admin.services.api_keys import create_key
+row, key = create_key("First key", ["chat", "admin"], created_by=user_id)
+# `key` is the only copy. Show it once; `row` never contains it.
+```
+
+Over MCP: the [`api_keys`](./06-mcp.md#govern--admin_mcptools_governpy) tool.
 
 ---
 
@@ -160,7 +325,7 @@ hand-edited, or freshly published. This screen renders
   naming the scope is what makes the verdict readable.
 - A **runtime flags** panel — process-visible container-level flags on *this* process
   (`VOICE_LIVE_SIM_ENABLED`, `ENABLE_ADMIN_MCP`, `ENVIRONMENT`, any variable a
-  plugin's deployment scopes are selected by (`scope_env_vars()`), `EMBED_PROVIDER`), read with a bare `os.getenv` rather than through
+  plugin's deployment scopes are selected by (`scope_env_vars()`), `EMBED_PROVIDER`, `EMBED_MODEL`), read with a bare `os.getenv` rather than through
   `core/env_resolver.py` — so they are invisible to the `env_vars` tool and
   `/admin/env-vars`, which both CRUD the `agent_env_vars` table instead. An unset flag
   renders as an explicit "unset" chip, not a blank cell — this is chiefly here for

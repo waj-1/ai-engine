@@ -157,6 +157,10 @@ async def _jwks_refresh_loop() -> None:
 #     portal kinds (/agents). Runs on a full build and on a deployment scope
 #     that owns those kinds (no-op on other scoped builds); self-contained —
 #     its own tools, prompts, KB source, profiles and bundles, insert-only.
+#   - seed_demo_agent AFTER seed_agent_models: the one generic `demo` agent a
+#     new install starts with. Seeded once (a marker row remembers it, so a
+#     deleted or renamed demo agent never comes back); off on a build with a
+#     product plugin unless SEED_DEMO_AGENT says otherwise.
 #   - seed_templates: protected "architecture mold" template catalog
 #     (agent_profiles rows with status='template', environment='staging') —
 #     forkable starting points, inert at runtime. Idempotent on
@@ -186,6 +190,7 @@ _BOOT_SEEDERS: tuple = (
     # eval suites that may reference their profiles.
     *(path for group in _call_plugins(_PLUGIN_APPS, "boot_seeders_after_models") for path in group),
     "admin.seed_agents_demo",
+    "admin.seed_demo_agent",
     "admin.seed_templates",
     "admin.seed_eval_suites",
     "admin.seed_voice_scenarios",
@@ -237,7 +242,16 @@ async def lifespan(app: FastAPI):
     # so OpenLLMetry could patch LangChain BEFORE the agent classes were
     # bound. Nothing to do here. `shutdown_observability` still flushes
     # pending spans on app exit (see `yield` block below).
+    # Model keys stored in the portal: load and decrypt them once, off the
+    # loop, so the seeders below and the first request see them
+    # (core/provider_keys.py). A no-op when SECRET_KEY is unset.
+    from core import provider_keys as _provider_keys
+    await _provider_keys.arefresh()
     await _run_boot_seeders()
+    # A fresh install with no admin account: issue the one-time setup code and
+    # print it (admin/services/first_run.py). Inert in a product build.
+    from admin.services import first_run as _first_run
+    await _first_run.on_boot()
     _call_plugins(_PLUGIN_APPS, "on_startup", app)
     # Keep the main project's JWKS warm in the background (now, then every
     # JWKS_REFRESH_INTERVAL_SEC) so verified requests read a cached key instead
@@ -419,7 +433,8 @@ async def persist_admin_env(request: Request, call_next):
 
 
 def _request_is_operator(request: Request) -> bool:
-    """True only when the request carries a signature-verified SUPERUSER JWT.
+    """True only when the request carries a signature-verified SUPERUSER JWT,
+    or a portal-issued API key with the `admin` scope.
 
     The `X-WAJ-*-Override` headers let a caller swap the LLM model or pin a
     prompt version for a request. That power must be limited to operators (the
@@ -439,6 +454,13 @@ def _request_is_operator(request: Request) -> bool:
             token = require_bearer(auth)
         if not token:
             return False
+        from core import api_keys
+
+        if api_keys.looks_like_api_key(token):
+            # A portal-issued key is an operator only with the `admin` scope:
+            # a `chat` key may talk to an agent, never choose its model or prompt.
+            row = api_keys.verify_key(token)  # raises on a bad, revoked or expired key
+            return api_keys.scope_allows(row.get("scopes") or [], api_keys.SCOPE_ADMIN)
         resolve_superuser(token)  # verifies signature + superuser row; raises otherwise
         return True
     except Exception:
@@ -620,7 +642,7 @@ async def security_and_rate_limit_middleware(request: Request, call_next):
         or request.url.path.startswith("/static")
         or (
             request.url.path.startswith("/admin")
-            and request.url.path not in ("/admin/login", "/admin/logout")
+            and request.url.path not in ("/admin/login", "/admin/logout", "/admin/setup")
         )
     )
 
@@ -795,6 +817,12 @@ async def health_check():
 @app.get("/")
 async def root():
     """Root endpoint with API information"""
+    from fastapi.responses import RedirectResponse
+
+    from admin.services import first_run as _first_run
+
+    if await _first_run.in_first_run():
+        return RedirectResponse(url="/admin/setup", status_code=303)
     return {
         "name": "WAJ AI Engine API",
         "version": "1.0.0",
