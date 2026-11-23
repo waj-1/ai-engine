@@ -2,6 +2,12 @@
 
 **Self-hosted chat agents you build from a portal or over MCP, not from code.**
 
+<!-- overview-video -->
+[![WAJ AI Engine in action](docs/media/overview/engine-overview.webp)](docs/media/overview/engine-overview.mp4)
+
+▶ [Watch with sound](docs/media/overview/engine-overview.mp4) (35 s) · [Video tour of every section](docs/partner/README.md#watch-it-first)
+<!-- /overview-video -->
+
 An agent here is a row of configuration: instructions, a model, tools from the
 MCP servers you connect, and optionally other agents it can hand off to. You
 create and change agents in the admin portal at `/admin`, or by asking your AI

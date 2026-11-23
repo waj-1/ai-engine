@@ -9,6 +9,21 @@ These guides show you how to look after your AI agents in the portal: change wha
 3. [Find anything](01-getting-started/03-find-anything.md): jump to any screen, agent or guide with **Ctrl K** (**⌘ K** on a Mac).
 4. [Set up a new install](01-getting-started/04-set-up-a-new-install.md): only if you installed the engine yourself and nobody has an account yet.
 
+## Watch it first
+
+Every section has a short video and a page with screenshots.
+
+| | |
+|---|---|
+| [<img src="01-getting-started/media/engine-getting-started-poster.jpg" width="320" alt="Getting started">](01-getting-started/) | **[Getting started](01-getting-started/)**<br>Up and running in minutes<br><br>▶ 36 s video |
+| [<img src="02-agents/media/engine-agents-poster.jpg" width="320" alt="Agents">](02-agents/) | **[Agents](02-agents/)**<br>Agents that get things done<br><br>▶ 40 s video |
+| [<img src="03-knowledge/media/engine-knowledge-poster.jpg" width="320" alt="Knowledge">](03-knowledge/) | **[Knowledge](03-knowledge/)**<br>Teach your agents what you know<br><br>▶ 37 s video |
+| [<img src="04-connections/media/engine-connections-poster.jpg" width="320" alt="Connections">](04-connections/) | **[Connections](04-connections/)**<br>Plug agents into your systems<br><br>▶ 36 s video |
+| [<img src="05-monitor/media/engine-monitor-poster.jpg" width="320" alt="Monitor">](05-monitor/) | **[Monitor](05-monitor/)**<br>Read every conversation your agents have<br><br>▶ 35 s video |
+| [<img src="06-testing/media/engine-testing-poster.jpg" width="320" alt="Testing">](06-testing/) | **[Testing](06-testing/)**<br>Know your agent is ready before customers see it<br><br>▶ 33 s video |
+| [<img src="07-publishing/media/engine-publishing-poster.jpg" width="320" alt="Publishing">](07-publishing/) | **[Publishing](07-publishing/)**<br>Change an agent safely, then ship it<br><br>▶ 37 s video |
+| [<img src="08-team-and-settings/media/engine-team-and-settings-poster.jpg" width="320" alt="Team & settings">](08-team-and-settings/) | **[Team & settings](08-team-and-settings/)**<br>Keys, limits and a full record<br><br>▶ 36 s video |
+
 ## All guides
 
 | Section | What it covers |
