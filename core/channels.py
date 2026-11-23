@@ -1,6 +1,6 @@
 """Runtime accessor for ``wajagents.agent_channels``.
 
-A *channel* names a request source (the WAJ app, the marketing landing
+A *channel* names a request source (an app, a marketing landing
 page, a tenant's own website, a partner app, the public API, …) and carries the
 policy the runtime should apply to it: CORS allow-list, allowed
 agent_kinds, default profile, branding, auth + rate-limit knobs. The
@@ -14,22 +14,21 @@ Typical use::
     from core.channels import get_active_channels
 
     channels = get_active_channels()
-    waj_app = channels.get("waj_app")
-    if waj_app and origin in waj_app["allowed_origins"]:
+    site = channels.get("website_chat")
+    if site and origin in site["allowed_origins"]:
         ...  # accept the request
 
-TODO(channels): wire this into ``main.py``'s CORS middleware and the
-agent dispatcher so the allowed_origins / allowed_agent_kinds /
-default_profile_id columns actually shape request handling. Today
-nothing reads from this module — the admin layer is what populates the
-table, and this helper just exposes the rows in a runtime-friendly
-shape so the follow-up wiring is mechanical.
+Readers: the request-time channel resolver (``core.channel_resolver``) and
+the CORS middleware (``core.cors.FirstPartyCORSMiddleware``), which allows a
+channel's origins as soon as the cache sees the channel.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import threading
+import time
 from typing import Any, Dict, Iterable, List, Optional
 
 from core.auth import get_service_client
@@ -42,6 +41,20 @@ logger = logging.getLogger(__name__)
 # return a half-populated dict.
 _lock = threading.Lock()
 _cache: Optional[Dict[str, Dict[str, Any]]] = None
+_loaded_at = 0.0
+
+
+def _ttl_seconds() -> float:
+    """How long a loaded map is served before it is read again.
+
+    ``invalidate()`` makes a portal edit take effect at once in the process
+    that served the edit; the TTL is what lets every OTHER process (another
+    replica, a separate chat service) see it too. ``CHANNELS_CACHE_TTL_SEC``,
+    default 60; 0 or less = never expire (the old behaviour)."""
+    try:
+        return float(os.getenv("CHANNELS_CACHE_TTL_SEC", "60"))
+    except ValueError:
+        return 60.0
 
 
 # Columns we surface to callers. Pinned so a downstream schema addition
@@ -101,15 +114,19 @@ def _load_from_db() -> Dict[str, Dict[str, Any]]:
 def get_active_channels() -> Dict[str, Dict[str, Any]]:
     """Return the active-channels map keyed by slug.
 
-    Cached at first call; call ``invalidate()`` from the admin write
-    paths to bust the cache so the next request sees the latest policy.
+    Cached at first call and re-read after ``CHANNELS_CACHE_TTL_SEC``; call
+    ``invalidate()`` from the admin write paths to bust the cache so the next
+    request sees the latest policy.
     Returns a fresh shallow copy on each call so callers can mutate the
     top-level dict without poisoning the cache.
     """
-    global _cache
+    global _cache, _loaded_at
     with _lock:
-        if _cache is None:
+        ttl = _ttl_seconds()
+        stale = ttl > 0 and (time.monotonic() - _loaded_at) > ttl
+        if _cache is None or stale:
             _cache = _load_from_db()
+            _loaded_at = time.monotonic()
         return dict(_cache)
 
 

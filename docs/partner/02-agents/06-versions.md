@@ -23,10 +23,15 @@ Pinning holds a known-good version steady. For example, pin your last checkpoint
 
 Pinning affects what people get, including in the **Test** chat. To try out new edits, go back to **Default (latest)** first.
 
+## Versions and Production
+
+On a portal with a STAGING / PRODUCTION switch, the checkpoints on this tab belong to the copy you're looking at. Production gets a new version each time you promote the agent; those are listed in **Settings › Releases › Promotion history**. See [Make your changes live](../07-publishing/01-publish-changes.md).
+
 ## Compare
 
 - **Compare with another agent…** lines up this agent's setup against another agent's, field by field.
 - **Compare versions** on the **Instructions** tab compares two versions of the instructions text only.
+- **Compare with Production** (only on portals with the switch, viewing Staging) shows how this agent's Staging setup differs from its Production copy.
 
 ## Good habits
 

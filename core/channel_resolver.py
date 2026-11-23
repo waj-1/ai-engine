@@ -175,8 +175,13 @@ def resolve_channel(request: HTTPConnection) -> Optional[Dict[str, Any]]:
     return channel
 
 
-def enforce_channel_kind(request: HTTPConnection, agent_kind: str) -> None:
+def enforce_channel_kind(request: HTTPConnection, agent_kind: str,
+                         agent_slug: Optional[str] = None) -> None:
     """Raise 403 if the resolved channel forbids ``agent_kind``.
+
+    Generic agents all share one kind and are told apart by slug, so a
+    channel names one of them as ``<kind>:<slug>`` (``custom:support-desk``).
+    The bare kind still allows every agent of that kind.
 
     Called explicitly from endpoint handlers (after ``resolve_channel``
     has populated ``request.state.channel``) because the agent_kind is
@@ -190,21 +195,24 @@ def enforce_channel_kind(request: HTTPConnection, agent_kind: str) -> None:
     channel = getattr(request.state, "channel", None)
     if not channel:
         return
+    # A slug-addressed voice call names its agent on the connection state.
+    agent_slug = agent_slug or getattr(request.state, "agent_slug", None)
     allowed = channel.get("allowed_agent_kinds") or []
     # An empty allow-list means "no restriction" (the admin form lets
     # operators leave it blank to indicate "any kind"). Enforce only
     # when at least one kind is explicitly configured.
     if not allowed:
         return
-    if agent_kind not in allowed:
-        slug = channel.get("slug") or "<unknown>"
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                f"channel '{slug}' is not permitted to dispatch agent_kind "
-                f"'{agent_kind}' (allowed: {sorted(allowed)})"
-            ),
-        )
+    if agent_kind in allowed or (agent_slug and f"{agent_kind}:{agent_slug}" in allowed):
+        return
+    slug = channel.get("slug") or "<unknown>"
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            f"channel '{slug}' is not permitted to dispatch agent_kind "
+            f"'{agent_kind}' (allowed: {sorted(allowed)})"
+        ),
+    )
 
 
 def root_span_attrs(
@@ -212,6 +220,7 @@ def root_span_attrs(
     *,
     agent_kind: Optional[str] = None,
     session_id: Optional[str] = None,
+    agent_slug: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build the ``waj.*`` root-span attributes for a request.
 
@@ -225,6 +234,10 @@ def root_span_attrs(
     Transcript can link a trace back to its persisted ``ai_chat_messages``
     (Laminar's dashboard API doesn't expose the chat session id on the trace,
     so we carry our own on the span — read from ClickHouse).
+
+    ``agent_slug`` (``waj.agent_slug``) names the one agent of a kind many
+    agents share (every generic agent is ``custom``), so Conversations can
+    filter to one of them.
 
     Split out from :func:`tag_active_span` so the streaming root span and the
     legacy in-place tagging stay in sync.
@@ -240,6 +253,8 @@ def root_span_attrs(
     }
     if agent_kind:
         attrs["waj.agent_kind"] = agent_kind
+    if agent_slug:
+        attrs["waj.agent_slug"] = agent_slug
     if session_id:
         attrs["waj.session_id"] = session_id
     attrs.update(eval_trace_attrs(request))

@@ -63,6 +63,7 @@ _DEFAULT_BRAND: Dict[str, Any] = {
     "title": PRODUCT_PORTAL_NAME,  # login heading / default <title>
     "login_copy": "Sign in with your WAJ superuser account.",
     "mark": None,                 # letter on the brand tile (None = plain tile)
+    "glyph": None,                # "engine" = the engine's own mark instead of the plain tile
     "css": "",                    # accent overrides (empty = WAJ teal)
 }
 
@@ -83,7 +84,9 @@ def brand() -> Dict[str, Any]:
     if client is None:
         out = dict(_DEFAULT_BRAND)
         if not has_product():
-            out.update(name=ENGINE_PORTAL_NAME, title=ENGINE_PORTAL_NAME)
+            # The engine's own mark on the sidebar, sign-in and first-run
+            # pages (admin/templates/_components/brand_mark.html).
+            out.update(name=ENGINE_PORTAL_NAME, title=ENGINE_PORTAL_NAME, glyph="engine")
         # PORTAL_NAME renames the shell for a deployment that is not WAJ's.
         name = (os.getenv("PORTAL_NAME") or "").strip()
         if name:
@@ -338,6 +341,41 @@ def section_tabs_for(path: Optional[str], query: Optional[Mapping[str, str]] = N
     return {"section": section, "tabs": tabs, "current": current}
 
 
+def page_section(path: Optional[str]) -> Optional[str]:
+    """The section key ('settings', 'knowledge', ...) of a page that carries a
+    section tab strip, or None. Unlike `section_tabs_for` it does not depend on
+    how many tabs the build shows."""
+    p = (path or "").rstrip("/") or "/"
+    hit = _TAB_PAGES.get(p)
+    if hit is None and p.startswith("/admin/docs/") and not p.startswith("/admin/docs/api"):
+        return "settings"
+    return hit[0] if hit else None
+
+
+# Operate screens read what agents are doing; they change nothing, so the
+# "you are working on production" banner would be noise there.
+_READ_ONLY_ACTIVE = frozenset({"live", "observability"})
+
+
+def env_chrome(request: Any, active: Optional[str], env_scoped: bool = False) -> Dict[str, bool]:
+    """Whether a page shows the STAGING / PRODUCTION switch and the
+    production banner.
+
+    Settings pages mostly hold install-wide data (team, API keys, releases,
+    diagnostics) that is the same whichever environment is picked, so they do
+    not show the switch; the few that hold per-environment data pass
+    ``env_scoped`` and then name the environment on the page. Every other
+    config screen shows the switch, and a production banner when production
+    is picked, so editing production is never silent."""
+    path = getattr(getattr(request, "url", None), "path", None)
+    in_settings = page_section(path) == "settings"
+    return {
+        "switch": env_scoped or not in_settings,
+        "prod_banner": (active or "") not in _READ_ONLY_ACTIVE,
+        "page_marker": bool(env_scoped),
+    }
+
+
 def section_tabs_for_request(request: Any) -> Optional[Dict[str, Any]]:
     """Jinja-friendly wrapper: reads path + query off a Starlette request."""
     if request is None:
@@ -363,6 +401,9 @@ class SettingsEntry:
     staff_only: bool = False
 
 
+_VOICE_BUDGETS_AGENT_TEXT = "How much voice-call time each agent can use per day."
+_VOICE_BUDGETS_BUSINESS_TEXT = "How much voice-call time each business can use per day."
+
 SETTINGS_ENTRIES: Tuple[SettingsEntry, ...] = (
     SettingsEntry(
         "users", "Team & access",
@@ -379,7 +420,9 @@ SETTINGS_ENTRIES: Tuple[SettingsEntry, ...] = (
     ),
     SettingsEntry(
         "voice_budgets", "Voice budgets",
-        "How many minutes of voice calls each business can use per day.", "voice",
+        # Neutral default; a build whose plugin has businesses says so
+        # (`settings_entries`), the same wording as the Voice budgets page.
+        _VOICE_BUDGETS_AGENT_TEXT, "voice",
         (("Set voice budgets", "/admin/voice-budgets", ""),),
     ),
     SettingsEntry(
@@ -420,8 +463,20 @@ SETTINGS_ENTRIES: Tuple[SettingsEntry, ...] = (
 
 
 def settings_entries() -> List[SettingsEntry]:
+    from dataclasses import replace
+
+    from admin.eval_context import business_field_label
+
     partner = partner_build()
-    return [e for e in SETTINGS_ENTRIES if not (partner and e.staff_only)]
+    has_businesses = bool(business_field_label())
+    out = []
+    for e in SETTINGS_ENTRIES:
+        if partner and e.staff_only:
+            continue
+        if e.key == "voice_budgets" and has_businesses:
+            e = replace(e, description=_VOICE_BUDGETS_BUSINESS_TEXT)
+        out.append(e)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +493,7 @@ def install_template_globals(templates: Any) -> None:
     g["portal_nav"] = portal_nav
     g["nav_section"] = section_for
     g["section_tabs_for"] = section_tabs_for_request
+    g["env_chrome"] = env_chrome
     g["partner_build"] = partner_build
     g["brand"] = brand
     g["search_quick_actions"] = search_quick_actions

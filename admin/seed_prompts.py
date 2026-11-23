@@ -47,7 +47,7 @@ def run() -> Dict[str, int]:
     # ONLY the active client's prompt(s) — including its own sub-agents
     # (<key>_title / <key>_suggestions) — while a normal WAJ build seeds
     # everything EXCEPT the union of ALL deployment scopes' kinds, so no
-    # client's prompt rows ever land in the shared WAJ DB (including a
+    # client's prompt rows ever land in the shared database (including a
     # scope whose specs do not exist yet). Existing rows of the other flavour are left untouched
     # either way.
     scope = active_scope()

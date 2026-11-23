@@ -235,11 +235,13 @@ def promotion_status(
 @tool_errors
 async def deploy(environment: Literal["prod"], git_ref: str = "main",
                  confirm: bool = False) -> Dict[str, Any]:
-    """Re-ship the prod chat service (ai-engine) at `git_ref` (default "main").
-    Only environment="prod" is valid — "staging" is an env column, not a service.
-    Note: the *canonical* deploy is a merge to main, which ships both the
-    control-plane and prod chat via CI; use this only to re-ship prod at a specific
-    ref. Requires confirm=true. Watch progress with list_deploy_runs."""
+    """Re-ship the prod chat service at `git_ref` (default "main") by
+    dispatching the deploy workflow (deploy-agent-from-portal.yaml) of the
+    GitHub repository GITHUB_DEPLOY_REPO names, with GITHUB_DEPLOY_TOKEN.
+    Offered only where deploying is set up that way. Only environment="prod"
+    is valid — "staging" is an env column, not a service. Use this to re-ship
+    prod at a specific ref (a branch on the allow-list or a release tag).
+    Requires confirm=true. Watch progress with list_deploy_runs."""
     from admin.services.deploys import DeployError, dispatch_deploy
     if not confirm:
         return not_confirmed(f"deploy git ref {git_ref!r} to {environment}")
@@ -254,9 +256,11 @@ async def deploy(environment: Literal["prod"], git_ref: str = "main",
 @tool_errors
 async def rollback(environment: Literal["prod"], target_revision: str,
                    confirm: bool = False) -> Dict[str, Any]:
-    """Roll the prod chat service (ai-engine) back to a previous Cloud Run
-    revision. Only environment="prod" is valid — "staging" is an env column,
-    not a deployable service. Requires confirm=true."""
+    """Roll the prod chat service back to a previous revision by dispatching
+    the rollback workflow (rollback-agent.yaml) of the GitHub repository
+    GITHUB_DEPLOY_REPO names. Offered only where deploying is set up that way.
+    Only environment="prod" is valid — "staging" is an env column, not a
+    deployable service. Requires confirm=true."""
     from admin.services.deploys import DeployError, dispatch_rollback
     if not confirm:
         return not_confirmed(f"roll back {environment} to {target_revision}")
@@ -271,8 +275,9 @@ async def rollback(environment: Literal["prod"], target_revision: str,
 @mcp.tool(annotations=READ_ONLY)
 @tool_errors
 async def list_deploy_runs(environment: EnvFilter = "", limit: int = 20) -> Dict[str, Any]:
-    """Recent GitHub Actions deploy/rollback runs (status, conclusion,
-    git ref, timestamps)."""
+    """Recent deploy/rollback workflow runs of the GITHUB_DEPLOY_REPO
+    repository (status, conclusion, git ref, timestamps). Offered only where
+    deploying is set up."""
     from admin.deploy_handlers import _fetch_recent_deploy_runs
     runs = await _fetch_recent_deploy_runs(limit=limit)
     if environment:
@@ -282,6 +287,27 @@ async def list_deploy_runs(environment: EnvFilter = "", limit: int = 20) -> Dict
         # clearly, so an unfiltered/ambiguous run still passes through.
         runs = [r for r in runs if r.get("target_env") in (environment, None, "")]
     return {"runs": runs}
+
+
+# The tools that dispatch a GitHub workflow. Without a repository to dispatch
+# (GITHUB_DEPLOY_REPO, or a plugin's deployment.deploy_repo()) every call
+# would fail, so the server does not offer them at all.
+DEPLOY_WORKFLOW_TOOLS = ("deploy", "rollback", "list_deploy_runs")
+
+
+def drop_unconfigured_deploy_tools(server) -> List[str]:
+    """Remove the deploy-workflow tools from ``server`` when no deploy
+    repository is configured. Returns the names removed."""
+    from admin.deploy_handlers import github_repo
+
+    if github_repo():
+        return []
+    removed = []
+    for name in DEPLOY_WORKFLOW_TOOLS:
+        if server._tool_manager.get_tool(name) is not None:
+            server.remove_tool(name)
+            removed.append(name)
+    return removed
 
 
 @mcp.tool()
@@ -295,7 +321,7 @@ def deployment_targets(action: Literal["list", "get", "create", "update", "delet
                        is_default: Optional[bool] = None,
                        is_active: Optional[bool] = None,
                        confirm: bool = False) -> Dict[str, Any]:
-    """CRUD for Cloud Run deployment targets (agent_deployment_targets) —
+    """CRUD for deployment targets (agent_deployment_targets) —
     per-(environment, label) service URLs the E2E runner and cross-env
     promote read instead of AI_AGENT_BASE_URL_* env vars. `env` selects
     which branch DB to operate on (client_for_env); `environment` is the

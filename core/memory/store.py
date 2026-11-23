@@ -22,6 +22,30 @@ def default_client():
     return get_service_client()
 
 
+# The kind every generic agent shares. Its memories belong to ONE agent,
+# named by `agent_slug`; every other kind is scoped by kind alone, as before.
+SLUG_SCOPED_KIND = "custom"
+
+
+class MissingAgentScope(ValueError):
+    """A custom-kind memory read or write named no agent."""
+
+
+def scope_query(query, *, agent_kind: str, agent_slug: Optional[str]):
+    """Narrow an ai_user_memory query to one agent's memories.
+
+    A product kind is one agent, so its rows are read by kind (unchanged).
+    Many generic agents share the `custom` kind, so theirs are read by kind
+    AND slug: without the slug, a support agent would recall what a user told
+    a sales agent. A custom-kind read with no slug fails closed."""
+    query = query.eq("agent_kind", agent_kind)
+    if agent_kind == SLUG_SCOPED_KIND:
+        if not agent_slug:
+            raise MissingAgentScope("custom-kind memory needs the agent's slug")
+        query = query.eq("agent_slug", agent_slug)
+    return query
+
+
 async def _exec(query) -> Any:
     return await asyncio.to_thread(query.execute)
 
@@ -30,7 +54,7 @@ async def insert_memory(
     client,
     *,
     user_id: str,
-    business_id: str,
+    business_id: Optional[str],
     agent_kind: str,
     content: str,
     embedding: Optional[List[float]],
@@ -39,7 +63,10 @@ async def insert_memory(
     pinned: bool = False,
     origin_session_id: Optional[str] = None,
     origin_message_id: Optional[str] = None,
+    agent_slug: Optional[str] = None,
 ) -> None:
+    if agent_kind == SLUG_SCOPED_KIND and not agent_slug:
+        raise MissingAgentScope("custom-kind memory needs the agent's slug")
     row: Dict[str, Any] = {
         "user_id": user_id,
         "business_id": business_id,
@@ -51,6 +78,8 @@ async def insert_memory(
         "origin_session_id": origin_session_id,
         "origin_message_id": origin_message_id,
     }
+    if agent_slug and agent_kind == SLUG_SCOPED_KIND:
+        row["agent_slug"] = agent_slug
     if embedding is not None:
         row["embedding"] = to_vector_literal(embedding)
     await _exec(client.table("ai_user_memory").insert(row))
@@ -79,30 +108,35 @@ async def match_memories(
     query_embedding: List[float],
     match_count: int,
     min_similarity: float,
+    agent_slug: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """Top-K active memories by cosine similarity via the match_user_memory RPC."""
+    """Top-K active memories by cosine similarity via the match_user_memory RPC.
+
+    A custom agent's call carries its slug (the RPC then reads only that
+    agent's rows); a product kind's call is the same as before."""
     literal = to_vector_literal(query_embedding)
-    result = await _exec(
-        client.rpc(
-            "match_user_memory",
-            {
-                "p_user_id": user_id,
-                "p_agent_kind": agent_kind,
-                "p_query_embedding": literal,
-                "p_match_count": match_count,
-                "p_min_similarity": min_similarity,
-            },
-        )
-    )
+    params: Dict[str, Any] = {
+        "p_user_id": user_id,
+        "p_agent_kind": agent_kind,
+        "p_query_embedding": literal,
+        "p_match_count": match_count,
+        "p_min_similarity": min_similarity,
+    }
+    if agent_kind == SLUG_SCOPED_KIND:
+        if not agent_slug:
+            raise MissingAgentScope("custom-kind memory needs the agent's slug")
+        params["p_agent_slug"] = agent_slug
+    result = await _exec(client.rpc("match_user_memory", params))
     return result.data or []
 
 
-async def list_pinned(client, *, user_id: str, agent_kind: str) -> List[Dict[str, Any]]:
-    result = await _exec(
-        client.table("ai_user_memory")
-        .select("id, content, importance, pinned, source")
+async def list_pinned(
+    client, *, user_id: str, agent_kind: str, agent_slug: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    query = client.table("ai_user_memory").select("id, content, importance, pinned, source") \
         .eq("user_id", user_id)
-        .eq("agent_kind", agent_kind)
+    result = await _exec(
+        scope_query(query, agent_kind=agent_kind, agent_slug=agent_slug)
         .eq("status", "active")
         .eq("pinned", True)
     )
@@ -111,10 +145,11 @@ async def list_pinned(client, *, user_id: str, agent_kind: str) -> List[Dict[str
 
 async def nearest_one(
     client, *, user_id: str, agent_kind: str, query_embedding: List[float],
+    agent_slug: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Single nearest active memory (for the dedup decision). min_similarity=0."""
     rows = await match_memories(
-        client, user_id=user_id, agent_kind=agent_kind,
+        client, user_id=user_id, agent_kind=agent_kind, agent_slug=agent_slug,
         query_embedding=query_embedding, match_count=1, min_similarity=0.0,
     )
     return rows[0] if rows else None
@@ -130,13 +165,14 @@ async def bump_usage(client, *, memory_ids: List[str]) -> None:
         logger.debug("memory.store: bump_usage skipped (%s)", exc)
 
 
-async def list_for_user(client, *, user_id: str, agent_kind: str, limit: int = 200) -> List[Dict[str, Any]]:
+async def list_for_user(
+    client, *, user_id: str, agent_kind: str, limit: int = 200,
+    agent_slug: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """Admin browse: all of a user's memories (active + archived), newest first."""
+    query = client.table("ai_user_memory").select("*").eq("user_id", user_id)
     result = await _exec(
-        client.table("ai_user_memory")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("agent_kind", agent_kind)
+        scope_query(query, agent_kind=agent_kind, agent_slug=agent_slug)
         .order("created_at", desc=True)
         .limit(limit)
     )

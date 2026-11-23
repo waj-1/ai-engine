@@ -39,7 +39,10 @@ Environment variables (`/admin/env?tab=variables`), Voice budgets
 `/admin/diagnostics/runtime`, `/admin/lmnr/diagnose`, `/admin/jobs`, `/admin/tests`) and Developer docs
 (`/admin/docs`). On a partner build only Team & access, Voice budgets and Model keys are listed (API keys is
 staff-only: the chat API a key opens is not served there).
-Each member screen shows the Settings section tabs.
+Each member screen shows the Settings section tabs. The Voice budgets entry reads
+"How much voice-call time each agent can use per day.", or "… each business …" when
+a plugin provides businesses (`agent_catalog.business_field_label()`), as on the
+Voice budgets page.
 
 ---
 
@@ -210,14 +213,23 @@ Over MCP: the [`api_keys`](./06-mcp.md#govern--admin_mcptools_governpy) tool.
 Settings › **Team & access** · `GET /admin/users` · `users.html` · `router.py:users_screen()` ·
 `admin/screens/govern.py` (`build_team`, `is_service_account`, `last_activity_by_actor`, `last_sign_in`)
 
-**Shows** — one table of people (from the main DB `user` table): person (email →
-phone → id-prefix, plus their WAJ-app role as a caption), **Access** (`Admin` chip, or
+**Shows** — one table of people (from the `user` table the portal's sign-in checks):
+person (email → phone → id-prefix, plus, where a plugin words it, their role in its
+own app as a caption), **Access** (`Admin` chip, or
 "No portal access"), **Last active** (the later of the person's newest Activity row —
 matched on `public.user.id` *or* their auth id, since MCP/script writers record the JWT
 `sub` — and, for admins, the last sign-in from the main project's auth admin API) and
 one action. A client-side search filters the rows. **Service accounts** (`role =
-system`, `@e2e.test`-style emails, the zero-uuid system row, rows with no email and no
-phone) are hidden behind **Show service accounts (N)** (`?service=1`).
+system`, `@e2e.test`-style emails, example.com / example.org addresses that are not
+admins, the zero-uuid system row, rows with no email and no phone) are hidden behind
+**Show service accounts (N)** (`?service=1`). An admin with an example.com address
+(what a fresh install's first-run admin often types) and the signed-in admin are
+always listed as people.
+
+**Wording** — the sentence under **People** and the role caption come from
+`govern.team_copy()`: neutral in the engine ("Everyone else listed here can't open
+the portal.", no role caption); a plugin's `portal_display.team_copy()` replaces
+them (a product build names its own apps there and shows "<role> in <its app>").
 
 **Roles** — there is still exactly one access level: the portal's superuser bit
 (`user.permission.is_superuser`), labelled **Admin** and explained on the page. No new

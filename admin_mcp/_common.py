@@ -26,7 +26,7 @@ ALLOWED_ENVS = ("staging", "prod")
 #                     config DB the tool reads/writes. Always this meaning.
 #   row_environment — a row's own `environment` COLUMN (update_profile,
 #                     deployment_targets, env_vars). Old name: `environment`.
-#   trace_env       — the Laminar `waj.env` TAG on traces (live_analytics,
+#   trace_env       — the environment TAG on traces (span attribute waj.env) (live_analytics,
 #                     caching_analytics, voice_insights). Old name:
 #                     `environment`.
 # The old names stay accepted as deprecated aliases (resolve_alias below).
@@ -39,9 +39,9 @@ EnvFilter = Literal["", "staging", "prod"]
 RowEnv = Annotated[EnvFilter, Field(
     description="The row's own `environment` column (staging|prod). '' = "
                 "default to `env` (create) or leave unchanged (update).")]
-# Laminar waj.env tags can carry "dev" too — wider than the config-DB Env.
+# Trace environment tags can carry "dev" too — wider than the config-DB Env.
 TraceEnv = Annotated[Literal["", "dev", "staging", "prod"], Field(
-    description="Laminar `waj.env` trace tag to scope telemetry to "
+    description="Environment tag of the traces to scope telemetry to "
                 "(dev|staging|prod); '' = all environments.")]
 Confirm = Annotated[bool, Field(
     description="false (default) = dry run: report what WOULD change and "

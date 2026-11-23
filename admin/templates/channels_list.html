@@ -1,25 +1,9 @@
 {% extends "_base.html" %}
 {% from "_components/chip.html" import chip %}
-{% from "_components/callout.html" import alert %}
 {% block title %}Channels · {{ brand().title }}{% endblock %}
 {% block page_title %}Channels{% endblock %}
 {% block page_subtitle %}Where your agents are available — apps, websites and APIs.{% endblock %}
 {% block content %}
-
-{% if cors_dirty %}
-<div data-cors-dirty-banner style="margin-bottom:var(--space-m);">
-  {% call alert('warning') %}
-    <strong>CORS allow-list is stale.</strong>
-    Channels were edited since the agent service last started. Restart the agent
-    process to pick up the new <code>allowed_origins</code> — until then,
-    browsers hitting the newly-added origins will be blocked by the static
-    <code>CORSMiddleware</code> snapshot taken at boot.
-    <form method="post" action="/admin/channels/cors-dirty/clear" style="margin:var(--space-xs) 0 0;">
-      <button type="submit" class="ghost">Mark as fixed</button>
-    </form>
-  {% endcall %}
-</div>
-{% endif %}
 
 <div class="page-head">
   <form method="get" action="/admin/channels" class="filter-row mb-0">

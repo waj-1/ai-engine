@@ -27,6 +27,8 @@ The words you'll see in the portal, in plain language.
 | **Version** | A saved copy of an agent's whole setup. You can compare versions and restore an earlier one. See [Versions](../02-agents/06-versions.md). |
 | **Draft** | An agent that isn't serving customers yet, or a copy you're working on. New agents start as drafts. |
 | **Live** | What customers get right now. An **Active** agent is live. |
+| **Staging / Production** | On portals with a STAGING / PRODUCTION switch, two copies of every agent. You edit **Staging**; **Production** serves the version you last promoted. See [Make your changes live](../07-publishing/01-publish-changes.md). |
+| **Promote** | Publish an agent's Staging setup to Production, in **Settings › Releases** or **More ▾ → Promote to Production…**. Each promote makes a new Production version, listed in **Promotion history**. |
 | **Model key** | The secret a provider such as Google or OpenAI gives you so your agents can use its AI models. See [Add a model key](../08-team-and-settings/04-model-keys.md). |
 | **Voice budget** | The number of voice-call minutes a business can use each day. See [Set the daily voice allowance](../08-team-and-settings/03-voice-budgets.md). |
 | **API key** | A piece of text, starting with `wae_`, that lets a program use your agents without anyone signing in. See [Create and revoke API keys](../08-team-and-settings/04-api-keys.md). |

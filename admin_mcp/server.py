@@ -42,7 +42,7 @@ Conventions:
 tools default to env="staging" (the edit-then-promote workflow); pass \
 env="prod" explicitly to read or change what production serves. `env` \
 never means anything else: a row's own environment column is \
-`row_environment`, a Laminar trace tag is `trace_env`.
+`row_environment`, a trace's environment tag is `trace_env`.
 - Destructive actions dry-run by default: they return {"confirmed": false, \
 "would": ...} and change nothing until re-called with confirm=true. \
 promote_profile included: without confirm it returns a "what will change" \
@@ -83,6 +83,8 @@ def build_mcp_asgi_app():
     import admin_mcp.tools_dispatch  # noqa: F401
     import admin_mcp.resources  # noqa: F401
     from admin_mcp.param_docs import apply_param_descriptions
+    from admin_mcp.tools_ship import drop_unconfigured_deploy_tools
+    drop_unconfigured_deploy_tools(mcp)
     apply_param_descriptions(mcp)
 
     return MCPAuthMiddleware(mcp.streamable_http_app())

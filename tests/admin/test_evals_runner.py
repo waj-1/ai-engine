@@ -154,7 +154,8 @@ def test_run_scenario_expected_answer_without_judge_does_not_pass(monkeypatch):
         judge=None, pass_threshold=0.7,
     )
     assert result["passed"] is False
-    assert result["score"] == 0.0
+    # Not judged (2026-11-23): no score, so it can't read as "Scored 0%".
+    assert result["score"] is None and result["ungraded"] is True
     assert result["grading_note"] and "judge model" in result["grading_note"]
 
 

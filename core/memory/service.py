@@ -109,20 +109,25 @@ async def build_context_block(
     session_id: Optional[str],
     current_message: str,
     client,
+    agent_slug: Optional[str] = None,
 ) -> Tuple[str, List[str], bool]:
-    """READ path. Returns (prompt_block, retrieved_memory_ids, summary_used). Never raises."""
+    """READ path. Returns (prompt_block, retrieved_memory_ids, summary_used). Never raises.
+
+    `agent_slug` names the custom agent whose memories are read (every custom
+    agent shares one kind; store.scope_query). Product kinds pass none."""
     cfg = resolve_memory_config(profile.memory_config)
     if not cfg.get("enabled") or not user_id:
         return "", [], False
     try:
         retr = cfg["retrieval"]
         # Dedup pinned + semantic by id; pinned always included.
-        pinned = await store.list_pinned(client, user_id=user_id, agent_kind=agent_kind)
+        pinned = await store.list_pinned(
+            client, user_id=user_id, agent_kind=agent_kind, agent_slug=agent_slug)
         semantic: List[Dict[str, Any]] = []
         embedding = await asyncio.to_thread(embed_text, current_message)
         if embedding is not None:
             semantic = await store.match_memories(
-                client, user_id=user_id, agent_kind=agent_kind,
+                client, user_id=user_id, agent_kind=agent_kind, agent_slug=agent_slug,
                 query_embedding=embedding,
                 match_count=int(retr["top_k"]),
                 min_similarity=float(retr["min_similarity"]),
@@ -176,10 +181,20 @@ async def process_turn(
     assistant_response: str,
     previous_messages: List[Dict[str, Any]],
     client=None,
+    agent_slug: Optional[str] = None,
 ) -> None:
-    """WRITE path (fire-and-forget). Extract+dedup+store facts; refresh summary."""
+    """WRITE path (fire-and-forget). Extract+dedup+store facts; refresh summary.
+
+    A custom agent's facts are saved under its `agent_slug` and need no
+    business (a generic agent has none); a product kind's need its business,
+    as before."""
     cfg = resolve_memory_config(profile.memory_config)
-    if not cfg.get("enabled") or not user_id or not business_id:
+    if not cfg.get("enabled") or not user_id:
+        return
+    if agent_kind == store.SLUG_SCOPED_KIND:
+        if not agent_slug:
+            return
+    elif not business_id:
         return
     client = client or store.default_client()
     light = build_chat_model(_slot_model(profile, cfg["extraction"].get("model_slot", "light")))
@@ -201,7 +216,8 @@ async def process_turn(
             if embedding is None:
                 continue
             nearest = await store.nearest_one(
-                client, user_id=user_id, agent_kind=agent_kind, query_embedding=embedding,
+                client, user_id=user_id, agent_kind=agent_kind, agent_slug=agent_slug,
+                query_embedding=embedding,
             )
             if nearest and float(nearest.get("similarity", 0.0)) >= dedup_threshold:
                 # Merge: refresh the existing memory's content + embedding.
@@ -213,7 +229,7 @@ async def process_turn(
                     client, user_id=user_id, business_id=business_id, agent_kind=agent_kind,
                     content=fact["content"], embedding=embedding,
                     importance=float(fact["importance"]), source="auto",
-                    origin_session_id=session_id,
+                    origin_session_id=session_id, agent_slug=agent_slug,
                 )
     except Exception as exc:
         logger.warning("memory.service: extraction path failed (%s)", exc)

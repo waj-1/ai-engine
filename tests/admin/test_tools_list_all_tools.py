@@ -69,7 +69,9 @@ def test_tools_are_grouped_per_server_and_collapsed(client):  # noqa: F811
     with patch("admin.router.build_integrations_context", return_value=ctx):
         r = client.get("/admin/tools")
     text = r.text
-    assert text.count("<details data-group>") == 2      # collapsed (no `open`)
+    import re
+    # Collapsed (no `open`); data-agent names the agents the server is attached to.
+    assert len(re.findall(r'<details data-group data-agent="[^"]*">', text)) == 2
     assert "Tools for Orchard" in text
     assert "Not in any server" in text
 

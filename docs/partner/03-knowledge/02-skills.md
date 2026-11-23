@@ -7,7 +7,7 @@ A skill is a short set of instructions an agent pulls in only when it needs them
 ## Create a skill
 
 1. In the sidebar, click **Knowledge**, then the **Skills** tab. Type a **Name**, for example "Demo — explain a refund". Fill in the **Short code name** too: lowercase letters, digits, - or _ (for example `explain-refund`).
-2. Under **Agent**, pick the agent that can use it, for example **Lina — Customer support**. Leave **Business** blank so it works for every business.
+2. Under **Agent**, pick the agent that can use it, for example **Lina — Customer support**. Every agent you made from a template or with **New agent** is listed by its own name, and the skill is added to that agent straight away. Leave **Business** blank so it works for every business.
 3. Write a **One-line description** (the agent reads it to decide when the skill is useful) and the **Instructions**: when to use the skill and the steps to follow.
 4. Leave **Always on** unticked so the agent loads the skill only when it's relevant. Tick it only for rules the agent needs in every conversation.
 5. Click **Create skill**. The skill appears in the list above the form.

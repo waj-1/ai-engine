@@ -86,7 +86,8 @@ HOOKS: dict[str, str] = {
         "Channel kinds and default channels (core/channel_kinds.py): "
         "channel_kinds() {kind: label}, tenant_channel_kinds() (kinds whose "
         "channel belongs to one business), full_build_channel_kinds() (kinds a "
-        "scoped build hides), default_channels() (rows seeded at boot)."
+        "scoped build hides), default_channels() (rows seeded at boot), name_example() "
+        "-> (name, slug): the New channel form's placeholders."
     ),
     "voice_builders": (
         "Duplex-voice builders per agent kind (runtime/agents/voice_registry.py); "
@@ -122,7 +123,8 @@ HOOKS: dict[str, str] = {
         "How the portal displays the plugin's own things: message_markdown(meta) "
         "for a structured session message, non_chat_agent_kinds() (kinds with no "
         "chat transcript to link), display_acronyms() (admin/screens/observability.py, "
-        "admin/testing_view.py)."
+        "admin/testing_view.py); team_copy() -> {others, app_role}: the Team & access "
+        "wording (admin/screens/govern.py)."
     ),
     "agent_catalog": (
         "The deployment's own agent kinds for pickers and the Testing screens: "
@@ -130,7 +132,8 @@ HOOKS: dict[str, str] = {
         "suite_kinds(), live_chat_kinds(), extra_eval_profile_kinds(), "
         "default_expectations(), template_agent_kind(), picker_kinds(), kb_kinds(), "
         "chart_kinds(), kind_colors(), background_kinds(), "
-        "default_kind(), eval_context_fields() (extra run-context ids, admin/eval_context.py), not_chat_endpoints(), endpoint_channels(), tenantless_kinds(), "
+        "default_kind(), eval_context_fields() (extra run-context ids, admin/eval_context.py), "
+        "business_field_label() (the Testing run forms' tenant picker; hidden without one), not_chat_endpoints(), endpoint_channels(), tenantless_kinds(), "
         "topic_sets() (admin/agent_kinds.py, core/conversation_insights.py)."
     ),
     "eval_suite_seeds": (

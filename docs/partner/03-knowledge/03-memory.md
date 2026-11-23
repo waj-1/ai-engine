@@ -11,11 +11,11 @@ Agents can remember useful facts about each person they talk to, such as a prefe
 
 ![Memory settings for Lina, with the agent picker and the long-term memory switch numbered](../media/knowledge/memory-settings.png)
 
-1. In the sidebar, click **Knowledge**, then the **Memory** tab, then **Memory settings for …**. Pick the agent in the **Agent** list.
+1. In the sidebar, click **Knowledge**, then the **Memory** tab, then **Memory settings for …**. Pick the agent in the **Agent** list. Each agent you made yourself is listed by its own name and has its own settings; the page opens on the first of them.
 2. Tick **Remember facts about each person** to turn long-term memory on. When it's off, nothing under **Saving facts**, **Recalling facts** or **Conversation summary** is used.
 3. Adjust the numbers only if you have a reason to. The defaults suit most agents. For example, **How important a fact must be** set higher saves fewer facts, and **Forget facts after (days)** deletes old facts automatically.
 4. Under **Conversation window**, **Messages to look back at** sets how many recent messages each reply considers.
-5. Scroll down and click **Save memory settings**.
+5. Scroll down and click **Save memory settings**. The note next to the button names the agent and the environment the settings are saved to.
 
 Saved settings apply to the agent in the test environment straight away. They reach customers when the agent's changes are published. See [Make your changes live](../07-publishing/01-publish-changes.md).
 
@@ -27,6 +27,10 @@ Saved settings apply to the agent in the test environment straight away. They re
 2. **Memory settings for …** opens the settings described above.
 
 Under **Memories**, search for a person to see the facts saved about them. **Inspector** shows what the agent recalled in one conversation.
+
+Each agent keeps its own memories. What a person told one agent, for example your sales agent, is never recalled by another, such as your support agent, even when both were made from the same template.
+
+If you used memory before agents kept their own, facts saved by hand back then may be listed under **Not assigned to an agent yet**. No agent recalls them. Click **Move to …** to give a fact to the agent you are viewing.
 
 ## Privacy
 

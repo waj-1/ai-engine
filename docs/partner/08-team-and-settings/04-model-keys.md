@@ -8,6 +8,7 @@ A model key is what lets your agents use an AI provider such as Google Gemini, O
 - A key saved here is used first. If you remove it, the provider goes back to the server's own key, if it has one.
 - Keys are stored encrypted. After you save one it is never shown again: you only see its last four characters, so you can tell keys apart.
 - A new key is used from the agent's next message.
+- On a portal with a STAGING / PRODUCTION switch, Staging and Production each have their own stored keys. The page keeps the switch and names the one you're looking at (**Staging** or **Production**) above the table. Save the key on both if both need it.
 
 ## Save a key
 

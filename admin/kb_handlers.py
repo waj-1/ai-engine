@@ -62,6 +62,122 @@ def _kb_agent_kinds() -> tuple:
     return build_agent_kinds()
 
 
+def _kb_agent_choices(env: Optional[str] = None) -> tuple:
+    """The KB "Agent" / "Also used by" pickers: one entry per agent (each
+    generic agent by name), admin.agent_kinds.build_agent_choices."""
+    from admin.agent_kinds import build_agent_choices
+    return build_agent_choices(env=env)
+
+
+# ---------------------------------------------------------------------------
+# Which agents use a knowledge base — the runtime's answer
+# ---------------------------------------------------------------------------
+# The runtime searches the sources a profile lists in `data_source_ids`
+# (runtime/tools/knowledge.py) — what the agent's Tools & knowledge tab and
+# `profile_attachments kind=kb` write. The source row's own `agent_kind` /
+# `additional_agent_kinds` are a label kept for the product agents; the KB
+# screens used to read only that label, so a knowledge base attached the way
+# the runtime reads it showed "Not attached to any agent". Both are read now,
+# and a generic agent picked on the KB screens is attached to its profile.
+
+
+def kb_profile_rows(client: Any, env: Optional[str]) -> List[Dict[str, Any]]:
+    """The env's agent profiles (templates left out) with their attached KBs."""
+    try:
+        q = client.table("agent_profiles").select(
+            "profile_id, agent_kind, slug, display_name, status, environment, data_source_ids")
+        if env:
+            q = q.eq("environment", env)
+        rows = q.execute().data or []
+    except Exception as exc:  # noqa: BLE001 - attachment names are decoration
+        logger.info("kb: profile attachments unavailable (%s)", exc)
+        return []
+    from admin.agent_kinds import in_build
+
+    return [r for r in rows if r.get("status") != "template" and in_build(r.get("agent_kind"))]
+
+
+def kb_used_by(row: Dict[str, Any], profiles: List[Dict[str, Any]]) -> List[str]:
+    """The choice values (admin.agent_kinds) of every agent using ``row``: its
+    product-kind label (`agent_kind`, `additional_agent_kinds`) and every
+    profile that attaches it (`data_source_ids`). A generic agent is
+    ``custom:<slug>``; the bare ``custom`` kind on a row names no agent."""
+    from admin.agent_kinds import SLUG_ADDRESSED_KIND, agent_choice
+
+    sid = str(row.get("source_id") or "")
+    out: List[str] = []
+
+    def _add(v: Optional[str]) -> None:
+        if v and v != SLUG_ADDRESSED_KIND and v not in out:
+            out.append(v)
+
+    _add(row.get("agent_kind"))
+    for k in row.get("additional_agent_kinds") or []:
+        _add(k)
+    for p in profiles:
+        if sid and sid in [str(x) for x in (p.get("data_source_ids") or [])]:
+            _add(agent_choice(p.get("agent_kind") or "", p.get("slug")))
+    return out
+
+
+def _sync_custom_attachments(client: Any, source_id: str, env: Optional[str],
+                             wanted_slugs: List[str], actor_user_id: str) -> None:
+    """Make exactly the generic agents in ``wanted_slugs`` (this env's rows)
+    list ``source_id`` in their `data_source_ids` — the attachment the runtime
+    reads. Each change goes through `update_profile_row` (audit + profile
+    cache), like the agent's own Tools & knowledge tab."""
+    from admin.agent_kinds import SLUG_ADDRESSED_KIND
+    from admin.services.profiles import update_profile_row
+
+    wanted = set(wanted_slugs)
+    for p in kb_profile_rows(client, env):
+        if p.get("agent_kind") != SLUG_ADDRESSED_KIND:
+            continue
+        current = [str(x) for x in (p.get("data_source_ids") or [])]
+        has = source_id in current
+        if (p.get("slug") in wanted) == has:
+            continue
+        after = ([*current, source_id] if not has
+                 else [x for x in current if x != source_id])
+        try:
+            update_profile_row(profile_id=p["profile_id"],
+                               payload={"data_source_ids": after},
+                               actor_user_id=actor_user_id)
+        except Exception as exc:  # noqa: BLE001 - one agent must not sink the save
+            logger.warning("kb: could not update %s's knowledge (%s)", p.get("slug"), exc)
+
+
+def _split_agent_fields(payload: Dict[str, Any]) -> Optional[List[str]]:
+    """Pull generic agents (``custom:<slug>``) out of the posted agent fields.
+
+    Their attachment lives on the profile, not on the source row, so they are
+    removed from `agent_kind` / `additional_agent_kinds` (a primary generic
+    agent leaves `agent_kind='custom'`). Returns the generic agents' slugs, or
+    None when the form did not post the agent fields at all."""
+    from admin.agent_kinds import SLUG_ADDRESSED_KIND, split_agent_choice
+
+    if "agent_kind" not in payload and "additional_agent_kinds" not in payload:
+        return None
+    slugs: List[str] = []
+    primary = payload.get("agent_kind")
+    if primary:
+        kind, slug = split_agent_choice(primary)
+        if slug:
+            slugs.append(slug)
+            payload["agent_kind"] = kind
+    if "additional_agent_kinds" in payload:
+        kept: List[str] = []
+        for v in payload["additional_agent_kinds"]:
+            kind, slug = split_agent_choice(v)
+            if slug:
+                if slug not in slugs:
+                    slugs.append(slug)
+            elif kind != SLUG_ADDRESSED_KIND:
+                kept.append(v)
+        payload["additional_agent_kinds"] = kept
+    return slugs
+
+
 def _parse_form_payload(form: Any) -> Dict[str, Any]:
     """Pull a normalized payload out of the detail / create form.
 
@@ -250,6 +366,19 @@ async def kb_detail(
         if _is_shared_kb(cfg):
             pages, pages_total, chunks_total = _load_pages_summary(client, source_id)
 
+    # Who uses it, as the runtime sees it (profile attachments) plus the
+    # product-kind label. The first is shown as "Agent", the rest ticked
+    # under "Also used by".
+    used_by = kb_used_by(row, kb_profile_rows(client, env))
+    agent_choices = list(_kb_agent_choices(env))
+    # The form edits what it can write back: a product agent's label on the
+    # row, a generic agent's attachment on its profile. (A product agent that
+    # attaches the KB from its own page is named in `used_by`, read-only.)
+    editable = [v for v in used_by
+                if ":" in v or v == row.get("agent_kind")
+                or v in (row.get("additional_agent_kinds") or [])]
+    primary = row.get("agent_kind") if row.get("agent_kind") in editable else (
+        editable[0] if editable else "")
     return templates.TemplateResponse(
         request,
         "kb_detail.html",
@@ -259,7 +388,10 @@ async def kb_detail(
             "current_env": env,
             "row": row,
             "kinds": KB_KINDS,
-            "agent_kinds": _kb_agent_kinds(),
+            "agent_kinds": agent_choices,
+            "used_by": used_by,
+            "primary_agent": primary,
+            "also_used_by": [v for v in editable if v != primary],
             "schema_rows": schema_rows,
             "pages": pages,
             "pages_total": pages_total,
@@ -280,10 +412,16 @@ async def kb_detail(
 async def kb_update(
     source_id: str,
     request: Request,
+    env: str = Depends(current_env),
     ctx: dict = Depends(require_superuser),
 ) -> Response:
     form = await request.form()
     payload = _parse_form_payload(form)
+    custom_slugs = _split_agent_fields(payload)
+    if custom_slugs is not None:
+        # The generic agents' side of the attachment is their profile.
+        _sync_custom_attachments(admin_service_client(), source_id, env,
+                                 custom_slugs, ctx["user_id"])
     if not payload:
         # Nothing to write; bounce back to detail rather than 400 the user.
         return RedirectResponse(url=f"/admin/kb/{source_id}", status_code=302)
@@ -319,10 +457,12 @@ async def kb_update(
 @router.post("/kb", name="kb_create")
 async def kb_create(
     request: Request,
+    env: str = Depends(current_env),
     ctx: dict = Depends(require_superuser),
 ) -> Response:
     form = await request.form()
     payload = _parse_form_payload(form)
+    custom_slugs = _split_agent_fields(payload) or []
     if not payload.get("name") or not payload.get("kind"):
         raise HTTPException(400, "name and kind are required")
     if "config" not in payload:
@@ -349,6 +489,8 @@ async def kb_create(
         after=new_row,
     )
     new_id = new_row.get("source_id")
+    if new_id and custom_slugs:
+        _sync_custom_attachments(client, str(new_id), env, custom_slugs, ctx["user_id"])
     target = f"/admin/kb/{new_id}" if new_id else "/admin/kb"
     return RedirectResponse(url=target, status_code=302)
 

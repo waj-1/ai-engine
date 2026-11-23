@@ -288,11 +288,13 @@ def start_suite_run(
         # fix rather than getting ungraded results. Exception: suites whose
         # runner_kind grades itself deterministically (a plugin runner's
         # default scorer) need no judge — see runner_kind_needs_judge.
-        from admin.services.eval_scorers import suite_needs_judge
+        from admin.services.eval_scorers import JUDGE_MODEL_HINT, suite_judge_problem
 
-        if suite_needs_judge(suite_row) and not suite_row.get("evaluator_model_id"):
+        problem = suite_judge_problem(client, suite_row)
+        if problem:
             raise ValueError(
-                "comparison runs require a model judge — set an evaluator model on the suite",
+                f"comparison runs require a model judge on the suite, and {problem}. "
+                f"{JUDGE_MODEL_HINT}.",
             )
     if prompt_overrides:
         prompt_overrides = resolve_prompt_overrides(client, profile_id, prompt_overrides)

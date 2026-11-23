@@ -12,7 +12,7 @@ A test run plays every case in a test suite against the agent and grades each an
 1. On the Testing **Overview**, click **Run tests** on the agent's card (or **Run tests** at the top right).
 2. Under **What to test**, leave **A test suite** selected.
 3. Check the **Agent**, then pick the **Test suite**. Only suites linked to that agent are listed.
-4. Leave **Business** on its default and **Advanced** as it is.
+4. Leave **Advanced** as it is (and **Business**, where your portal shows one, on its default).
 5. Click **Start run**. The run page opens and fills in as cases finish. You can leave the page; the run carries on.
 
 ## Read the result
@@ -25,6 +25,10 @@ A test run plays every case in a test suite against the agent and grades each an
 4. **Compare with previous** puts this run next to the one before. See [Compare results](03-compare-results.md).
 
 The row of numbers shows cases passed, typical response time, cost and how long the run took.
+
+A case marked **Not judged** could not be graded: no judge model is set (or the one set can't be used), and the answer doesn't contain the expected words. It doesn't count towards the score. The case says why; pick a **Judge model** in the suite's settings, or give the case expected words.
+
+If you try another **Model** under **Advanced** and the suite has no judge model, the run doesn't start and a page tells you what to set, with a link back to the form.
 
 ## What to do with a failure
 

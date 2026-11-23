@@ -653,14 +653,24 @@ def field_changes(before: Any, after: Any, max_lines: int = 400,
 # Team & access
 # ---------------------------------------------------------------------------
 
-_SERVICE_EMAIL_RE = re.compile(r"(@e2e\.test$|@example\.(com|org)$|^e2e[-_.]|^test[-_.].*@|\+e2e@)", re.I)
+_SERVICE_EMAIL_RE = re.compile(r"(@e2e\.test$|^e2e[-_.]|^test[-_.].*@|\+e2e@)", re.I)
+# The documentation domains. Test fixtures use them, but so does a real
+# admin of a fresh install who typed admin@example.com on the first-run page.
+_PLACEHOLDER_EMAIL_RE = re.compile(r"@example\.(com|org)$", re.I)
+
+
+def _is_superuser_row(row: Mapping[str, Any]) -> bool:
+    perm = row.get("permission") or {}
+    return bool(perm.get("is_superuser")) if isinstance(perm, dict) else False
 
 
 def is_service_account(row: Mapping[str, Any]) -> bool:
     """Automation / test identities that clutter the team list.
 
     `role == 'system'` rows are seeded service users; `@e2e.test` emails are
-    the e2e harness's accounts; the zero-uuid row is the system actor."""
+    the e2e harness's accounts; the zero-uuid row is the system actor. An
+    example.com / example.org address hides a user only when it is not an
+    admin: an admin can sign in to the portal, so it is a person."""
     if str(row.get("id") or "").startswith(SYSTEM_ACTOR_PREFIX):
         return True
     if (row.get("role") or "").lower() == "system":
@@ -668,7 +678,37 @@ def is_service_account(row: Mapping[str, Any]) -> bool:
     email = row.get("email") or ""
     if email and _SERVICE_EMAIL_RE.search(email):
         return True
+    if email and _PLACEHOLDER_EMAIL_RE.search(email) and not _is_superuser_row(row):
+        return True
     return not email and not row.get("phone_number")
+
+
+# How the Team & access screen words a user's access outside the portal.
+# Neutral here; a plugin whose users also sign in to its own apps says so
+# through its ``portal_display`` hook (``team_copy()``).
+_TEAM_COPY: Dict[str, Optional[str]] = {
+    "others": "Everyone else listed here can't open the portal.",
+    # "{role}" is the user's `role` column; None = the role is not shown.
+    "app_role": None,
+}
+
+
+def team_copy() -> Dict[str, Optional[str]]:
+    """The Team & access wording, with a plugin's ``team_copy()`` on top."""
+    from core.plugins import call_hook, load_hook
+
+    out = dict(_TEAM_COPY)
+    for extra in call_hook(load_hook("portal_display"), "team_copy"):
+        out.update({k: v for k, v in (extra or {}).items() if k in _TEAM_COPY})
+    return out
+
+
+def app_role_text(role: Optional[str], copy: Mapping[str, Optional[str]]) -> Optional[str]:
+    """``copy["app_role"]`` filled with ``role``; None when either is blank."""
+    template = copy.get("app_role")
+    if not role or not template:
+        return None
+    return template.replace("{role}", str(role))
 
 
 def last_activity_by_actor(client: Any, users: Sequence[Mapping[str, Any]], limit: int = 2000) -> Dict[str, str]:
@@ -729,6 +769,7 @@ def merge_latest(*maps: Mapping[str, Any]) -> Dict[str, Any]:
 def build_team(rows: Sequence[Mapping[str, Any]], last_seen: Mapping[str, Any], me: Optional[str],
                now: Optional[_dt.datetime] = None) -> List[Dict[str, Any]]:
     people = []
+    copy = team_copy()
     for r in rows:
         perm = r.get("permission") or {}
         is_admin = bool(perm.get("is_superuser")) if isinstance(perm, dict) else False
@@ -740,9 +781,11 @@ def build_team(rows: Sequence[Mapping[str, Any]], last_seen: Mapping[str, Any], 
             "email": r.get("email"),
             "phone": (f"+{r.get('country_code') or ''}{r['phone_number']}" if r.get("phone_number") else None),
             "is_admin": is_admin,
-            "is_service": is_service_account(r),
+            # The signed-in admin is never hidden from their own team list.
+            "is_service": is_service_account(r) and not (me and str(r.get("id")) == str(me)),
             "is_me": bool(me and str(r.get("id")) == str(me)),
             "app_role": r.get("role"),
+            "app_role_text": app_role_text(r.get("role"), copy),
             "last_active": relative_time(seen, now) if seen else None,
             "last_active_full": full_time(seen) if seen else None,
             "last_active_sort": str(seen or ""),
@@ -1027,6 +1070,124 @@ def release_rows(*, src_client: Any, tgt_client: Any, src_rows: Sequence[Mapping
                                                       t.get("agent_kind"))).lower(),
         })
     out.sort(key=lambda r: (not r["has_changes"], (r["name"] or "").lower()))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Releases › Promotion history — one row per published agent version
+# ---------------------------------------------------------------------------
+
+# Snapshot keys (runtime/compiler.py) → the plain area they belong to. The
+# resolved copies (`prompt_contents`, `model_main`, ...) fold into the same
+# label as the id column they were resolved from, so one change reads once.
+_SNAPSHOT_AREAS: Dict[str, str] = {
+    **dict(PROMOTE_FIELDS),
+    "prompt_contents": "Instructions",
+    "model_main": "Main model",
+    "voice_model": "Voice settings",
+    "tool_python_names": "Tools",
+    "data_sources": "Knowledge",
+    "mcp_servers": "Integrations",
+    "mcp_attachments": "Integrations",
+    "skill_attachments": "Skills",
+    "downstream_delegates": "Sub-agents",
+}
+_NOTES_RE = re.compile(r"^Promoted from (\S+) by (.+)$")
+HISTORY_LIMIT = 100
+
+
+def snapshot_changes(before: Optional[Mapping[str, Any]], after: Mapping[str, Any]) -> List[str]:
+    """The areas that differ between two published snapshots, in display
+    order. Keys starting with `_` (schema version) are not changes."""
+    before = before or {}
+    seen: List[str] = []
+    for key in sorted(set(before) | set(after)):
+        if key.startswith("_") or key not in _SNAPSHOT_AREAS:
+            continue
+        if before.get(key) != after.get(key):
+            label = _SNAPSHOT_AREAS[key]
+            if label not in seen:
+                seen.append(label)
+    order = list(dict.fromkeys(_SNAPSHOT_AREAS.values()))
+    return sorted(seen, key=order.index)
+
+
+def promotion_history(*, tgt_client: Any, tgt_env: str = "prod", main_client: Any = None,
+                      labels: Optional[Mapping[str, Any]] = None,
+                      now: Optional[_dt.datetime] = None,
+                      limit: int = HISTORY_LIMIT) -> List[Dict[str, Any]]:
+    """Every promote, newest first: which agent, which version it published
+    and which one it replaced, from where, by whom, when, and what changed.
+
+    Read from `agent_profile_versions` in the target environment: each
+    promote writes exactly one row there (runtime/compiler.py)."""
+    labels = labels or env_labels(None)
+    versions = [v for v in _rows(
+        tgt_client.table("agent_profile_versions")
+        .select("version_id, profile_id, version_number, promoted_at, promoted_by, notes, snapshot")
+        .eq("environment", tgt_env).order("promoted_at", desc=True).limit(limit)) if isinstance(v, dict)]
+    if not versions:
+        return []
+    versions.sort(key=lambda v: str(v.get("promoted_at") or ""), reverse=True)
+    pids = sorted({str(v.get("profile_id")) for v in versions if v.get("profile_id")})
+    profiles = {str(r.get("profile_id")): r for r in _rows(
+        tgt_client.table("agent_profiles")
+        .select("profile_id, display_name, slug, agent_kind, served_version_id")
+        .in_("profile_id", pids)) if isinstance(r, dict)}
+    people = resolve_people(main_client, [v.get("promoted_by") for v in versions])
+
+    by_profile: Dict[str, List[Dict[str, Any]]] = {}
+    for v in versions:
+        by_profile.setdefault(str(v.get("profile_id")), []).append(v)
+    for vs in by_profile.values():
+        vs.sort(key=lambda x: x.get("version_number") or 0, reverse=True)
+
+    out: List[Dict[str, Any]] = []
+    for v in versions:
+        pid = str(v.get("profile_id"))
+        snap = v.get("snapshot") if isinstance(v.get("snapshot"), dict) else {}
+        prof = profiles.get(pid) or {}
+        siblings = by_profile.get(pid) or []
+        number = v.get("version_number")
+        older = [x for x in siblings if (x.get("version_number") or 0) < (number or 0)]
+        previous = older[0] if older else None
+        if previous is not None:
+            prev_snap = previous.get("snapshot") if isinstance(previous.get("snapshot"), dict) else {}
+            changes = snapshot_changes(prev_snap, snap)
+            replaced = previous.get("version_number")
+        elif number == 1:
+            changes, replaced = ["First publish"], None
+        else:  # the older version is past the page: its number is still known
+            changes, replaced = [], (number - 1) if isinstance(number, int) else None
+        m = _NOTES_RE.match((v.get("notes") or "").strip())
+        source = m.group(1) if m else None
+        who = people.get(str(v.get("promoted_by") or "")) or {}
+        by = None if (who.get("is_system") or (who.get("label") or "").startswith("Unknown user")) \
+            else who.get("label")
+        served = prof.get("served_version_id")
+        live_id = str(served) if served else (str(siblings[0].get("version_id")) if siblings else None)
+        out.append({
+            "version_id": v.get("version_id"),
+            "profile_id": pid,
+            "name": prof.get("display_name") or snap.get("display_name") or prof.get("slug")
+            or snap.get("slug") or pid[:8],
+            "technical": f"{prof.get('agent_kind') or snap.get('agent_kind')} · "
+                         f"{prof.get('slug') or snap.get('slug')}",
+            "number": number,
+            "replaced": replaced,
+            # Promotes copy from the source environment: name it the way the
+            # Releases page does (Staging, or Draft on a single-env build).
+            "source": labels.get("source") if source in (None, "staging", "dev")
+            else humanize_key(source),
+            "by": by or (m.group(2) if m else None),
+            "when": short_date(v.get("promoted_at"), now),
+            "when_full": full_time(v.get("promoted_at")),
+            "changes": changes,
+            "is_live": live_id is not None and str(v.get("version_id")) == live_id,
+            "notes": v.get("notes"),
+            "search": " ".join(str(x or "") for x in (prof.get("display_name"), prof.get("slug"),
+                                                      snap.get("display_name"))).lower(),
+        })
     return out
 
 

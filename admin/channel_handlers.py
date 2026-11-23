@@ -41,7 +41,6 @@ from admin.router import router, templates, _safe_list, current_env, client_for
 # `get_service_client()` write targets the LOCAL branch regardless of the
 # selected env (identical behavior while cross-env vars are unset).
 from core.auth import admin_service_client
-from core.cors import clear_cors_dirty, is_cors_dirty
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +56,10 @@ _CHANNEL_KINDS: Tuple[str, ...] = tuple(CHANNEL_KIND_LABELS)
 _TENANT_KINDS: Tuple[str, ...] = tenant_channel_kinds()
 # The kind the create form preselects: the first one this build knows.
 templates.env.globals["default_channel_kind"] = _CHANNEL_KINDS[0]
+# The New channel form's example Name / Short code name (placeholders only).
+from core.channel_kinds import channel_name_example  # noqa: E402
+
+templates.env.globals["channel_name_example"] = channel_name_example()
 templates.env.globals["channel_kind_label"] = lambda k: CHANNEL_KIND_LABELS.get(k or "", k or "—")
 
 # Mirrors `_AGENT_KINDS_FOR_TOOLS` in tool_handlers.py — the agent_kinds a
@@ -167,17 +170,48 @@ def _validate_origins(origins: List[str]) -> Optional[str]:
     return None
 
 
+def _channel_agent_choices() -> Tuple[str, ...]:
+    """The "Agents allowed on this channel" boxes: one per AGENT. A product
+    kind is one agent; every generic agent shares the kind ``custom`` and is
+    offered by name as ``custom:<slug>`` (admin.agent_kinds), the value the
+    runtime checks (core.channel_resolver.enforce_channel_kind)."""
+    from admin.agent_kinds import expand_agent_choices, custom_agent_rows
+
+    kinds = list(_channel_agent_kinds())
+    if "custom" not in kinds and _custom_kind_served() and custom_agent_rows():
+        kinds.append("custom")
+    return expand_agent_choices(kinds)
+
+
+def _custom_kind_served() -> bool:
+    from admin.agent_kinds import build_kinds
+
+    return build_kinds() is None
+
+
+def _channel_choice_known(value: str) -> bool:
+    """A ``custom:<slug>`` value naming a generic agent that exists."""
+    from admin.agent_kinds import custom_agent_rows, split_agent_choice
+
+    kind, slug = split_agent_choice(value)
+    return bool(slug) and _custom_kind_served() and any(
+        r.get("slug") == slug for r in custom_agent_rows())
+
+
 def _parse_agent_kinds(form_values: List[str]) -> List[str]:
     """Filter the multi-checkbox submission down to the known-good list,
-    de-duped and order-preserving."""
+    de-duped and order-preserving. A generic agent arrives as
+    ``custom:<slug>`` (one box per agent) and is kept when that agent exists."""
     out: List[str] = []
     seen: set[str] = set()
+    values = [(v or "").strip() for v in form_values if (v or "").strip()]
+    if not values:
+        return out
     # Validation accepts system agents too, so saving a channel that already
     # lists one (a title generator, say) never silently drops it.
     allowed = _channel_agent_kinds(include_system=True)
-    for v in form_values:
-        v = (v or "").strip()
-        if v in allowed and v not in seen:
+    for v in values:
+        if v not in seen and (v in allowed or _channel_choice_known(v)):
             seen.add(v)
             out.append(v)
     return out
@@ -290,9 +324,9 @@ def _invalidate_channels_cache() -> None:
     out via patching, so a missing import here just means "no cache to
     bust yet".
 
-    Also flips ``core.cors.mark_cors_dirty()`` so any banner /
-    health-check UI can flag that a restart is needed for the static
-    CORSMiddleware allow-list to pick up channel-origin changes."""
+    The CORS middleware reads channel origins through the same cache
+    (``core.cors.live_channel_origins``), so busting it is all a new or
+    edited channel's origins need: no restart."""
     try:
         from core.channels import invalidate as invalidate_channels
     except Exception:  # pragma: no cover - test environments without core.channels
@@ -302,13 +336,6 @@ def _invalidate_channels_cache() -> None:
             invalidate_channels()
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("channels cache invalidate failed: %s", exc)
-
-    try:
-        from core.cors import mark_cors_dirty
-
-        mark_cors_dirty()
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("mark_cors_dirty failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -352,13 +379,6 @@ async def channels_list(
             "profile_names": profile_names,
             "kind_filter": kind if kind in _CHANNEL_KINDS else None,
             "channel_kinds": channel_kinds,
-            # The CORSMiddleware allow-list is built once at boot from a
-            # snapshot of agent_channels (see core/cors.py). Mutations
-            # after that flip the in-process dirty flag so the operator
-            # sees a "restart required" banner until the next process
-            # start (auto-cleared by build_allowed_origins) or until they
-            # explicitly acknowledge via the cors-dirty/clear endpoint.
-            "cors_dirty": is_cors_dirty(),
         },
     )
 
@@ -386,11 +406,12 @@ async def channel_new_form(
                 "is_active": True,
                 "auth_required": True,
                 "rate_limit_rpm": 60,
-                "kind": "waj_app",
+                # The first kind this build offers (a plugin's own first).
+                "kind": (_channel_kinds_for_build() or [None])[0],
             },
             "channel_kinds": _channel_kinds_for_build(),
             "tenant_kinds": list(_TENANT_KINDS),
-            "agent_kinds": list(_channel_agent_kinds()),
+            "agent_kinds": list(_channel_agent_choices()),
             "profiles": _fetch_profiles_for_picker(client),
             "businesses": fetch_businesses_for_picker(client),
             "error": None,
@@ -463,7 +484,7 @@ async def channel_detail(
             "form": channel,  # template reads `form.*` for value attrs
             "channel_kinds": _channel_kinds_for_build(),
             "tenant_kinds": list(_TENANT_KINDS),
-            "agent_kinds": list(_channel_agent_kinds()),
+            "agent_kinds": list(_channel_agent_choices()),
             "profiles": _fetch_profiles_for_picker(client),
             "businesses": fetch_businesses_for_picker(client),
             "error": None,
@@ -546,34 +567,6 @@ async def channel_delete(
     return RedirectResponse(url="/admin/channels", status_code=303)
 
 
-@router.post("/channels/cors-dirty/clear")
-async def channels_cors_dirty_clear(
-    ctx: dict = Depends(require_superuser),
-) -> Response:
-    """Operator escape hatch: clear the in-process "channels changed,
-    restart required" flag without restarting the agent.
-
-    Useful when the operator HAS already restarted the agent process
-    (e.g. via an Azure Container Apps restart/redeploy) but the dirty
-    flag in the user's still-warm browser banner was set against the
-    new process by an unrelated write — or for the rare case where we
-    want to dismiss the banner without rebooting. The flag lives in
-    module-global state (see ``core/cors.py``) so each process owns
-    its own copy; clearing it
-    here only affects the process serving this request, which is fine
-    because the banner is read from that same process on the next
-    page load.
-    """
-    clear_cors_dirty()
-    record_change(
-        entity_type="agent_channels",
-        entity_id=None,  # global CORS dirty-flag — no single entity
-        action="cors_dirty_clear",
-        actor_user_id=ctx["user_id"],
-    )
-    return RedirectResponse(url="/admin/channels", status_code=303)
-
-
 # ---------------------------------------------------------------------------
 # Form-render helper for the error path. Lives at the bottom because it
 # pulls `_fetch_profiles_for_picker` and `fetch_businesses_for_picker` and
@@ -610,7 +603,7 @@ def _render_form_with_error(
             "form": echo,
             "channel_kinds": _channel_kinds_for_build(),
             "tenant_kinds": list(_TENANT_KINDS),
-            "agent_kinds": list(_channel_agent_kinds()),
+            "agent_kinds": list(_channel_agent_choices()),
             "profiles": _fetch_profiles_for_picker(client),
             "businesses": fetch_businesses_for_picker(client),
             "error": message,

@@ -30,11 +30,11 @@
       <div class="form-grid">
         <label class="field">
           <span class="field-label">Name</span>
-          <input type="text" name="name" required value="{{ form.name or '' }}" placeholder="WAJ App">
+          <input type="text" name="name" required value="{{ form.name or '' }}" placeholder="{{ channel_name_example[0] }}">
         </label>
         <label class="field">
           <span class="field-label">Short code name</span>
-          <input type="text" name="slug" required pattern="^[a-z][a-z0-9_-]{1,62}$" value="{{ form.slug or '' }}" placeholder="waj_app">
+          <input type="text" name="slug" required pattern="^[a-z][a-z0-9_-]{1,62}$" value="{{ form.slug or '' }}" placeholder="{{ channel_name_example[1] }}">
           <span class="field-help">Lowercase, 2–63 characters. Apps send this to say which channel they are.</span>
         </label>
       </div>
@@ -49,6 +49,8 @@
           {% endfor %}
         </div>
       </fieldset>
+      {# Only where a plugin has channel kinds that belong to one tenant. #}
+      {% if tenant_kinds %}
       <div id="business-field" class="field"
            style="display: {% if (form.kind or '') in tenant_kinds %}flex{% else %}none{% endif %};">
         <span class="field-label">Business</span>
@@ -63,6 +65,7 @@
         ) }}
         <span class="field-help">Required for a business website: the site belongs to this business.</span>
       </div>
+      {% endif %}
       <label class="field">
         <span class="field-label">Description <span class="opt">(optional)</span></span>
         <textarea name="description" rows="2" placeholder="Marketing site. Only the support agent is available here.">{{ form.description or '' }}</textarea>

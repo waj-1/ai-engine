@@ -40,7 +40,7 @@
   </section>
 
   {% if resolved_user_id %}
-    <p class="caption">User <code>{{ resolved_user_id }}</code> — {{ memories|length }} memories ({{ agent_kind }} agent).</p>
+    <p class="caption">User <code>{{ resolved_user_id }}</code> — {{ memories|length }} memories ({{ agent_label(agent_kind) }}).{% if agent_kind.startswith('custom:') %} Only this agent reads these: each custom agent keeps its own memories.{% endif %}</p>
 
     <section class="card" style="margin-bottom:var(--space-m);">
       <table data-tabulator data-tabulator-page-size="50">
@@ -94,15 +94,46 @@
       </table>
     </section>
 
+    {% if unassigned_memories %}
+    <section class="card" style="margin-bottom:var(--space-m);" id="unassigned-memories">
+      <h3 style="margin-top:0;">Not assigned to an agent yet ({{ unassigned_memories|length }})</h3>
+      <p class="caption">Saved for this user before each custom agent kept its own memories. No agent recalls them until you move one to an agent.</p>
+      <table>
+        <thead><tr><th>Content</th><th>Source</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        {% for m in unassigned_memories %}
+          <tr{% if m.status == 'archived' %} class="row-deprecated"{% endif %}>
+            <td>{{ m.content }}</td>
+            <td>{{ chip(m.source, 'ghost') }}</td>
+            <td>{{ chip(m.status, 'ok' if m.status == 'active' else 'mauve') }}</td>
+            <td>
+              <form method="post" action="/admin/memory/{{ m.id }}/assign?env={{ current_env }}" style="margin:0;">
+                <input type="hidden" name="user" value="{{ resolved_user_id }}">
+                <input type="hidden" name="agent_kind" value="{{ agent_kind }}">
+                <button type="submit">Move to {{ agent_label(agent_kind) }}</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
     <details class="card collapse-card" style="margin-bottom:var(--space-m);">
       <summary>Add a memory manually</summary>
       <form method="post" action="/admin/memory/add?env={{ current_env }}" style="display:flex;flex-direction:column;gap:var(--space-s);">
         <input type="hidden" name="user_id" value="{{ resolved_user_id }}">
         <input type="hidden" name="agent_kind" value="{{ agent_kind }}">
+        {# A tenant id only where a plugin has tenants (business_field_label());
+           a generic agent's memories belong to the agent and the caller. #}
+        {% set biz_label = business_field_label() %}
+        {% if biz_label and not agent_kind.startswith('custom') %}
         <label>
-          <div class="caption">business_id</div>
+          <div class="caption">{{ biz_label }} id</div>
           <input type="text" name="business_id" required style="width:100%;">
         </label>
+        {% endif %}
         <label>
           <div class="caption">content</div>
           <textarea name="content" required style="width:100%;min-height:80px;"></textarea>

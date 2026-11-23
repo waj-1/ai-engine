@@ -16,7 +16,7 @@ answers at `POST /v1/agents/{slug}/chat`. Test suites let you measure a change
 to the instructions or the model before it reaches anyone.
 
 This is an early release. What is in this README works today on a fresh
-database; what does not yet is listed under [Roadmap](#roadmap).
+database.
 
 ## Quick start
 
@@ -289,20 +289,6 @@ ALLOWED_ORIGINS="*" \
 
 Run it in a shell where `deploy/local/.env` is not loaded:
 `ENABLE_GENERIC_AGENTS`, `ENABLE_ADMIN_MCP` and `AI_DATABASE_URL` must be unset.
-
-## Roadmap
-
-Not done yet:
-
-- Deploy guides for more targets. Today there is one, for the target we have
-  run: [Docker Compose on one machine](docs/deploy/compose.md), with backup,
-  restore and upgrade. Serving the engine to other machines behind a TLS
-  proxy, cloud container services and Kubernetes are not tested yet.
-- A call with real audio against a portal-built agent (see "By voice").
-- A local embedding model's retrieval quality has only been spot-checked.
-
-Known limits: team hand-offs were unreliable with a 3B local model and have not
-yet been re-run with a stronger one.
 
 ## Contributing and security
 

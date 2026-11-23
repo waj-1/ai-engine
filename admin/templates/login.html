@@ -1,5 +1,6 @@
 {# ai_agent/admin/templates/login.html — standalone (does not extend _base.html) #}
 {% from "_components/callout.html" import alert, hint_text %}
+{% from "_components/brand_mark.html" import brand_mark %}
 <!doctype html>
 {% set _brand = brand() %}
 <html lang="en"{% if _brand.key %} data-brand="{{ _brand.key }}"{% endif %}>
@@ -29,7 +30,7 @@
 
     {# Brand mark #}
     <div style="display:flex;align-items:center;gap:var(--space-s);margin-bottom:var(--space-m);">
-      <span style="width:28px;height:28px;background:var(--accent);border-radius:6px;flex:0 0 auto;"></span>
+      {{ brand_mark(_brand, size=28) }}
       <span style="font-weight:700;font-size:18px;letter-spacing:-0.3px;">{{ _brand.title }}</span>
     </div>
 

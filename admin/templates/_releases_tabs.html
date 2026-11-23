@@ -1,12 +1,14 @@
 {# admin/templates/_releases_tabs.html — in-page strip for Settings › Releases.
 
    Releases groups two screens that stay on their own URLs: Promote
-   (/admin/env — copy an agent's setup from staging to production) and the
-   code-deploy screens (/admin/deployments — dispatch, history, targets).
-   Context key: `tab` ('promote' on /admin/env; 'dispatch' | 'history' |
-   'targets' on /admin/deployments). #}
+   (/admin/env — copy an agent's setup from staging to production, and the
+   history of those promotes at ?tab=history) and the code-deploy screens
+   (/admin/deployments — dispatch, deploy history, targets).
+   Context key: `tab` ('promote' | 'promotions' on /admin/env; 'dispatch' |
+   'history' | 'targets' on /admin/deployments). #}
 {% from "_components/tabs.html" import tabs %}
 {{ tabs([('promote', 'Promote agent changes', '/admin/env'),
+         ('promotions', 'Promotion history', '/admin/env?tab=history'),
          ('dispatch', 'Deploy code', '/admin/deployments'),
-         ('history', 'History', '/admin/deployments?tab=history'),
+         ('history', 'Deploy history', '/admin/deployments?tab=history'),
          ('targets', 'Targets', '/admin/deployments?tab=targets')], tab) }}

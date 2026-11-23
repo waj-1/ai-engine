@@ -348,6 +348,26 @@ def reset_rate_limiters():
 
 
 @pytest.fixture(autouse=True)
+def _no_live_mcp_listing():
+    """The portal screens list an external MCP server's tools live when this
+    process has not seen its list yet (admin/external_mcp_tools.py). Tests are
+    hermetic: they see only what a test puts in the tool-list cache.
+
+    Set by hand, NOT through `monkeypatch`: an autouse fixture here that asks
+    for `monkeypatch` sets it up before every other fixture, so it is torn
+    down LAST — and a test's own `monkeypatch.setattr` over something a later
+    fixture patched (tests/admin's business-picker stub) then restores that
+    fixture's mock for the rest of the session."""
+    from admin import external_mcp_tools
+
+    before = external_mcp_tools.LIVE_LISTING
+    external_mcp_tools.LIVE_LISTING = False
+    external_mcp_tools.reset()
+    yield
+    external_mcp_tools.LIVE_LISTING = before
+
+
+@pytest.fixture(autouse=True)
 def _reset_clickhouse_last_failure():
     """`core.lmnr_clickhouse` keeps the most recent query failure process-wide
     so the observability banner can name its cause. Clear it per test, or a

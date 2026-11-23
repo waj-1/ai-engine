@@ -120,7 +120,7 @@
       {% if changes[key] %}
       <ul>
         {% for c in changes[key][:12] %}
-        <li><a href="/admin/evals/runs/{{ last.run_id }}#cases">{{ c.scenario_id|humanize }}</a>
+        <li><a href="/admin/evals/runs/{{ last.run_id }}#cases">{{ c.display_name or (c.scenario_id|humanize) }}</a>
           {% if c.reason %}<span class="caption" dir="auto" title="{{ c.reason }}">{{ c.reason }}</span>{% endif %}</li>
         {% endfor %}
         {% if changes[key]|length > 12 %}<li class="caption">and {{ changes[key]|length - 12 }} more</li>{% endif %}

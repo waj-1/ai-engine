@@ -42,7 +42,7 @@ If it says **This knowledge base needs re-embedding**, the engine's embedding mo
 
 The list on a knowledge base page is everything the agent can find there. The numbers at the top show how many documents and searchable passages it holds. If a document shows 0 passages, upload it again.
 
-Under **Settings** you can rename the knowledge base, change the agent that searches it, or tick **Also used by** to share it with more agents. Untick **Active** to stop agents searching it without deleting anything.
+Under **Settings** you can rename the knowledge base, change the agent that searches it, or tick **Also used by** to share it with more agents. This is the same setting as the knowledge list on the agent's **Tools & knowledge** tab: a knowledge base you add there shows here as used by that agent, and ticking or unticking an agent here changes that tab too. Untick **Active** to stop agents searching it without deleting anything.
 
 ## Tips
 

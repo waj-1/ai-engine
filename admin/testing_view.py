@@ -102,13 +102,19 @@ def money(v: Any) -> str:
 
 
 def ms(v: Any) -> str:
-    """Milliseconds -> '850 ms' / '7.3 s'; '—' when unknown."""
+    """Milliseconds -> '850 ms' / '7.3 s' / '1 min 26 s' / '1 h 2 min'; '—'
+    when unknown. Past a minute the same shape as `duration`."""
     f = _num(v)
     if f is None:
         return "—"
-    if f >= 1000:
+    if f < 1000:
+        return f"{round(f)} ms"
+    if f < 59950:  # below what rounds to 60.0 s
         return f"{f / 1000:.1f} s"
-    return f"{round(f)} ms"
+    secs = int(round(f / 1000))
+    if secs < 3600:
+        return f"{secs // 60} min {secs % 60} s"
+    return f"{secs // 3600} h {(secs % 3600) // 60} min"
 
 
 def count(v: Any) -> str:
@@ -350,6 +356,10 @@ def case_reason(result: Dict[str, Any]) -> str:
     breaches, the first failed check, missing tool calls / wording."""
     if not isinstance(result, dict):
         return ""
+    if result.get("ungraded") and result.get("grading_note"):
+        # Not judged (no judge, nothing deterministic to check): say why,
+        # never "Scored 0%".
+        return _clip(result["grading_note"])
     judge = result.get("judge")
     reason = result.get("reason")
     if not reason and isinstance(judge, dict):
@@ -397,6 +407,8 @@ def case_reason(result: Dict[str, Any]) -> str:
     if tool_errors and result.get("passed") is False:
         return _clip(f"Tool error: {tool_errors[0].get('tool')} ({tool_errors[0].get('error')})"
                      + (f" (+{len(tool_errors) - 1} more)" if len(tool_errors) > 1 else ""))
+    if result.get("passed") is False and result.get("grading_note"):
+        return _clip(result["grading_note"])
     if result.get("passed") is False:
         sc = _num(result.get("score"))
         if sc is not None:

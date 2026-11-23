@@ -51,7 +51,14 @@ the flag off (the default) nothing below applies.
   template brings, is created with `agent_kind = 'custom'`
   (`admin/services/templates.py`). The templates themselves keep their
   historical kind, which the gallery no longer shows. The wizard's second
-  step asks for the **Model** (blank = the template's); the new agent drops
+  step asks for the **Model**. Left on its first row, the new agent (and each
+  sub-agent) keeps the template's model only when it can run on this install
+  (`core.model_resolver.model_unusable_reason`: a local provider, or a key for
+  its provider); otherwise it starts on the **Automatic (first usable model)**
+  row (`templates._replace_unusable_models`). That first row's text names the
+  choice that will be used (`templates.default_model_choice`: "The template's
+  model: …", or "Automatic (first usable model): now … (… can't run here: …)").
+  The new agent drops
   the template's description. Its **slug**, left blank, is made from its
   name ("Support desk" → `support-desk`, then `support-desk-2`; a name with
   no Latin letters gets `agent-<n>`), because a generic agent's slug is
@@ -694,6 +701,13 @@ keyed by `business_id`; a tenant's cap covers all of its duplex voice whichever
 realtime model the call runs on — moving a tenant between realtime rows neither
 changes nor resets its allowance.
 
+**Wording follows the build.** Where a plugin has tenants
+(`agent_catalog.business_field_label()`, "Business" in the product build) the page
+says business. With none, the key is a generic agent's budget id
+(`endpoints/voice_live.agent_budget_id`, one per agent, shown on its Voice tab), so
+the page says **Budget ID** / "each agent" and names the agent beside an id that
+belongs to one (`router._agent_budget_names`).
+
 The page shows each allowance (minutes, with seconds) next to today's burn, plus tenants burning the
 default with no explicit row. No row = the engine default
 (`VOICE_LIVE_DAILY_SECONDS`, 3600s/day) — read **at import** in
@@ -941,7 +955,10 @@ A unified, line-wrapped diff of two prompt versions (green additions, red deleti
 hunk headers) with a length-delta summary.
 
 **A/B compare (true A/B via prompt override)** — `GET /admin/prompts/{prompt_id}/compare` · `prompt_compare.html` · `prompt_handlers.py`
-Pick a suite, profile, two prompt versions, and optional business/context. Launching
+Pick a suite, profile, two prompt versions, and optional business/context. The
+business, branch id and customer id fields show only where a plugin has tenants
+(`agent_catalog.business_field_label()`); a build with no plugin shows the plugin's
+other context fields, if any, and none of these. Launching
 creates **two queued `agent_eval_runs`**, each pinned to one version via a prompt
 override, runs them in the background, and redirects to the [eval run compare](./03-test.md#eval-run-compare) view.
 
@@ -1140,11 +1157,22 @@ server.** There is no direct HTTP-tool creation here — you author new HTTP too
   it (`router.py:_tool_groups()`, from `agent_mcp_tools`; a trailing "Not in any
   server" group holds the rest). Search box + Agent / Access (reads vs changes data)
   filters + **Missing guidance** and **Show retired** toggles, all client-side; a
-  matching filter opens the groups that still have rows. A header meter reads
+  matching filter opens the groups that still have rows. The **Agent** filter lists
+  every agent (`router.py:_tool_filter_agents()`: `agent_kinds.build_agent_choices()`,
+  one entry per generic agent as `custom:<slug>`, plus any other kind a row names); a
+  row matches on its own `agent_kind` / `additional_agent_kinds`, and a whole server
+  group (an external server's listed tools included) matches the agents its server is
+  attached to (`agent_profile_mcp_servers`, the group's `data-agent`). A header meter reads
   "N of M tools have usage guidance" — `usage_guidance` is the only config-driven
   steer the LLM gets about when/how to call a tool. Each row links to its
   `/admin/tools/{tool_id}` editor. It is a **catalog, not a binding** — a tool only
-  reaches an LLM when an agent's MCP attachment binds it. A scoped build sees only
+  reaches an LLM when an agent's MCP attachment binds it. Each **external** server
+  follows with the tools it lists itself (read-only rows, no editor), and they count
+  in the header and in the server's **Tools** column: the list this process last saw
+  (Test connection, an agent's turn — `runtime.tools._mcp_adapter` caches it), else a
+  live `tools/list` the page waits for up to 3 s (`admin/external_mcp_tools.py`; a
+  failed read is not retried for 60 s). A server never reached shows "all" until it
+  is. The agent's Tools & knowledge tab counts the same list in "N available right now". A scoped build sees only
   the visible agent kinds' tools. Access labels are honest even before a boot sync:
   a tool in `sync_tools.WRITE_TOOL_NAMES` always shows **Changes data**.
 - **Platform services** — collapsed under an Advanced disclosure: the static
@@ -1154,9 +1182,23 @@ server.** There is no direct HTTP-tool creation here — you author new HTTP too
 Agent pickers and filters on this and every Build screen (Tools, Channels,
 Knowledge, Skills, Memory) come from one live list, `admin/agent_kinds.py`: the
 curated base kinds (plus any a deployment's plugin adds) and every kind with a
-live `agent_profiles` row (so `custom` and the `agents_*` demo kinds appear), minus
+live `agent_profiles` row (so the `agents_*` demo kinds appear), minus
 system agents (`*_title`, `*_suggestions`, and any the plugin names), labelled with
 the agent's default profile name. A scoped build keeps its scoped lists.
+
+**One entry per agent, not per kind** (`build_agent_choices()`). Every generic agent
+(templates, the New agent wizard, the seeded demo) is `agent_kind='custom'`, told
+apart by slug, so the kind `custom` is replaced by one entry per non-template,
+non-archived custom profile, valued `custom:<slug>` and labelled with its name
+(before, the pickers offered one "custom" entry labelled after the demo agent). What
+picking one does: **Knowledge** attaches the KB to that agent's `data_source_ids`
+(below); **Skills** creates the skill with `agent_kind='custom'` and attaches it to
+that agent (`agent_profile_skills`, every environment's row of the slug); **Memory**
+reads and saves that agent's own `memory_config`; **Channels** stores `custom:<slug>`
+in `allowed_agent_kinds`, which `core.channel_resolver.enforce_channel_kind` honours
+(the bare `custom` still allows every generic agent); **Conversations** narrows to
+that agent's chats (`waj.agent_slug` on the trace, or the session's
+`metadata.agent_slug`). Product kinds keep their kind as the value.
 
 ### Sub-views & popups
 
@@ -1245,9 +1287,7 @@ default channels, which `seed_channels.py` inserts at boot (insert-only, on slug
 Seeded channels carry `allowed_agent_kinds = []` (no restriction) so seeding never
 gates live traffic; tighten per channel from this screen.
 
-**Shows** — a **CORS-dirty banner** (appears when channels changed since boot, since
-the CORS allow-list is snapshotted at startup; "Mark as fixed" dismisses it), a type
-filter, **＋ New channel**, and a table: name (code name muted), type in plain words
+**Shows** — a type filter, **＋ New channel**, and a table: name (code name muted), type in plain words
 (`channel_handlers.CHANNEL_KIND_LABELS`), **Answered by** (the default profile's
 name), sign-in, website count, status.
 
@@ -1256,13 +1296,21 @@ name), sign-in, website count, status.
 **Channel detail / new** — `GET /admin/channels/{id}` or `/admin/channels/new` · `channel_detail.html` · `channel_handlers.py`
 Sections with plain labels: **Basics** (name, short code name = `slug`, type —
 a type that belongs to one business (a plugin's tenant type) reveals a **business
-picker** — description), **Answered by**
+picker**; a build whose plugin has no tenant types renders no picker at all —
+description), **Answered by**
 (`default_profile_id`, plus "Agents allowed on this channel" = `allowed_agent_kinds`
-from the shared live agent list), **Access** (allowed websites = `allowed_origins`,
+from the shared live agent list, one box per agent: a generic agent is stored as
+`custom:<slug>`), **Access** (allowed websites = `allowed_origins`,
 require sign-in = `auth_required`, requests per minute = `rate_limit_rpm`, active),
 and the free-form `config` JSON under **Advanced**; a Details rail on edit. POST
 field names unchanged. A danger-zone soft-delete (`…/delete`) sets `is_active=false`. Every
-mutation busts the channel cache and marks CORS dirty.
+mutation busts the channel cache, and the CORS middleware reads channel origins
+through that cache at request time (`core.cors.live_channel_origins`): a new or edited
+channel's allowed websites work at once, with no restart (other processes see the
+change within `CHANNELS_CACHE_TTL_SEC`, default 60 s). The New channel form's
+example name and code name come from the build (`core.channel_kinds.channel_name_example`:
+"Website chat" / `website_chat`, or a plugin's `name_example()`), and the type
+preselects the first one this build offers.
 
 **`allowed_origins` also gates the duplex voice WS handshake** (`<portal_prefix>/voice/live`),
 opt-in and OFF by default: an `Origin` that matches no channel is only rejected once
@@ -1286,7 +1334,9 @@ Sidebar **Knowledge** › Skills.
 (playbook) agents load on demand. Platform skills (no business) attach to
 profiles; tenant skills (business-scoped) resolve dynamically for that
 business's requests. Columns: name, slug, agent kind, scope
-(platform/tenant), always-on flag, status.
+(platform/tenant), always-on flag, status. The scope column and the create form's
+**Business** field show only where a plugin has tenants
+(`agent_catalog.business_field_label()`); with none every skill is a platform skill.
 
 **Key actions.** Create a skill (slug + description + first version body);
 edit metadata (display name, description, always-on, linked knowledge
@@ -1321,8 +1371,12 @@ document imports.
 
 **Shows** — a collapsed "New knowledge base" form (name, source type in plain words —
 `router.py:KB_KIND_LABELS` — agent; sync schedule + config JSON under Advanced), an
-agent filter (shared live list), and a table: name, agent ("Not attached to any agent"
-flagged), source type, documents, last updated, status. Status is per source type
+agent filter (one entry per agent, `?kind=custom:<slug>` for a generic agent), and a
+table: name, agent — every agent that uses it: the profiles whose `data_source_ids`
+list it (what the runtime searches, and what the agent's Tools & knowledge tab and
+`profile_attachments kind=kb` write) plus the product-kind label on the row
+(`agent_kind` / `additional_agent_kinds`); "Not attached to any agent" only when
+neither — source type, documents, last updated, status. Status is per source type
 (`router.py:_attach_kb_document_stats()`): uploaded files → **Ready** / **No
 documents yet** from `ai_kb_pages`; synced sources (GitBook / Drive / URL) →
 **Synced** / **Never synced**; a database table → **Live table**. "Never refreshed"
@@ -1339,10 +1393,13 @@ the settings to add, so the first sign is not a failed upload.
 
 **Source detail** — `GET /admin/kb/{source_id}` · `kb_detail.html` · `kb_handlers.py`
 Order (2026-10-11): ① **Documents** — the upload drop zone at the top (files, title,
-kind of document, language) and the list of documents already in the KB below it;
+kind of document, language; the stored `business_concept` kind reads "Concept" unless
+a plugin has businesses (`business_field_label()`)) and the list of documents already in the KB below it;
 non-pgvector kinds get a **Source** explanation instead (synced: last sync or "has not
 been synced yet"); ② **Settings** — name, agent, "Also used by" (one checkbox per
-agent; `_additional_kinds_form` marker lets "none ticked" clear it, the old
+agent; a generic agent ticked or unticked here is attached to or detached from its
+profile's `data_source_ids` in this environment, through `update_profile_row`; a
+product agent stays a label on the row; `_additional_kinds_form` marker lets "none ticked" clear it, the old
 newline-textarea shape still parses), sync schedule / SLA for synced kinds only,
 active; source type, config JSON and the pgvector `information_schema` inspector
 under Advanced; ③ **Danger zone** last. One **Details** rail (status, type, agent,
@@ -1477,7 +1534,9 @@ and defaults to the build's default kind (`custom` on a build with no plugin; a
 plugin may name another, `agent_catalog.default_kind()`).
 
 Two tabs (**Memories**, **Inspector**) plus the per-agent **memory settings** operate
-on the **selected agent kind** — so an operator can view/edit/pin/delete user
+on the **selected agent** (`?agent_kind=<kind>`, or `custom:<slug>` for one generic
+agent, whose settings are its own row, draft or live, and whose memories are its own:
+`ai_user_memory.agent_slug`, so no other generic agent reads them) — so an operator can view/edit/pin/delete user
 memories, tune extraction and retrieval config, and inspect per-session memory for
 `custom`, an `agents_*` demo kind, or any registered agent kind.
 
@@ -1513,7 +1572,20 @@ of their memory facts (`content`, `importance`, `pinned`, `source`, `status`,
 - **Edit** a memory's text in-line (re-embeds on save).
 - **Delete** — soft-archive (`status = 'archived'`); the row is kept for audit/inspector purposes.
 - **Pin / Unpin** — pinned memories are always injected into the prompt regardless of similarity.
-- **Add a memory manually** — a disclosure form that inserts a new row with `source = 'manual'` and embeds it immediately so it is retrievable.
+- **Add a memory manually** — a disclosure form that inserts a new row with `source = 'manual'` and embeds it immediately so it is retrievable. For a generic agent the row is saved under its slug. The tenant id field (labelled by the plugin's `agent_catalog.business_field_label()`, e.g. "Business id") shows only for a product kind in a build whose plugin has tenants; a build with no plugin asks for none.
+- **Not assigned to an agent yet** — for a generic agent, the user's custom-kind rows with no `agent_slug` (saved before memories were per agent, 2026-11-23). No agent recalls them; **Move to <agent>** (`POST /admin/memory/{id}/assign`) gives one to the agent being viewed. Only a row with no slug moves.
+
+**Each generic agent keeps its own memories (2026-11-23).** Every generic agent has
+kind `custom`, so memories stored by kind alone would have been shared: Support desk
+could recall what a user told Sales assistant. A custom agent's rows carry its slug
+(`ai_user_memory.agent_slug`) and every read and write names it: the runtime
+(`runtime/agents/custom.py`, text turns of `/v1/agents/{slug}/chat` with a known
+caller, when the agent's memory is on), this screen, and the admin MCP `memory` tool
+(`agent_kind=custom:<slug>`). `core.memory.store.scope_query` is the one filter, and a
+custom-kind read with no slug fails closed. Product kinds are read by kind exactly as
+before. Migration `20261123150000_agent_scoped_memory.sql` gives a pre-existing
+custom-kind row the slug of the session that saved it (`ai_chat_sessions.metadata.agent_slug`);
+the rest stay unassigned (above).
 
 Every mutation is recorded in `agent_audit_log`.
 
@@ -1542,7 +1614,17 @@ Saving writes `agent_profiles.memory_config` for the selected agent kind **and a
 env** — the read and the write are both scoped to the selected environment's profile
 row (staging and prod share one config DB, so an unscoped lookup could otherwise land
 on the wrong env's row). Staging changes are live immediately; production reads the
-promoted snapshot — promote from Environments after staging validation.
+promoted snapshot — promote from Environments after staging validation. The note next
+to **Save** names the agent, its profile slug and the environment ("Saves to Support
+desk `support-desk` in staging. Production keeps the released version until you
+release Support desk."; on production just "… in production.").
+
+**Which agent it opens on.** The picker lists agents one by one
+(`build_agent_choices`), so the bare `custom` kind (the default kind of a build with
+no plugin) is neither offered nor opened when generic agents exist: both
+`/admin/memory` and `/admin/agents/memory` open on the first generic agent
+(`memory_handlers._open_on_agent`). A build whose plugin names a product default
+kind opens on it as before.
 
 ### Inspector tab
 

@@ -92,7 +92,11 @@ def _attachments_by_profile(att_rows, servers, members, tools) -> Dict[str, List
     return out
 
 
-def _bound_count(attachments: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _bound_count(attachments: List[Dict[str, Any]],
+                 listed: Optional[Dict[str, Optional[List[Dict[str, Any]]]]] = None) -> Dict[str, Any]:
+    """``listed`` (admin.external_mcp_tools.listed_tools) holds the tools an
+    external server lists; with it, a server attached with no pinned subset
+    counts the tools it really offers instead of none."""
     from runtime.tools._mcp_resolver import bound_tool_names_from_attachments
 
     names = set(bound_tool_names_from_attachments(attachments))
@@ -107,8 +111,11 @@ def _bound_count(attachments: List[Dict[str, Any]]) -> Dict[str, Any]:
         if server.get("endpoint_only") or server.get("source") == "bundle":
             continue
         pinned = a.get("tool_subset") or server.get("tool_subset") or []
+        known = (listed or {}).get(str(server.get("mcp_server_id")))
         if pinned:
             names.update(pinned)
+        elif known is not None:
+            names.update(t["name"] for t in known)
         else:
             open_ended = True
     return {"count": len(names), "external": open_ended, "toolsets": len(attachments)}
@@ -147,7 +154,8 @@ def load_agents_list(env: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         "profiles": _profiles,
         "models": _q("agent_models", "model_id, name"),
         "atts": _q("agent_profile_mcp_servers", "profile_id, mcp_server_id, tool_subset, position"),
-        "servers": _q("agent_mcp_servers", "mcp_server_id, name, source, endpoint_only, is_active"),
+        "servers": _q("agent_mcp_servers", "mcp_server_id, name, source, endpoint_only, is_active, "
+                                           "endpoint, auth_env_var, tool_subset"),
         "members": _q("agent_mcp_tools", "mcp_server_id, tool_id, position"),
         "tools": _q("agent_tools", "tool_id, python_name", is_deprecated=False),
         "skills": _q("agent_profile_skills", "profile_id, skill_id"),
@@ -166,6 +174,12 @@ def load_agents_list(env: str, user_id: Optional[str] = None) -> Dict[str, Any]:
     atts = _attachments_by_profile(
         [a for a in batch["atts"] if a.get("profile_id") in env_ids],
         batch["servers"], batch["members"], batch["tools"])
+    # What each attached external server lists (admin/external_mcp_tools.py).
+    from admin.external_mcp_tools import listed_tools
+
+    attached_ids = {a.get("mcp_server_id") for a in batch["atts"] if a.get("profile_id") in env_ids}
+    listed = listed_tools([sv for sv in batch["servers"]
+                           if sv.get("mcp_server_id") in attached_ids and sv.get("is_active", True)])
     skills_by_profile: Dict[str, int] = {}
     for s in batch["skills"]:
         skills_by_profile[s["profile_id"]] = skills_by_profile.get(s["profile_id"], 0) + 1
@@ -195,7 +209,7 @@ def load_agents_list(env: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         if answers_for == (p.get("display_name") or p.get("agent_kind")):
             answers_for = None
         channels = P.channels_for(p, answers_voice_for=answers_for)
-        bound = _bound_count(atts.get(pid, []))
+        bound = _bound_count(atts.get(pid, []), listed)
         knowledge = len(p.get("data_source_ids") or [])
         subs = len(p.get("downstream_profile_ids") or [])
         return {
@@ -328,6 +342,15 @@ def build_detail_view(ctx: Dict[str, Any], env: str,
                        for g in (bound.get("groups") or [])}
     toolsets: List[Dict[str, Any]] = []
     attached_ids = set()
+    # The tools each attached external server lists itself; the resolver
+    # leaves them out (they are not catalog rows), so without this an agent
+    # whose server it really calls read "0 available right now".
+    from admin.external_mcp_tools import listed_tools
+
+    listed = listed_tools(
+        [(a.get("mcp_server") or {}) for a in ctx.get("mcp_attachments") or []
+         if (a.get("mcp_server") or {}).get("is_active", True)]
+        + [m for m in attachable if m.get("is_active", True)])
     for att in ctx.get("mcp_attachments") or []:
         srv = att.get("mcp_server") or {}
         mid = srv.get("mcp_server_id")
@@ -336,6 +359,9 @@ def build_detail_view(ctx: Dict[str, Any], env: str,
         attached_ids.add(mid)
         pick = attachable_by_id.get(mid) or {}
         tool_names = list(pick.get("tool_names") or [])
+        known = listed.get(str(mid))
+        if not tool_names and known:
+            tool_names = [t["name"] for t in known]
         subset = list(att.get("tool_subset") or [])
         is_bundle_list = (pick.get("source") or srv.get("source")) == "bundle" and bool(tool_names)
         if srv.get("endpoint_only"):
@@ -367,6 +393,8 @@ def build_detail_view(ctx: Dict[str, Any], env: str,
     toolset_catalog = []
     for m in attachable:
         names = list(m.get("tool_names") or [])
+        if not names and listed.get(str(m.get("mcp_server_id"))):
+            names = [t["name"] for t in listed[str(m.get("mcp_server_id"))]]
         toolset_catalog.append({
             "id": m.get("mcp_server_id"),
             "label": P.toolset_label(m),

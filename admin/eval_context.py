@@ -34,3 +34,19 @@ def run_context_from_form(form) -> dict:
         if raw:
             out[key] = raw
     return out
+
+
+def business_field_label() -> str:
+    """The label of the run forms' tenant picker ("Business" in a build whose
+    plugin has businesses), or '' when no plugin provides one.
+
+    The engine has no tenants of its own: in a build with no plugin the
+    picker would list nothing, so the Testing screens hide it. A plugin
+    whose agents serve tenants names them with the `agent_catalog` hook's
+    `business_field_label()`; the first non-empty label wins."""
+    from core.plugins import call_hook, load_hook
+
+    for found in call_hook(load_hook("agent_catalog"), "business_field_label"):
+        if found:
+            return str(found)
+    return ""

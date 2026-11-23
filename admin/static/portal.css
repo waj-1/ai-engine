@@ -330,6 +330,15 @@ body.prompt-editor-lock { overflow: hidden; }
 .env-switcher a.active.dev { background: var(--accent-soft); color: var(--accent); }
 .env-switcher a.active.staging { background: var(--warning-soft); color: var(--warning); }
 .env-switcher a.active.prod { background: var(--error-soft); color: var(--error); }
+.env-banner {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-s);
+  margin: 0 0 var(--space-m); padding: var(--space-s) var(--space-m);
+  border: 1px solid var(--error); border-radius: var(--radius-btn);
+  background: var(--error-soft); color: var(--fg-1); font-size: 13px;
+}
+.env-banner strong { color: var(--error); text-transform: uppercase; letter-spacing: 1.2px; font-size: 11px; }
+.env-banner a { margin-left: auto; }
+.env-marker { display: inline-flex; align-items: center; gap: var(--space-xs); }
 
 /* chips & pills */
 .chip {

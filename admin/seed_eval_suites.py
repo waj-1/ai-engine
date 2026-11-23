@@ -72,6 +72,11 @@ def _resolve_judge_model_id(client: Any, environment: str) -> Optional[str]:
       3. any active Claude model row in `environment` — the only OTHER
          provider `_try_build_judge` supports.
 
+    Since 2026-11-23 the judge builder takes ANY provider the engine can call
+    (Ollama, OpenAI-compatible, Azure, ...); this seeder still prefers Gemini
+    then Claude so the product build seeds as before, and an operator can pick
+    any other row in the suite editor.
+
     None means genuinely no judge-capable model row exists (e.g. an
     Azure-only catalog) — those suites seed without `evaluator_model_id`,
     fall back to substring-only grading on plain runs, and the bake-off

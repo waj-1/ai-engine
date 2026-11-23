@@ -53,7 +53,7 @@ def wired(monkeypatch):
         seen["built"].append(slug)
         return _StubAgent()
 
-    async def _run_turn(*, agent, message, identity, profile):
+    async def _run_turn(*, agent, message, identity, profile, extra_context=None):
         seen["identities"].append(identity)
         yield {"type": "answer", "content": "Hi!"}
         yield {"type": "done"}

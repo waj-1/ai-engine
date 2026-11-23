@@ -152,6 +152,7 @@ ROUTE_TO_TOOL: Dict[str, str] = {
     "/admin/memory/{memory_id}/delete": "memory",
     "/admin/memory/{memory_id}/edit": "memory",
     "/admin/memory/{memory_id}/pin": "memory",
+    "/admin/memory/{memory_id}/assign": "memory",
     "/admin/profiles/{profile_id}": "update_profile",
     "/admin/profiles/{profile_id}/mcp-attachments": "profile_mcp_attachments",
     "/admin/profiles/{profile_id}/serve-prompt-version": "prompts",
@@ -196,10 +197,6 @@ ROUTE_TO_TOOL: Dict[str, str] = {
 #: into ROUTE_TO_TOOL above — which is the intended outcome when a route
 #: lands here for no better reason than nobody having built the tool.
 PORTAL_ONLY: Dict[str, str] = {
-    "/admin/channels/cors-dirty/clear": (
-        "clears the process-local mark_cors_dirty() flag, not a config row "
-        "— nothing for an MCP tool to act on"
-    ),
     "/admin/eval-runs/schedules/due/fire": (
         "batch cron fire (the pg_cron sweep entrypoint) — the per-schedule "
         "tool exists (eval_schedules action=fire)"

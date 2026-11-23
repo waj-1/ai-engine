@@ -7,7 +7,7 @@ A test suite is a set of cases for one agent: each case is a question and the an
 1. On **Testing**, open the **Test suites** tab and click **Create test suite**.
 2. Type a **Name**, for example "Demo — Lina support answers", and pick the **Agent**. **Agent type** fills in by itself.
 3. Set the **Target score**: a run passes when its score reaches it. 80–90% is typical.
-4. Pick a **Judge model** so each answer is graded against the expected answer. Without one, only expected words are checked.
+4. Pick a **Judge model** so each answer is graded against the expected answer. Any model your portal has works, a local model included. Without one, only expected words are checked, and a case whose answer doesn't contain them is shown as **Not judged**.
 5. Click **Create suite**, then open the suite to add cases.
 
 ## Add and edit cases
@@ -17,7 +17,7 @@ A test suite is a set of cases for one agent: each case is a question and the an
 Open a suite from the **Test suites** tab. The top shows the latest result and the **Run history**.
 
 1. **Run this suite** starts a run. See [Run a test and read the result](02-run-a-test.md).
-2. Under **Cases**, each row has a **Category**, the **Question** the customer asks and the **Expected answer**. Edit them in place, then click **Save**. Tick **Remove** to delete a case.
+2. Under **Cases**, each row has a **Name**, a **Category**, the **Question** the customer asks and the **Expected answer**. Edit them in place, then click **Save**. Tick **Remove** to delete a case. A case without a name is shown by its question in runs; **Add a case** has a **Name (optional)** field too.
 
 Writing good cases:
 

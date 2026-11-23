@@ -8,7 +8,8 @@ CREATE OR REPLACE FUNCTION "public"."match_user_memory"(
   p_agent_kind public.ai_agent_kind,
   p_query_embedding text,
   p_match_count integer DEFAULT 6,
-  p_min_similarity real DEFAULT 0.7
+  p_min_similarity real DEFAULT 0.7,
+  p_agent_slug text DEFAULT NULL
 )
 RETURNS TABLE (
   id uuid,
@@ -31,6 +32,10 @@ LANGUAGE sql STABLE AS $function$
   FROM public.ai_user_memory m
   WHERE m.user_id = p_user_id
     AND m.agent_kind = p_agent_kind
+    -- A custom agent reads only its own memories (agent_slug); product kinds
+    -- are scoped by kind alone. Migration 20261123150000 drops the old
+    -- five-argument version, which would make a five-argument call ambiguous.
+    AND (p_agent_kind <> 'custom'::public.ai_agent_kind OR m.agent_slug = p_agent_slug)
     AND m.status = 'active'
     AND m.embedding IS NOT NULL
     AND (1 - (m.embedding <=> p_query_embedding::vector)) >= p_min_similarity

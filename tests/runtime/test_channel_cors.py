@@ -184,36 +184,92 @@ class TestBuildAllowedOrigins:
 
 
 # ---------------------------------------------------------------------------
-# CORS dirty flag
+# Channel origins at request time (no restart after a portal edit)
 # ---------------------------------------------------------------------------
 
 
-class TestCorsDirtyFlag:
-    def test_flag_starts_clean(self):
-        from core.cors import clear_cors_dirty, is_cors_dirty
+def _cors_app(channel_origins):
+    from fastapi import FastAPI
 
-        clear_cors_dirty()
-        assert is_cors_dirty() is False
+    from core.cors import FirstPartyCORSMiddleware
 
-    def test_mark_sets_flag(self):
-        from core.cors import clear_cors_dirty, is_cors_dirty, mark_cors_dirty
+    application = FastAPI()
 
-        clear_cors_dirty()
-        mark_cors_dirty()
-        assert is_cors_dirty() is True
-        clear_cors_dirty()
-        assert is_cors_dirty() is False
+    @application.get("/ping")
+    def ping():
+        return {"ok": True}
 
-    def test_channel_handlers_invalidate_marks_dirty(self):
-        """The channel admin write path should set the dirty flag so
-        future banner UI can tell operators a restart is needed."""
+    application.add_middleware(FirstPartyCORSMiddleware, allow_origins=["https://boot.example.net"],
+                               allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
+                               channel_origins=channel_origins)
+    return application
+
+
+def _preflight(client, origin):
+    return client.options("/ping", headers={"Origin": origin, "Access-Control-Request-Method": "POST"})
+
+
+class TestChannelOriginsAtRequestTime:
+    def test_a_channel_added_after_boot_is_allowed_without_a_restart(self):
+        """The middleware is built once; a channel created afterwards must
+        still pass the preflight (it used to need a restart, and the
+        Channels screen showed a "restart the agent process" banner)."""
+        from fastapi.testclient import TestClient
+
+        live = set()
+        client = TestClient(_cors_app(lambda: live))
+        assert _preflight(client, "https://shop.example.net").status_code == 400
+        live.add("https://shop.example.net")  # the portal saved a new channel
+        r = _preflight(client, "https://shop.example.net")
+        assert r.status_code == 200
+        assert r.headers["access-control-allow-origin"] == "https://shop.example.net"
+        assert _preflight(client, "https://other.example.net").status_code == 400
+
+    def test_default_reads_the_channels_cache_the_portal_busts(self, monkeypatch):
+        """With no override the middleware reads ``core.channels``; a write
+        through the portal's invalidate path makes the new row visible."""
+        from fastapi.testclient import TestClient
+
         from admin.channel_handlers import _invalidate_channels_cache
-        from core.cors import clear_cors_dirty, is_cors_dirty
+        from core import channels as channels_mod
+        from core.cors import FirstPartyCORSMiddleware, live_channel_origins
 
-        clear_cors_dirty()
-        _invalidate_channels_cache()
-        assert is_cors_dirty() is True
-        clear_cors_dirty()
+        rows = []
+        monkeypatch.setattr(channels_mod, "_load_from_db",
+                            lambda: {r["slug"]: r for r in rows})
+        channels_mod.invalidate()
+        client = TestClient(_cors_app(live_channel_origins))
+        try:
+            assert _preflight(client, "https://shop.example.net").status_code == 400
+            rows.append({"slug": "shop", "allowed_origins": ["https://shop.example.net"]})
+            _invalidate_channels_cache()
+            assert _preflight(client, "https://shop.example.net").status_code == 200
+        finally:
+            channels_mod.invalidate()
+        import inspect
+        default = inspect.signature(FirstPartyCORSMiddleware.__init__).parameters["channel_origins"].default
+        assert default is live_channel_origins
+
+    def test_the_cache_is_read_again_after_its_ttl(self, monkeypatch):
+        """Another process's edit (a second replica, a separate chat
+        service) arrives after CHANNELS_CACHE_TTL_SEC."""
+        from core import channels as channels_mod
+
+        rows = [{"slug": "a", "allowed_origins": []}]
+        monkeypatch.setattr(channels_mod, "_load_from_db", lambda: {r["slug"]: dict(r) for r in rows})
+        monkeypatch.setenv("CHANNELS_CACHE_TTL_SEC", "30")
+        clock = [1000.0]
+        monkeypatch.setattr(channels_mod.time, "monotonic", lambda: clock[0])
+        channels_mod.invalidate()
+        try:
+            assert set(channels_mod.get_active_channels()) == {"a"}
+            rows.append({"slug": "b", "allowed_origins": []})
+            clock[0] += 10
+            assert set(channels_mod.get_active_channels()) == {"a"}  # still cached
+            clock[0] += 25
+            assert set(channels_mod.get_active_channels()) == {"a", "b"}
+        finally:
+            channels_mod.invalidate()
 
 
 # ---------------------------------------------------------------------------

@@ -9,27 +9,18 @@ The allow-list is the union of:
 * any origins a plugin allows at request time (its ``cors_origins()`` hook,
   passed to ``FirstPartyCORSMiddleware`` as ``dynamic_origins``).
 
-Known limitation — startup-only allow-list
-==========================================
-FastAPI's bundled ``CORSMiddleware`` is constructed once at app boot and
-captures the ``allow_origins`` list by value. Channels added or edited
-in the admin portal AFTER the process has started will NOT appear in
-the CORS allow-list until the next restart. We accept this tradeoff
-because:
+Channel origins are read at request time
+========================================
+``FirstPartyCORSMiddleware`` asks ``core.channels`` (an in-process cache the
+admin portal busts on every channel write, re-read after
+``CHANNELS_CACHE_TTL_SEC`` in every other process) whenever an origin is not
+already on the boot-time list. So a channel created or edited in the portal
+allows its origins without a restart: at once in the process that served the
+edit, within the TTL everywhere else. The boot-time list stays as the fast
+path, and only an origin that is not on it costs a cache lookup.
 
-* The middleware is in the hot path of every preflight; doing a
-  per-request channels lookup (even a cached one) is measurable.
-* The admin portal already busts ``core.channels`` cache on every
-  write, so the per-request channel resolution dependency
-  (see ``core.channel_resolver``) DOES see fresh data immediately —
-  it's only the browser-facing CORS handshake that lags.
-
-To make the lag visible to operators we expose a ``mark_cors_dirty()``
-flag that ``admin.channel_handlers`` sets on every write. Future UI
-work can surface a "restart required" banner by reading
-``is_cors_dirty()`` — the primitive is here, the banner template
-wiring is out of scope for this change (the affected templates are
-locked down for parallel agents).
+With ``ALLOWED_ORIGINS=*`` every origin is allowed anyway (without
+credentials), so channels do not change CORS at all.
 """
 
 from __future__ import annotations
@@ -37,7 +28,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-import threading
 from typing import Callable, Iterable, List, Optional, Set
 
 from starlette.middleware.cors import CORSMiddleware
@@ -73,38 +63,6 @@ def is_static_allowed_origin(origin: str) -> bool:
     if not isinstance(origin, str) or not origin:
         return False
     return any(pattern.match(origin) for pattern in _STATIC_ALLOWED_ORIGIN_PATTERNS)
-
-
-# Restart-required flag. Set by admin writes (via mark_cors_dirty), read
-# by any future banner UI / health-check probe via is_cors_dirty.
-_cors_dirty_lock = threading.Lock()
-_cors_dirty = False
-
-
-def mark_cors_dirty() -> None:
-    """Flag that an admin write changed channel origins after boot.
-
-    Called from ``admin.channel_handlers._invalidate_channels_cache``
-    on every create/update/delete. Idempotent.
-    """
-    global _cors_dirty
-    with _cors_dirty_lock:
-        _cors_dirty = True
-
-
-def is_cors_dirty() -> bool:
-    """Return True if any channel origin changed since the last app
-    boot (or since ``clear_cors_dirty`` was called)."""
-    with _cors_dirty_lock:
-        return _cors_dirty
-
-
-def clear_cors_dirty() -> None:
-    """Reset the flag. Useful from tests; also intended to be called by
-    an operator-acknowledgement endpoint if one is ever added."""
-    global _cors_dirty
-    with _cors_dirty_lock:
-        _cors_dirty = False
 
 
 def _split_env_origins(raw: Optional[str]) -> List[str]:
@@ -177,9 +135,6 @@ def build_allowed_origins(
     if env_origins == ["*"]:
         # Wildcard mode: skip channels entirely. The caller wires the
         # middleware with allow_origins=["*"] and disables credentials.
-        # A fresh boot is a fresh allow-list snapshot — reset the dirty
-        # flag so any banner UI starts clean until the next admin write.
-        clear_cors_dirty()
         return ["*"]
 
     merged: Set[str] = set(env_origins)
@@ -198,11 +153,19 @@ def build_allowed_origins(
     if channels_provider is not None:
         merged |= _channel_origins(channels_provider)
 
-    # We've just (re)snapshotted the channel origins into a fresh
-    # CORSMiddleware allow-list — the banner only matters for mutations
-    # that land AFTER this call, so reset on every successful build.
-    clear_cors_dirty()
     return sorted(merged)
+
+
+def live_channel_origins() -> Set[str]:
+    """Every active channel's origins as ``core.channels`` sees them now
+    (its cache: busted by portal writes, re-read after a TTL). Empty when
+    the channels table cannot be read."""
+    try:
+        from core.channels import get_active_channels
+    except Exception as exc:  # pragma: no cover - defensive: import-time
+        logger.warning("cors: core.channels unavailable (%s)", exc)
+        return set()
+    return _channel_origins(get_active_channels)
 
 
 class FirstPartyCORSMiddleware(CORSMiddleware):
@@ -210,7 +173,10 @@ class FirstPartyCORSMiddleware(CORSMiddleware):
     is an explicit list: the boot-time list (env + channels, see
     ``build_allowed_origins``), PLUS every first-party origin
     (``is_static_allowed_origin`` — company.example, tenants.example, staging.example, localhost),
-    PLUS whatever ``dynamic_origins()`` returns at request time (the plugins'
+    PLUS every active channel's origins as they are NOW
+    (``channel_origins()``, default ``live_channel_origins``: a channel added
+    in the portal after boot works without a restart), PLUS whatever
+    ``dynamic_origins()`` returns at request time (the plugins'
     ``cors_origins()`` hook; a callable so a plugin may refresh its set).
 
     Lives here rather than inline in main.py so the exact class prod runs can
@@ -218,15 +184,24 @@ class FirstPartyCORSMiddleware(CORSMiddleware):
     cross-origin, preflight included).
     """
 
-    def __init__(self, app, *, dynamic_origins: Optional[Callable[[], Iterable[str]]] = None, **kwargs):
+    def __init__(self, app, *, dynamic_origins: Optional[Callable[[], Iterable[str]]] = None,
+                 channel_origins: Optional[Callable[[], Iterable[str]]] = live_channel_origins,
+                 **kwargs):
         super().__init__(app, **kwargs)
         self._dynamic_origins = dynamic_origins
+        self._channel_origins = channel_origins
 
     def is_allowed_origin(self, origin: str) -> bool:
         if origin in self.allow_origins:
             return True
         if is_static_allowed_origin(origin):
             return True
+        if self._channel_origins is not None:
+            try:
+                if origin in set(self._channel_origins() or ()):
+                    return True
+            except Exception:  # pragma: no cover - defensive
+                pass
         if self._dynamic_origins is not None:
             try:
                 return origin in set(self._dynamic_origins() or ())

@@ -616,8 +616,9 @@ with `ai_chat_*`.
 |--------|------|---------|
 | `id` | uuid PK | Auto-generated via `gen_random_uuid()`. |
 | `user_id` | uuid NOT NULL | The subject (per-user scoping). Usually the caller's auth user id; an agent with no logged-in caller may derive a stable id instead. |
-| `business_id` | uuid NOT NULL | Tenant scoping; used for admin queries. |
+| `business_id` | uuid NULL | Tenant scoping where the build's plugin has tenants; NULL for a generic agent's memories (nullable since `20261123150000`). |
 | `agent_kind` | `ai_agent_kind` NOT NULL | Namespaces memory per agent kind. |
+| `agent_slug` | text NULL | The generic agent (`custom` kind, `agent_profiles.slug`) the memory belongs to; read and written by kind AND slug, so generic agents never share memories. NULL for product kinds. A `custom` row with NULL here predates per-agent memory and is recalled by no agent until assigned (Memory › Memories). Added by `20261123150000_agent_scoped_memory.sql`. |
 | `content` | text NOT NULL | The fact text, normalized. |
 | `embedding` | `vector(768)` | Gemini `text-embedding-004` 768-dim embedding; used by HNSW index for ANN retrieval. |
 | `importance` | real NOT NULL default 0.5 | Extraction score 0–1; used for threshold filtering and ranking. |
@@ -636,6 +637,8 @@ with `ai_chat_*`.
 - `CHECK (source IN ('auto', 'manual', 'tool'))`, `CHECK (status IN ('active', 'archived'))`.
 - `idx_ai_user_memory_lookup` — btree on `(user_id, agent_kind, status)` (hot read filter).
 - `idx_ai_user_memory_business` — btree on `(business_id, agent_kind)` (admin browse).
+- `idx_ai_user_memory_agent_slug` — btree on `(user_id, agent_kind, agent_slug, status)` (a generic agent's reads).
+- `match_user_memory(p_user_id, p_agent_kind, p_query_embedding, p_match_count, p_min_similarity, p_agent_slug)` — the recall RPC; for kind `custom` it returns only `agent_slug = p_agent_slug` rows.
 - HNSW index on `embedding` (`vector_cosine_ops`) for approximate nearest-neighbour retrieval.
 - Requires the `vector` extension (`CREATE EXTENSION IF NOT EXISTS vector`).
 
@@ -1020,8 +1023,8 @@ Added by migration `20261123070000_engine_setup.sql`.
 
 ### `agent_audit_log`
 Append-only. Key columns: `entity_type`, `entity_id` (**nullable** — global / bulk
-actions such as the eval scheduler's `due_fire` or the channels CORS dirty-flag have
-no single entity), `action`, `before` / `after` JSONB, `actor_user_id`, `created_at`,
+actions such as the eval scheduler's `due_fire`, or the retired channels CORS
+dirty-flag's old `cors_dirty_clear` rows, have no single entity), `action`, `before` / `after` JSONB, `actor_user_id`, `created_at`,
 optional `signed_hash`. Secrets masked before insert; writes are best-effort.
 
 ### `admin_jobs`

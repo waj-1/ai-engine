@@ -1,0 +1,35 @@
+{#- The portal's brand mark: the sidebar, the sign-in page and the first-run
+    page all draw it from here, so the three always match.
+      brand.mark   a letter tile (a partner build's logo letter)
+      brand.glyph  "engine": the engine's own mark (a build with no product)
+      neither      the plain accent tile
+    `size` is the side in px; None keeps the sidebar's own CSS sizes. Decorative: the brand name is always next to it. -#}
+{% macro brand_mark(brand, size=None, class_="") -%}
+{%- set _style = ('width:%dpx;height:%dpx;' % (size, size)) if size else '' -%}
+{%- if brand.mark -%}
+<span class="nav-brand-mark nav-brand-mark-logo {{ class_ }}" aria-hidden="true" {% if _style %}style="{{ _style }}"{% endif %}>
+  <svg viewBox="0 0 30 30" focusable="false">
+    <rect width="30" height="30" rx="9" fill="{{ brand.accent or 'currentColor' }}"/>
+    <text x="15" y="22" text-anchor="middle" font-family="Sora, system-ui, sans-serif"
+          font-size="20" font-weight="800" fill="#FFFFFF">{{ brand.mark }}</text>
+  </svg>
+</span>
+{%- elif brand.glyph == "engine" -%}
+<span class="nav-brand-mark nav-brand-mark-logo {{ class_ }}" aria-hidden="true" data-brand-glyph="engine" {% if _style %}style="{{ _style }}"{% endif %}>
+  <svg viewBox="0 0 30 30" focusable="false">
+    <rect width="30" height="30" rx="8" style="fill:var(--accent)"/>
+    <g style="stroke:var(--accent-fg, #FFFFFF);fill:none" stroke-width="2.2" stroke-linecap="round">
+      <path d="M15 15 L8.5 9 M15 15 L21.5 9 M15 15 L15 23"/>
+    </g>
+    <g style="fill:var(--accent-fg, #FFFFFF)">
+      <circle cx="15" cy="15" r="3.4"/>
+      <circle cx="8.5" cy="9" r="2.4"/>
+      <circle cx="21.5" cy="9" r="2.4"/>
+      <circle cx="15" cy="23" r="2.4"/>
+    </g>
+  </svg>
+</span>
+{%- else -%}
+<span class="nav-brand-mark {{ class_ }}" aria-hidden="true"{% if size %} style="{{ _style }}border-radius:{{ (size * 0.22)|round|int }}px;"{% endif %}></span>
+{%- endif -%}
+{%- endmacro %}

@@ -423,9 +423,13 @@ async def persist_admin_env(request: Request, call_next):
         reset_admin_env(token)
     try:
         if qp_env in ("staging", "prod") and is_admin and not only_env:
+            # Production is remembered only until the browser closes (a
+            # session cookie), so a later visit does not silently reopen the
+            # portal on production; staging is kept for 30 days.
             response.set_cookie(
                 "waj_admin_env", qp_env,
-                max_age=60 * 60 * 24 * 30, samesite="lax", path="/",
+                max_age=None if qp_env == "prod" else 60 * 60 * 24 * 30,
+                samesite="lax", path="/",
             )
     except Exception:
         pass
@@ -736,10 +740,9 @@ else:
     # When using specific origins, credentials can be enabled. The
     # allow-list is the UNION of:
     #   1) ALLOWED_ORIGINS env var (legacy explicit list)
-    #   2) every active channel's allowed_origins (agent_channels table)
-    # See ``core/cors.py`` for the documented startup-only caveat —
-    # post-boot channel edits don't take effect on the CORSMiddleware
-    # until the next restart.
+    #   2) every active channel's allowed_origins (agent_channels table),
+    #      read again at request time, so a channel added in the portal
+    #      after boot works without a restart (see ``core/cors.py``).
     allowed_origins = build_allowed_origins(env_value=allowed_origins_str)
 
     # localhost (dev) + first-party origins (the apex and any subdomain of

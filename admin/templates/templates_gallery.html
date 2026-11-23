@@ -83,7 +83,7 @@
       <div class="template-pick-grid" role="radiogroup" aria-label="Template">
         {% for t in all_templates %}
         <label class="template-pick">
-          <input type="radio" name="template_id" value="{{ t.template_id }}" required data-template-name="{{ t.display_name or t.slug }}">
+          <input type="radio" name="template_id" value="{{ t.template_id }}" required data-template-name="{{ t.display_name or t.slug }}" data-template-model="{{ t.default_model.label if t.default_model else '' }}">
           <span class="template-pick-body">
             <strong>{{ t.display_name or t.slug }}</strong>
             {% if t.is_composite %}<span class="chip chip-info">Team</span>{% endif %}
@@ -106,7 +106,7 @@
         {% if model_options %}
         <label class="field"><span class="field-label">Model</span>
           <select name="model_id">
-            <option value="">— The template's default —</option>
+            <option value="" data-default-model-option>— The template's default —</option>
             {% for m in model_options %}<option value="{{ m.model_id }}">{{ m.name }} — {{ m.model_string }}</option>{% endfor %}
           </select>
         </label>
@@ -131,7 +131,7 @@
         <details class="advanced">
           <summary><span class="h3">Advanced</span></summary>
           <label class="field mt-s"><span class="field-label">Technical name (slug) <span class="muted">(optional)</span></span>
-            <input name="slug" placeholder="e.g. business_reporting" pattern="[a-z][a-z0-9_-]*">
+            <input name="slug" placeholder="e.g. order_status" pattern="[a-z][a-z0-9_-]*">
           </label>
           {% call hint() %}Leave blank for a name made from the agent's name (“Support desk” becomes <code>support-desk</code>). Set one when a parent must reach this agent by a fixed hand-off name — its tool will be <code>ask_&lt;slug&gt;</code>. A clash fails loudly.{% endcall %}
         </details>
@@ -161,6 +161,11 @@
     if (two) {
       var r = form.querySelector('input[name="template_id"]:checked');
       form.querySelector("[data-chosen-template]").textContent = r ? r.getAttribute("data-template-name") : "";
+      // The default row names the model the agent will actually get: the
+      // template's own, or Automatic when the template's can't run here.
+      var opt = form.querySelector("[data-default-model-option]");
+      var m = r ? r.getAttribute("data-template-model") : "";
+      if (opt && m) opt.textContent = m;
       setTimeout(function () { form.querySelector('input[name="display_name"]').focus(); }, 30);
     }
   }

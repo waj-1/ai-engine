@@ -11,7 +11,7 @@ Read exactly what a customer and your agent said, listen to the call, and see wh
 
 1. Click **Conversations** in the sidebar. Narrow the list with the filters at the top:
    - **Period**: from **Last hour** to **Last 30 days**.
-   - **Agent** and **Channel**: one agent, or one place customers reach you.
+   - **Agent** and **Channel**: one agent, or one place customers reach you. Each agent you made yourself is listed by its own name.
    - **Outcome**: **Needs attention**, **Handed to a person** or **No problems**.
    - **Search**: words, a customer's name or a reference. Click **Search**.
 

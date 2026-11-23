@@ -139,6 +139,24 @@ def _session_rows(client, *, cutoff: str, agent_kind: Optional[str],
     return rows
 
 
+def count_session_messages(client, session_id: Any, stored: Any = None) -> Optional[int]:
+    """The number of user and agent messages saved for one session.
+
+    ``ai_chat_sessions.message_count`` is never maintained by the chat path
+    (core/chat_persistence.py counts the messages instead), so a session row
+    reads 0 however many messages it has. Count the messages; fall back to
+    the stored column only when the messages cannot be read."""
+    sid = str(session_id or "")
+    if sid:
+        try:
+            rows = (client.schema("public").table("ai_chat_messages").select("role")
+                    .eq("session_id", sid).limit(_MESSAGE_ROWS_LIMIT).execute().data or [])
+            return sum(1 for r in rows if r.get("role") in ("user", "assistant"))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("saved chats: message count unavailable for %s (%s)", sid, exc)
+    return stored if isinstance(stored, int) else None
+
+
 def _message_facts(client, sids: List[str]) -> Dict[str, Dict[str, Any]]:
     """Per session: first user message, message count, first and last time."""
     if not sids:
@@ -248,7 +266,16 @@ def list_conversations(*, env: Optional[str], hours: int, search: Optional[str] 
         ids = _search_session_ids(client, search.strip(), cutoff)
         if not ids:
             return []
-    sessions = _session_rows(client, cutoff=cutoff, agent_kind=agent_kind or None, ids=ids)
+    from admin.agent_kinds import split_agent_choice
+
+    # `custom:<slug>` is ONE generic agent (they all share the kind); the
+    # session remembers which (metadata.agent_slug).
+    kind, agent_slug = split_agent_choice(agent_kind)
+    sessions = _session_rows(client, cutoff=cutoff, agent_kind=kind or None, ids=ids)
+    if agent_slug:
+        sessions = [s for s in sessions
+                    if isinstance(s.get("metadata"), dict)
+                    and s["metadata"].get("agent_slug") == agent_slug]
     sids = [str(s["id"]) for s in sessions if s.get("id")]
     facts = _message_facts(client, sids)
     turns = _turn_rows(client, sids)
@@ -332,9 +359,9 @@ def build_list_context(*, env: str, hours: int, search: Optional[str], outcome: 
     for k in list(agent_names) + [g["agent_kind"] for g in groups if g.get("agent_kind")]:
         if k not in kinds and in_build(k):
             kinds.append(k)
-    agent_options = sorted(
-        ({"kind": k, "name": pl.agent_label(k, agent_names)} for k in kinds),
-        key=lambda o: o["name"].lower())
+    from admin.screens.conversations import agent_filter_options
+
+    agent_options = agent_filter_options(kinds, agent_names, env)
     return {
         "groups": groups,
         "total": len(groups),
@@ -555,7 +582,8 @@ def load_overview_json(session_id: str, env: Optional[str] = None) -> Dict[str, 
         "session": {
             "id": row.get("id"), "agent_kind": row.get("agent_kind"),
             "business_id": row.get("business_id"), "branch_id": row.get("branch_id"),
-            "title": row.get("title"), "message_count": row.get("message_count"),
+            "title": row.get("title"),
+            "message_count": count_session_messages(_client(env), row.get("id"), row.get("message_count")),
             "locale": meta.get("locale"), "source": meta.get("source"),
             "created_at": row.get("created_at"),
         },

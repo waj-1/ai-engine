@@ -96,7 +96,8 @@ def _fetch_profiles() -> List[dict]:
 
         rows = (
             admin_service_client().table("agent_profiles")
-            .select("agent_kind, slug, display_name, status, parent_profile_id, is_active")
+            .select("agent_kind, slug, display_name, status, parent_profile_id, is_active, "
+                    "environment")
             .execute().data or []
         )
     except Exception as exc:  # noqa: BLE001 - never block a picker
@@ -146,11 +147,98 @@ def live_agent_kinds(*, include_system: bool = False) -> Tuple[str, ...]:
 
 
 def agent_label(kind: Optional[str]) -> str:
-    """Plain name for an agent kind ("Lina — Customer support")."""
+    """Plain name for an agent kind ("Lina — Customer support"), or for one
+    agent picked by its choice value (``custom:<slug>`` -> that agent's name).
+
+    The bare ``custom`` kind names no agent: every generic agent shares it, so
+    it is never labelled after one of them (it used to read as whichever
+    custom profile sorted first, the seeded demo agent)."""
     if not kind:
         return ""
+    base, slug = split_agent_choice(kind)
+    if slug:
+        for r in custom_agent_rows():
+            if r.get("slug") == slug:
+                return _clean_label(r.get("display_name") or "") or _humanize(slug)
+        return _humanize(slug)
+    if base == SLUG_ADDRESSED_KIND:
+        return _FALLBACK_LABELS.get(base) or "Custom agent"
     live = _live_index()
     return live.get(kind) or _FALLBACK_LABELS.get(kind) or _humanize(kind)
+
+
+# ---------------------------------------------------------------------------
+# One option per AGENT, not per kind
+# ---------------------------------------------------------------------------
+# A product kind is one agent, so its kind is its picker value. Every generic
+# agent (templates, the New agent wizard, the seeded demo) shares the kind
+# ``custom`` and is told apart by slug (runtime/agents/custom.py), so a picker
+# that listed kinds offered ONE "custom" entry, labelled after whichever
+# custom profile sorted first. Pickers list choice values instead: a product
+# kind as itself, a generic agent as ``custom:<slug>``. The slug, not the
+# profile id, is the agent's identity across environments (it is its address).
+
+SLUG_ADDRESSED_KIND = "custom"
+_CHOICE_SEP = ":"
+_HIDDEN_STATUSES = ("template", "archived")
+
+
+def agent_choice(kind: str, slug: Optional[str] = None) -> str:
+    """The picker value for an agent: ``custom:<slug>`` or a product kind."""
+    if kind == SLUG_ADDRESSED_KIND and slug:
+        return f"{kind}{_CHOICE_SEP}{slug}"
+    return kind
+
+
+def split_agent_choice(value: Optional[str]) -> Tuple[str, Optional[str]]:
+    """``(kind, slug)`` for a picker value; ``slug`` is None for a kind."""
+    value = (value or "").strip()
+    if _CHOICE_SEP in value:
+        kind, _, slug = value.partition(_CHOICE_SEP)
+        if kind == SLUG_ADDRESSED_KIND and slug:
+            return kind, slug
+    return value, None
+
+
+def custom_agent_rows(env: Optional[str] = None) -> List[dict]:
+    """The generic agents (one row per slug), name order. Templates and
+    archived agents are left out. ``env`` narrows to one environment's rows;
+    without it a slug present in any environment counts once."""
+    by_slug: Dict[str, dict] = {}
+    for r in _fetch_profiles():
+        if r.get("agent_kind") != SLUG_ADDRESSED_KIND or not r.get("slug"):
+            continue
+        if r.get("status") in _HIDDEN_STATUSES:
+            continue
+        if env and r.get("environment") and r.get("environment") != env:
+            continue
+        by_slug.setdefault(r["slug"], r)
+    return sorted(by_slug.values(),
+                  key=lambda r: ((r.get("display_name") or r["slug"]).lower(), r["slug"]))
+
+
+def expand_agent_choices(kinds, *, env: Optional[str] = None) -> Tuple[str, ...]:
+    """``kinds`` with ``custom`` replaced by one value per generic agent (in
+    name order, where ``custom`` sat). ``custom`` with no agent is dropped:
+    it would name nobody."""
+    out: List[str] = []
+    for k in kinds or ():
+        if k == SLUG_ADDRESSED_KIND:
+            out.extend(agent_choice(k, r["slug"]) for r in custom_agent_rows(env))
+        elif k not in out:
+            out.append(k)
+    return tuple(out)
+
+
+def build_agent_choices(*, include_system: bool = False,
+                        env: Optional[str] = None) -> Tuple[str, ...]:
+    """The agents a Build-area picker offers on this deployment: the
+    ``build_agent_kinds`` list, one entry per agent (``expand_agent_choices``).
+    A partner build never serves generic agents, so it is unchanged there."""
+    kinds = list(build_agent_kinds(include_system=include_system))
+    if build_kinds() is None and SLUG_ADDRESSED_KIND not in kinds and custom_agent_rows(env):
+        kinds.append(SLUG_ADDRESSED_KIND)
+    return expand_agent_choices(kinds, env=env)
 
 
 def agent_options(kinds) -> List[Dict[str, str]]:

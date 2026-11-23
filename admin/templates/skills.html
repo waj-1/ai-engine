@@ -12,14 +12,16 @@
 {% if skills %}
 <section class="section">
   <table data-tabulator>
-    <thead><tr><th>Name</th><th>Code name</th><th>Agent</th><th>Available to</th><th>Always on</th><th>Status</th><th>Updated</th></tr></thead>
+    {# Tenant scope only where a plugin has tenants (business_field_label()). #}
+    {% set biz_label = business_field_label() %}
+    <thead><tr><th>Name</th><th>Code name</th><th>Agent</th>{% if biz_label %}<th>Available to</th>{% endif %}<th>Always on</th><th>Status</th><th>Updated</th></tr></thead>
     <tbody>
       {% for s in skills %}
       <tr>
         <td><a href="/admin/skills/{{ s.skill_id }}">{{ s.display_name }}</a></td>
         <td><code>{{ s.slug }}</code></td>
-        <td>{{ agent_label(s.agent_kind) }}</td>
-        <td>{% if s.business_id %}<span class="chip chip-neutral">One business</span> <span class="technical">{{ s.business_id }}</span>{% else %}<span class="chip chip-ok">All businesses</span>{% endif %}</td>
+        <td>{% if s.agents %}{% for v in s.agents %}{{ agent_label(v) }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}<span class="muted">No agent yet</span>{% endif %}</td>
+        {% if biz_label %}<td>{% if s.business_id %}<span class="chip chip-neutral">One business</span> <span class="technical">{{ s.business_id }}</span>{% else %}<span class="chip chip-ok">All businesses</span>{% endif %}</td>{% endif %}
         <td>{% if s.always_on %}<span class="pill warn">always on</span>{% else %}<span class="muted">on demand</span>{% endif %}</td>
         <td>{% if s.status == 'archived' %}<span class="pill bad">archived</span>{% else %}<span class="pill ok">{{ s.status or 'active' }}</span>{% endif %}</td>
         <td class="muted">{{ s.updated_at or '—' }}</td>
@@ -54,11 +56,13 @@
           {% for k in agent_kinds %}<option value="{{ k }}">{{ agent_label(k) }}</option>{% endfor %}
         </select>
       </label>
+      {% if business_field_label() %}
       <label class="field">
         <span class="field-label">Business <span class="opt">(optional)</span></span>
         <input name="business_id" placeholder="Business ID">
         <span class="field-help">Leave blank to make the skill available to every business.</span>
       </label>
+      {% endif %}
     </div>
     <label class="field">
       <span class="field-label">One-line description</span>

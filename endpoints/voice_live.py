@@ -1383,6 +1383,10 @@ async def voice_live(
     # socket, where everything below behaves exactly as it always has.
     route = _voice_route(websocket)
     agent_slug = route.agent_slug if route else None
+    if agent_slug:
+        # Which agent of the shared kind: a channel may allow just this one
+        # (core.channel_resolver.enforce_channel_kind reads it from here).
+        websocket.state.agent_slug = agent_slug
     route_caller: Optional[Dict[str, Any]] = None
 
     authorization = websocket.headers.get("authorization")
@@ -2541,7 +2545,8 @@ async def voice_live(
     # endpoint's root span gets, so both the metric points and the real agent
     # turns are env/agent/channel-tagged in ClickHouse + trace metadata.
     turn_trace_attrs = root_span_attrs(
-        websocket, agent_kind=agentKind, session_id=str(identity.session_id)
+        websocket, agent_kind=agentKind, session_id=str(identity.session_id),
+        agent_slug=agent_slug,
     )
     # Per-connection linkage for the explorer's Audio tab (see `call_id` above).
     turn_trace_attrs["waj.voice.call_id"] = call_id

@@ -49,6 +49,8 @@ async def model_keys_screen(
 ) -> HTMLResponse:
     context: Dict[str, Any] = {
         "ctx": ctx, "active": "settings", "current_env": env,
+        # Keys are stored per environment: keep the switch and name the env.
+        "env_scoped": True,
         "error": request.query_params.get("error"),
         "saved": request.query_params.get("saved"),
         "removed": request.query_params.get("removed"),

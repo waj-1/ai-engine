@@ -95,7 +95,7 @@ async def agent_chat(
     from runtime.agents.custom import CUSTOM_AGENT_KIND, create_custom_agent
 
     resolve_channel(request)
-    enforce_channel_kind(request, CUSTOM_AGENT_KIND)
+    enforce_channel_kind(request, CUSTOM_AGENT_KIND, agent_slug=slug)
     tag_active_span(request, agent_kind=CUSTOM_AGENT_KIND)
 
     try:
@@ -121,8 +121,11 @@ async def agent_chat(
             source="api",
             session_metadata={"agent_slug": slug},
         )
+        # The caller's id lets the agent read and save ITS memories about
+        # this caller (off unless the agent's memory settings turn it on).
         async for event in run_turn(agent=agent, message=body.message, identity=identity,
-                                    profile=agent.profile):
+                                    profile=agent.profile,
+                                    extra_context={"user_id": caller.get("user_id")}):
             yield event
 
     return sse_response(
@@ -130,7 +133,7 @@ async def agent_chat(
         error_message="An error occurred. Please try again.",
         trace_name="custom.agent",
         trace_attributes=root_span_attrs(request, agent_kind=CUSTOM_AGENT_KIND,
-                                         session_id=body.session_id),
+                                         session_id=body.session_id, agent_slug=slug),
     )
 
 

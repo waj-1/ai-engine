@@ -16,6 +16,7 @@ New agents start from a **template**: a ready-made starting point that already h
 ![The New agent window, step 2, with the Name field, the sub-agent picker and Create draft agent highlighted](../media/agents/new-agent-name.png)
 
 2. Give it a clear **Name**, for example "FAQ helper".
+   - **Model** (shown once a model exists): the first row says which model the agent will get if you leave it. That is the template's own model when your install can use it. When it can't (there's no key for that provider), the agent starts on **Automatic (first usable model)** instead, and the row says so and names the model Automatic uses right now. Pick another model to override it.
 3. If you use [categories](09-categories.md), choose one in **Category** (the field appears once a category exists). You can change it later in **Settings**.
 4. To make it a specialist for one of your existing agents, choose that agent in **Make it a sub-agent of**. Otherwise leave **— No, a standalone agent —**.
 5. Click **Create draft agent**. The new agent opens on its **Overview**.

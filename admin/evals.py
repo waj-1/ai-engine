@@ -487,6 +487,13 @@ def run_eval_suite_sync(
             if evaluator_model and runner_kind_needs_judge(runner_kind)
             else None
         )
+        # Why there is no judge, for the cases it leaves ungraded (run page).
+        judge_note: Optional[str] = None
+        if judge is None and runner_kind_needs_judge(runner_kind):
+            judge_note = (
+                _judge_unavailable_reason(evaluator_model, suite.get("evaluator_model_id"))
+                if evaluator_model else "no judge model is set on this suite"
+            ) or None
 
         voice_ctx: Optional[Dict[str, Any]] = None
         caller_llm = None
@@ -586,6 +593,7 @@ def run_eval_suite_sync(
                     profile_model=profile_model,
                     request_shape=kind_shape,
                     environment=environment,
+                    judge_note=judge_note,
                 )
             if repeats > 1:
                 scenario_result["attempt"] = attempt
@@ -665,8 +673,24 @@ def run_eval_suite_sync(
                 r["judge"]["score"] for r in results
                 if r.get("judge") and "score" in r["judge"]
             ]
+            # A case that could not be judged (no judge, nothing deterministic
+            # to check) is neither a pass nor a 0% fail: it stays out of the
+            # score, and a run with no gradable case says so instead.
+            graded = [r for r in results if not r.get("ungraded")]
+            if results and not graded:
+                _finalize(
+                    client, run_id, status="errored", results=results,
+                    error=("No case could be judged: " + (judge_note or "no judge model")
+                           + ". Pick a judge model in the suite's settings (any model this "
+                           "engine can call), or give the cases expected words the reply "
+                           "must contain."),
+                    lmnr_trace_id=lmnr_trace_id,
+                )
+                return
             if judge_scores:
                 score = sum(judge_scores) / len(judge_scores)
+            elif len(graded) != len(results):
+                score = sum(1 for r in graded if r.get("passed")) / len(graded)
             else:
                 # Divide by attempts actually run (len(results)), NOT
                 # len(scenarios): with repeats>1, `passed` counts every passing
@@ -724,6 +748,7 @@ def _run_scenario(
     profile_model: Optional[Dict[str, Any]] = None,
     request_shape: Optional[Dict[str, Any]] = None,
     environment: str = "staging",
+    judge_note: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Hit the agent endpoint with the scenario, capture SSE answer chunks,
     then score against expected_substrings and (optionally) the judge.
@@ -863,6 +888,7 @@ def _run_scenario(
             substring_passed: Optional[bool] = None
             judge_result: Optional[Dict[str, Any]] = None
             grading_note: Optional[str] = None
+            ungraded = False
             scorer_detail: Optional[Dict[str, Any]] = None
             scorer_score: Optional[float] = None
 
@@ -930,31 +956,47 @@ def _run_scenario(
                 elif substring_passed is not None:
                     passed = substring_passed
                 elif expected:
-                    # The scenario declares an expected_answer that needs an LLM judge,
-                    # but none ran (no evaluator_model configured on the suite, or the
-                    # judge LLM couldn't be built — e.g. GOOGLE_API_KEY unset). We must
-                    # NOT silently pass an answer we never graded — that's the bug where
-                    # everything showed "passed". Fail it with a clear, actionable note.
-                    #
-                    # With no judge the suite editor promises "check expected
-                    # words only", so that is what happens: the reply passes
-                    # when it contains the expected text (case and spacing
-                    # ignored). Until 2026-11-22 it was failed unread, so a
-                    # suite written in the portal with the default "no judge"
-                    # could not pass a single case. A full-sentence expected
-                    # answer will rarely appear verbatim; the note says what
-                    # to do about that.
-                    def _norm(text: Any) -> str:
-                        return " ".join(str(text or "").lower().split())
+                    # The scenario declares an expected_answer but no judge ran:
+                    # none is set on the suite ("None — check expected words
+                    # only"), or the one set couldn't be built. The answer is
+                    # still graded by what code can check:
+                    #   - the reply contains the expected text, or every word of
+                    #     it → pass;
+                    #   - otherwise, when the case has other deterministic checks
+                    #     (expected/forbidden tools, per-turn checks), those decide
+                    #     (applied below) and the note says the answer was not
+                    #     judged;
+                    #   - otherwise the case is NOT JUDGED: no score, left out of
+                    #     the run's score, and the run page says why. It used to
+                    #     be failed at 0%, so a correct answer worded differently
+                    #     read "Scored 0%, below the pass mark" (2026-11-23).
+                    from admin.e2e_runner import expected_text_found
 
-                    passed = bool(_norm(expected)) and _norm(expected) in _norm(actual_output)
-                    grading_note = (
-                        "no judge model: checked that the reply contains the expected text"
-                        if passed else
-                        "no judge model: the reply does not contain the expected text. "
-                        "Without a judge the expected answer is matched as words; pick a "
-                        "judge model in the suite's settings to grade it for meaning"
+                    why = judge_note or "no judge model is set on this suite"
+                    has_checks = bool(
+                        scenario.get("expected_tools") or scenario.get("forbidden_tools")
+                        or turn_specs or scenario.get("reply_checks")
                     )
+                    if not (actual_output or "").strip():
+                        passed = False
+                        grading_note = "the agent returned an empty reply"
+                    elif expected_text_found(expected, actual_output):
+                        passed = True
+                        grading_note = "no judge model: checked that the reply contains the expected text"
+                    elif has_checks:
+                        passed = True  # the tool / check gates below decide
+                        grading_note = (
+                            f"the expected answer was not judged ({why}); graded on the "
+                            "case's expected tools and checks only"
+                        )
+                    else:
+                        passed = False
+                        ungraded = True
+                        grading_note = (
+                            f"Not judged: {why}, and the reply does not contain the expected "
+                            "words. Pick a judge model in the suite's settings to grade it for "
+                            "meaning, or give the case expected words"
+                        )
                 else:
                     # Pure smoke scenario: no expected_answer and no substrings, so any
                     # non-empty 2xx body is a legitimate pass.
@@ -1051,6 +1093,9 @@ def _run_scenario(
                 if reply_check_failures:
                     passed = False
 
+            if ungraded and (reply_check_failures or (tool_errors and fail_on_tool_error)):
+                ungraded = False  # a deterministic gate failed it: a real fail
+
             if invoke_error:
                 _mark_span_error(invoke_error)
             elif not http_ok:
@@ -1088,8 +1133,12 @@ def _run_scenario(
                 "passed": passed,
                 "score": (
                     scorer_score if scorer is not None
-                    else (judge_result["score"] if judge_result else (1.0 if passed else 0.0))
+                    else (judge_result["score"] if judge_result
+                          else (None if ungraded else (1.0 if passed else 0.0)))
                 ),
+                # True when the case could not be graded at all (no judge and
+                # nothing deterministic to check): not a pass, not a 0% fail.
+                "ungraded": ungraded or None,
                 "missing_substrings": missing,
                 "judge": judge_result,
                 "criteria": (judge_result.get("criteria") if judge_result else None),
@@ -1278,6 +1327,16 @@ def _resolve_evaluator_model(client: Any, suite: Dict[str, Any]) -> Optional[str
     # "gemini-3.5-flash"), NOT the friendly `name`
     # ("…-default") — the latter isn't a valid model id for the SDK.
     return (rows[0].get("model_string") if rows else None) or None
+
+
+def _judge_unavailable_reason(model_string: Optional[str], model_id: Optional[str] = None) -> str:
+    """Why the suite's judge could not be built ('' when it can); never raises."""
+    try:
+        from admin.e2e_runner import judge_unavailable_reason
+
+        return judge_unavailable_reason(model_string, model_id)
+    except Exception as exc:
+        return f"the judge model {model_string} could not be set up ({exc})"
 
 
 def _try_build_judge(model_string: Optional[str], model_id: Optional[str] = None) -> Optional[Any]:

@@ -51,7 +51,10 @@
 
     </div>
 
-    <label class="field">Business (optional)
+    {# The tenant picker only where a plugin has tenants (business_field_label()). #}
+    {% set biz_label = business_field_label() %}
+    {% if biz_label %}
+    <label class="field">{{ biz_label }} (optional)
       <select name="business_id">
         <option value="">Any / the suite's default</option>
         {% for b in businesses %}
@@ -59,6 +62,7 @@
         {% endfor %}
       </select>
     </label>
+    {% endif %}
 
     <div data-mode="suite">
       <details class="advanced">
@@ -98,6 +102,7 @@
               <option value="{{ m.model_id }}">{{ m.name }}{% if m.provider %} ({{ m.provider }}){% endif %}</option>
               {% endfor %}
             </select>
+            <span class="hint">Trying another model is a comparison: the suite needs a judge model (any model this engine can call, local ones included), unless its cases only check tools or expected words.</span>
           </label>
           <label class="field">Agent version
             <select name="profile_version_id" id="trigger-profile-version">

@@ -8,7 +8,7 @@ the suite needs no LLM judge.
 """
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from admin.services.eval_runners import plugin_runners, plugin_scorers
 
@@ -149,3 +149,43 @@ def suite_needs_judge(suite: Dict[str, Any]) -> bool:
         if not graded:
             return True
     return False
+
+
+# How the comparison pre-flights (start_suite_run, bake-offs) describe a
+# usable judge. Any model the engine can call builds one
+# (admin/e2e_runner._build_judge): Gemini, Claude, OpenAI or an
+# OpenAI-compatible base URL, Azure OpenAI, a local Ollama model.
+JUDGE_MODEL_HINT = (
+    "Pick one under the suite's Settings → Judge model (/admin/evals/suites/<suite>); "
+    "any model this engine can call works as a judge, local models included"
+)
+
+
+def suite_judge_problem(client: Any, suite: Dict[str, Any]) -> Optional[str]:
+    """Why a comparison run of this suite can't be graded by a judge, or None.
+
+    None when the suite needs no judge (`suite_needs_judge`), or its judge is
+    a model this engine can build. Otherwise a short reason: no judge set,
+    or the judge row's provider is one the engine cannot call. A missing key is not checked here (that is the operator's install,
+    not the suite): such a run says per case why it was not judged.
+    """
+    if not suite_needs_judge(suite or {}):
+        return None
+    model_id = (suite or {}).get("evaluator_model_id")
+    if not model_id:
+        return "no judge model is set"
+    try:
+        rows = (client.table("agent_models").select("model_id, name, provider, model_string")
+                .eq("model_id", model_id).limit(1).execute().data or [])
+    except Exception:
+        return None  # can't look it up here; the run itself reports what happens
+    if not rows:
+        return None  # not found here; the run itself reports what happens
+    row = rows[0]
+    from runtime.llm_factory import SUPPORTED_PROVIDERS
+
+    provider = str(row.get("provider") or "google_genai").lower()
+    if provider not in SUPPORTED_PROVIDERS and provider != "auto":
+        return (f"its judge model {row.get('name') or row.get('model_string') or model_id} "
+                f"uses the provider {provider!r}, which this engine cannot call")
+    return None

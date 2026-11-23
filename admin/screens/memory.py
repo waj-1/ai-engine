@@ -112,6 +112,20 @@ def active_profile_row(client, agent_kind: str, env: Optional[str],
     correct single-profile lookup; it's optional only so a per-env-DB caller
     that already scoped its client can pass ``None`` deliberately.
     """
+    from admin.agent_kinds import split_agent_choice
+
+    kind, slug = split_agent_choice(agent_kind)
+    if slug:
+        # One generic agent (`custom:<slug>`): many agents share the kind and
+        # several are live at once, so the slug picks the row — the same row
+        # the runtime loads for it (by kind + slug + environment). A draft has
+        # settings too, so it is not required to be active.
+        q = (client.table("agent_profiles").select(select)
+             .eq("agent_kind", kind).eq("slug", slug).neq("status", "template"))
+        if env:
+            q = q.eq("environment", env)
+        rows = _exec(q.limit(1)).data or []
+        return rows[0] if rows else None
     q = (client.table("agent_profiles").select(select)
          .eq("agent_kind", agent_kind).eq("is_active", True).eq("status", "active"))
     if env:
@@ -153,22 +167,47 @@ def _resolve_user_id(query: str) -> Optional[str]:
         return None
 
 
+def resolve_user_id(query: Optional[str]) -> Optional[str]:
+    """A user id (uuid) for a uuid or an email, or None when it names nobody.
+    Every memory read or write that takes a user goes through this, so an
+    email works the same for listing and adding."""
+    return _resolve_user_id(query or "")
+
+
 def load_memories_context(
     client, user_query: Optional[str], agent_kind: str = _DEFAULT_AGENT_KIND
 ) -> Dict[str, Any]:
-    """List a user's memories. `user_query` is a uuid or email."""
+    """List a user's memories for one agent. `user_query` is a uuid or email.
+
+    A product kind's memories are read by kind. A generic agent
+    (``custom:<slug>``) reads only its own (``agent_slug``): every generic
+    agent shares the kind. Its view also lists the user's custom-kind rows
+    that belong to no agent yet (saved before memories were kept per agent),
+    which no agent recalls until one is moved to an agent."""
+    from admin.agent_kinds import split_agent_choice
+    from core.memory.store import scope_query
+
     user_id = _resolve_user_id(user_query) if user_query else None
     memories: List[Dict[str, Any]] = []
-    if user_id:
+    unassigned: List[Dict[str, Any]] = []
+    kind, slug = split_agent_choice(agent_kind)
+    if user_id and (slug or kind != "custom"):
+        base = client.table("ai_user_memory").select("*").eq("user_id", user_id)
         memories = (
+            scope_query(base, agent_kind=kind, agent_slug=slug)
+            .order("created_at", desc=True).limit(200).execute().data or []
+        )
+    if user_id and slug:
+        unassigned = (
             client.table("ai_user_memory").select("*")
-            .eq("user_id", user_id).eq("agent_kind", agent_kind)
+            .eq("user_id", user_id).eq("agent_kind", kind).is_("agent_slug", "null")
             .order("created_at", desc=True).limit(200).execute().data or []
         )
     return {
         "user_query": user_query or "",
         "resolved_user_id": user_id,
         "memories": memories,
+        "unassigned_memories": unassigned,
     }
 
 

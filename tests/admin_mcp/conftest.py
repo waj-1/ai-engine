@@ -38,6 +38,11 @@ def mcp_client():
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(mcp_auth, "resolve_superuser", lambda tok: dict(ACTOR))
+        # The deploy-workflow tools are only offered where a deploy
+        # repository is configured (admin_mcp.tools_ship.
+        # drop_unconfigured_deploy_tools). These tests describe the whole
+        # surface, so configure one for the build, in every build.
+        mp.setenv("GITHUB_DEPLOY_REPO", "example-org/engine")
 
         @contextlib.asynccontextmanager
         async def lifespan(app):
@@ -97,6 +102,11 @@ class FakeTable:
         self._predicates.append(("gte", col, val))
         return self
 
+    def is_(self, col, val):
+        assert val == "null", val
+        self._predicates.append(("is_null", col, None))
+        return self
+
     def order(self, *a, **k):
         """Record the sort so `execute()` can apply it before `limit`.
 
@@ -147,6 +157,8 @@ class FakeTable:
             if kind == "in" and row.get(col) not in val:
                 return False
             if kind == "gte" and row.get(col) < val:
+                return False
+            if kind == "is_null" and row.get(col) is not None:
                 return False
         return True
 

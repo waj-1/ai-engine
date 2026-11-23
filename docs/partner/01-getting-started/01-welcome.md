@@ -30,6 +30,7 @@ The [Glossary](../09-reference/01-glossary.md) explains every term.
 
 - The **‹** button next to the sidebar shrinks it to icons. Click it again to bring the labels back.
 - The moon button at the top right switches between light and dark mode.
+- Some portals show a **STAGING / PRODUCTION** switch at the top right. You make changes on Staging and promote them to Production; a red **Production** banner shows while you work on Production. See [Make your changes live](../07-publishing/01-publish-changes.md).
 - Most screens have tabs along the top. The tab you're on is underlined.
 
 **Related:** [Your first 15 minutes](02-first-15-minutes.md) · [Find anything](03-find-anything.md) · [Glossary](../09-reference/01-glossary.md)

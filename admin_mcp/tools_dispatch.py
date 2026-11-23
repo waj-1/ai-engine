@@ -222,7 +222,7 @@ async def chat(
     goes to its default deployment target (deployment_targets).
 
     tool_calls come from the persisted assistant message (name, input,
-    output — outputs capped at 2000 chars); trace_id is the Laminar trace
+    output — outputs capped at 2000 chars); trace_id is the turn's trace
     (open with traces action=overview / transcript). Both can be null if
     the agent doesn't persist/trace that turn; the reply is still
     returned. This is a REAL turn: it runs the agent's tools and writes

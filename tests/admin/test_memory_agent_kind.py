@@ -72,6 +72,12 @@ class TestLoadMemoriesContext:
         from admin.screens.memory import _DEFAULT_AGENT_KIND
         eq_calls = builder.eq.call_args_list
         agent_kind_calls = [c for c in eq_calls if c.args and c.args[0] == "agent_kind"]
+        if _DEFAULT_AGENT_KIND == "custom":
+            # A build with no plugin opens on the bare generic kind, which
+            # names no agent: each custom agent's memories are its own, so
+            # nothing is read until one is picked.
+            assert not agent_kind_calls
+            return
         assert agent_kind_calls, "No .eq('agent_kind', ...) call found"
         assert agent_kind_calls[0].args[1] == _DEFAULT_AGENT_KIND
 
