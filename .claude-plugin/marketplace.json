@@ -1,0 +1,17 @@
+{
+  "name": "waj-ai-engine",
+  "owner": {
+    "name": "WAJ",
+    "url": "https://github.com/waj-1"
+  },
+  "metadata": {
+    "description": "Build, test and ship agents on your own WAJ AI Engine from your AI assistant."
+  },
+  "plugins": [
+    {
+      "name": "waj-ai-engine",
+      "source": "./plugin",
+      "description": "Connects your assistant to your WAJ AI Engine's MCP server, with skills to build an agent, write and run its tests, improve its instructions and compare models."
+    }
+  ]
+}

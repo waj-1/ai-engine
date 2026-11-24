@@ -545,3 +545,59 @@ async def test_tool_names_are_saved_on_the_reply_and_absent_without_tools(fake_s
     assert [e for e in out if e.get("type") == "tool_activity"]  # still forwarded to the client
     _out, meta = await _run([{"type": "answer", "content": "Hello"}])
     assert meta is None
+
+
+# --------------------------------------------------------------------------
+# Caller-supplied history (endpoints/openai_compat.py)
+# --------------------------------------------------------------------------
+
+async def _run_with_history(fake_session, history, **profile_overrides):
+    agent = _FakeAgent([{"type": "answer", "content": "Hello"}])
+    profile = _profile()
+    for key, value in profile_overrides.items():
+        setattr(profile, key, value)
+    with patch("common.chat_session.get_service_client", return_value=MagicMock()), \
+         patch("common.chat_session.ChatSession.for_identity", return_value=fake_session), \
+         patch("common.chat_session.record_turn_telemetry", AsyncMock()):
+        events = [ev async for ev in run_turn(
+            agent=agent, message="now", identity=TurnIdentity(agent_kind="custom", session_id="s1"),
+            profile=profile, history=history)]
+    return agent, events
+
+
+@pytest.mark.asyncio
+async def test_supplied_history_replaces_the_stored_rows(fake_session):
+    """A client that resends the conversation is the source of the history:
+    the session's stored rows are not loaded on top of it (they would double
+    every earlier turn), and the turn is still recorded."""
+    history = [{"role": "user", "content": "client says"},
+               {"role": "assistant", "content": "client heard"}]
+    agent, events = await _run_with_history(fake_session, history)
+    assert agent.seen_context["previous_messages"] == history
+    assert fake_session.load_history.called is False
+    assert fake_session.append_user.call_args[0] == ("now",)
+    assert fake_session.append_assistant.call_args[0] == ("Hello",)
+    assert events[-1]["type"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_an_empty_supplied_history_is_still_the_history(fake_session):
+    """A regenerated first message: the client says there is nothing before
+    it, whatever the session holds."""
+    agent, _ = await _run_with_history(fake_session, [])
+    assert agent.seen_context["previous_messages"] == []
+    assert fake_session.load_history.called is False
+
+
+@pytest.mark.asyncio
+async def test_supplied_history_is_capped_to_the_agents_window(fake_session):
+    history = [{"role": "user", "content": f"m{i}"} for i in range(50)]
+    agent, _ = await _run_with_history(fake_session, history)
+    seen = agent.seen_context["previous_messages"]
+    assert len(seen) == 20 and seen[-1]["content"] == "m49" and seen[0]["content"] == "m30"
+
+
+@pytest.mark.asyncio
+async def test_without_supplied_history_the_stored_rows_are_used(fake_session):
+    agent, _ = await _run_with_history(fake_session, None)
+    assert agent.seen_context["previous_messages"] == [{"role": "user", "content": "prev"}]

@@ -47,6 +47,7 @@ from admin import memory_handlers as _memory_handlers  # noqa: F401  -- attaches
 from endpoints.voice_live import router as voice_live_router
 from endpoints.agents_portal import router as agents_portal_router
 from endpoints.agents_v1 import router as agents_v1_router
+from endpoints.openai_compat import router as openai_compat_router
 from endpoints.ai_sessions import router as ai_sessions_router
 from runtime.chat_images import InvalidImage
 import voice.live.providers.gemini_live  # noqa: F401 — registers the google_genai realtime provider
@@ -346,6 +347,7 @@ app.include_router(voice_live_router, prefix=_mount_prefix())
 
 app.include_router(agents_portal_router)
 app.include_router(agents_v1_router)
+app.include_router(openai_compat_router)
 app.include_router(ai_sessions_router)
 app.include_router(admin_router)
 

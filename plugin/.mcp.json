@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "waj-ai-engine": {
+      "type": "http",
+      "url": "${WAJ_AI_ENGINE_URL:-http://localhost:8000}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${WAJ_AI_ENGINE_API_KEY}"
+      }
+    }
+  }
+}

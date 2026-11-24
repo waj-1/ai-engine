@@ -2,13 +2,16 @@
 
 This is the one deployment we have run ourselves, on a Linux machine with
 Docker Engine and the Compose plugin. Every command below was run on a fresh
-install before it was written down. We have not yet tested any other target
-(a cloud container service, Kubernetes, a public address behind a TLS proxy),
-so there is no guide for those yet.
+install before it was written down.
+
+There are also templates for [Coolify](coolify.md), [Railway](railway.md) and
+[Render](render.md). They were checked against each platform's documentation
+but we have not deployed them ourselves yet. Each guide says so.
 
 ## What you get
 
-`docker compose up` builds the engine image and starts seven services: a setup
+`docker compose up` pulls the engine image (or builds it, see "The engine
+image" below) and starts seven services: a setup
 step, Postgres with pgvector, a REST layer, an auth service, a gateway, an init
 step and the engine. Two Docker volumes hold everything worth keeping:
 
@@ -28,7 +31,8 @@ cd ai-engine
 docker compose up -d
 ```
 
-The first start builds the image, which takes a few minutes. Then either:
+The first start pulls the engine image, or builds it when no published image
+fits this machine. A build takes a few minutes. Then either:
 
 - **In a browser.** Open http://localhost:8000. The first-run page asks for
   the setup code from `docker compose logs engine`, creates the admin account,
@@ -49,6 +53,37 @@ docker compose ps
 curl http://localhost:8000/health
 ```
 
+## The engine image
+
+`docker-compose.yml` names a published image and a build for the same three
+services (setup, init, engine):
+
+```yaml
+image: ghcr.io/waj-1/ai-engine:${AI_ENGINE_VERSION:-latest}
+build: .
+```
+
+Compose pulls the image first and builds from your checkout only when the
+pull fails. So:
+
+| You want | Run |
+|---|---|
+| The newest release, no build | `docker compose up -d` |
+| A fixed release | `AI_ENGINE_VERSION=0.1.0 docker compose up -d` |
+| Your own changes to the code | `docker compose up -d --build` |
+| A newer release than the one you already pulled | `docker compose pull && docker compose up -d` |
+
+Three things to know:
+
+- Published images are `linux/amd64`. On another CPU architecture, and before
+  the first release exists, the pull fails and Compose builds the image
+  instead. That is expected.
+- Once an image is on your machine under that name (pulled or built), a plain
+  `docker compose up` uses it and does not look for a newer one. Use
+  `docker compose pull` or `--build` to change it.
+- After you edit the code, `docker compose up` without `--build` still runs
+  the old image.
+
 ## Settings
 
 Put settings in a `.env` file next to `docker-compose.yml`; Compose reads it
@@ -61,6 +96,8 @@ on `up`. All are optional.
 | `EMBED_MODEL`, `EMBED_BASE_URL` | A local embedding model for knowledge bases, for example `EMBED_MODEL=nomic-embed-text` with Ollama |
 | `PORTAL_NAME` | The name shown in the portal |
 | `ENGINE_PORT`, `GATEWAY_PORT` | Publish on other ports than 8000 and 54421 |
+| `AI_ENGINE_VERSION` | The release of the engine image to pull, for example `0.1.0`. Default `latest` |
+| `ENGINE_IMAGE` | A whole image reference instead, for another registry or a tag of your own |
 | `SEED_DEMO_AGENT=false` | Do not create the demo agent |
 
 After changing `.env`, run `docker compose up -d` again; only the engine
@@ -88,14 +125,18 @@ docker compose stop          # stop, keep everything
 docker compose up -d         # start again: same secrets, same login, same data
 ```
 
-To upgrade to a newer version of the code:
+To upgrade to a newer release:
 
 ```bash
 git pull
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
-The image is rebuilt, the init step applies any new database migration (it
+If you run your own build of the code, use `git pull` and
+`docker compose up -d --build` instead.
+
+Either way the init step applies any new database migration (it
 runs on every start and is safe to repeat), and the engine restarts. The
 volumes are untouched.
 
@@ -162,7 +203,8 @@ new install with a new setup code.
 
 ## What this guide does not cover
 
-Serving the engine to other machines. Both ports are bound to `127.0.0.1` on
-purpose: the engine speaks plain HTTP and expects a TLS-terminating proxy in
-front of it before it is exposed. We have not tested that setup yet, so it is
-not documented here.
+Serving the engine to other machines with this file. Both ports are bound to
+`127.0.0.1` on purpose: the engine speaks plain HTTP and expects a
+TLS-terminating proxy in front of it before it is exposed. The
+[Coolify](coolify.md), [Railway](railway.md) and [Render](render.md) templates
+put the engine behind the platform's own HTTPS proxy.

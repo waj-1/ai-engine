@@ -355,3 +355,23 @@ def create_custom_agent(slug: str, **kwargs: Any) -> CustomRuntimeAgent:
     agent exists in this environment. Blocking (profile load): call through
     asyncio.to_thread from async code."""
     return CustomRuntimeAgent(slug, **kwargs)
+
+
+def list_served_agents(environment: Optional[str] = None) -> List[Dict[str, Any]]:
+    """The custom agents this environment serves, oldest first: one
+    `{slug, display_name, created_at}` per live profile. The same rows
+    `create_custom_agent` resolves a slug against (`is_active`, this
+    environment), so a listed agent is one a caller can talk to. Blocking:
+    call through asyncio.to_thread from async code."""
+    from core.auth import get_service_client
+
+    rows = (
+        get_service_client().table("agent_profiles")
+        .select("slug, display_name, created_at")
+        .eq("agent_kind", CUSTOM_AGENT_KIND)
+        .eq("environment", environment or _default_environment())
+        .eq("is_active", True)
+        .order("created_at")
+        .execute().data
+    ) or []
+    return [row for row in rows if row.get("slug")]
