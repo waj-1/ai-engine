@@ -75,7 +75,13 @@ def main() -> int:
         if not os.getenv(name):
             raise SystemExit(f"[init] {name} is not set: engine.env was not loaded")
     print("[init] waiting for the auth service and the REST layer…", flush=True)
-    wait_for_gateway(os.environ["SUPABASE_URL"], os.environ["SUPABASE_ANON_KEY"])
+    # INIT_WAIT_SEC: longer where nothing orders the services' start (one
+    # host, no compose: deploy/compose/start_engine.sh).
+    try:
+        wait = max(10, int(os.getenv("INIT_WAIT_SEC") or 180))
+    except ValueError:
+        wait = 180
+    wait_for_gateway(os.environ["SUPABASE_URL"], os.environ["SUPABASE_ANON_KEY"], timeout=wait)
 
     import init_db  # deploy/local/init_db.py
 

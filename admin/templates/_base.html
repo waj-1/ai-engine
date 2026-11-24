@@ -150,6 +150,15 @@
       {% block topbar_action %}{% endblock %}
     </header>
     <div class="app-content">
+      {# The public demo (demo_mode): who can see what you type, and where to get your own. #}
+      {% set _demo = demo_chrome() %}
+      {% if _demo.enabled %}
+      <div class="demo-banner" role="note" data-demo-banner>
+        <strong>Public demo</strong>
+        <span>Anyone can see what you type here, so do not enter anything private. Everything resets every night.</span>
+        <a href="{{ _demo.repo_url }}" target="_blank" rel="noopener">Run your own: get it on GitHub</a>
+      </div>
+      {% endif %}
       {# Production is never picked silently: a config screen working on it
          says so above everything else (admin/nav.py env_chrome). #}
       {% if not hide_env_switcher and _env == 'prod' and _chrome.prod_banner %}
@@ -199,5 +208,40 @@
   </div>
 </div>
 <script type="application/json" id="global-search-quick">{{ search_quick_actions(_env) | tojson }}</script>
+{% if demo_chrome().enabled %}
+{# The public demo's builder assistant (demo_mode/assistant.py): a chat that
+   builds and tests agents with the engine's own admin tools. #}
+<button type="button" class="ba-launcher" id="ba-launcher" aria-controls="ba-panel" aria-expanded="false" hidden>Build with AI</button>
+<aside class="ba-panel" id="ba-panel" aria-label="Builder assistant" hidden>
+  <header class="ba-head">
+    <div>
+      <strong>Build with AI</strong>
+      <span class="caption">An agent that builds and tests the demo's agents for you.</span>
+    </div>
+    <button type="button" class="ghost ba-icon" id="ba-new" title="Start a new conversation">New</button>
+    <button type="button" class="ghost ba-icon" id="ba-close" aria-label="Close the assistant">&times;</button>
+  </header>
+  <div class="ba-log" id="ba-log" role="log" aria-live="polite"></div>
+  <div class="ba-chips" id="ba-chips">
+    <button type="button" class="chip-btn" data-prompt="Build me a support agent that checks outages">Build me a support agent that checks outages</button>
+    <button type="button" class="chip-btn" data-prompt="Test the Support desk">Test the Support desk</button>
+    <button type="button" class="chip-btn" data-prompt="Add a refund specialist to the Support desk">Add a refund specialist</button>
+    <button type="button" class="chip-btn" data-prompt="Why did the last test fail?">Why did this test fail?</button>
+    <button type="button" class="chip-btn" data-prompt="Chat with the Sales assistant as a family of four and tell me what it recommends">Chat with the Sales assistant</button>
+  </div>
+  <form class="ba-form" id="ba-form">
+    <textarea id="ba-input" rows="2" maxlength="4000" placeholder="Ask the assistant to build or test an agent…" aria-label="Message to the builder assistant"></textarea>
+    <button type="submit" class="primary" id="ba-send">Send</button>
+  </form>
+  <details class="caption ba-foot">
+    <summary>About this demo</summary>
+    The assistant is the demo's own <strong>Builder assistant</strong> agent: it works with the
+    engine's own admin tools, on the demo's agents only. It is read-only here so every visitor
+    gets the same one, and it is not in the Agents list. Anyone can see what you type, and
+    everything resets every night.
+  </details>
+</aside>
+<script src="/admin/static/builder-assistant.js?v={{ asset_version }}" defer></script>
+{% endif %}
 </body>
 </html>

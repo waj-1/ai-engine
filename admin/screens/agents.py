@@ -440,6 +440,10 @@ def load_agents_context(
         client.table("agent_profiles").select("*")
         .eq("environment", env).order("agent_kind").execute().data or []
     )
+    from demo_mode import protect as demo_protect
+
+    # The public demo's Builder assistant is not opened or offered here.
+    profiles = demo_protect.visible(profiles)
     # Every profile in this environment, captured BEFORE the deployment-scope gate
     # below narrows the rail. `resolve_voice_config_owner` reads this list, not
     # the filtered one: the parent/specialist relationship is a fact about the

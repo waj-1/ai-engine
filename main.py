@@ -122,6 +122,7 @@ def _validate_env_or_die(env: dict | None = None) -> None:
 
 _jwks_refresh_task: Optional[asyncio.Task] = None
 _insights_task: Optional[asyncio.Task] = None
+_demo_reset_task: Optional[asyncio.Task] = None
 
 
 async def _jwks_refresh_loop() -> None:
@@ -199,6 +200,12 @@ _BOOT_SEEDERS: tuple = (
 )
 
 
+# In demo mode the install shows the Northwind demo only: the sample-agents
+# portal's four agents and the generic starter agent are not seeded, and the
+# deployment's own variables are not mirrored into the portal.
+_DEMO_SKIPPED_SEEDERS = ("admin.seed_agents_demo", "admin.seed_demo_agent", "admin.seed_env_vars")
+
+
 async def _run_boot_seeders() -> None:
     """Run every boot seeder in `_BOOT_SEEDERS` order, isolating failures.
 
@@ -222,7 +229,12 @@ async def _run_boot_seeders() -> None:
         if reason:
             logger.info("boot seeders skipped: %s", reason)
             return
+    from demo_mode import settings as _demo_settings
+
+    skip = _DEMO_SKIPPED_SEEDERS if _demo_settings.enabled() else ()
     for module_path in _BOOT_SEEDERS:
+        if module_path in skip:
+            continue
         try:
             module = importlib.import_module(module_path)
             await asyncio.to_thread(module.run)
@@ -252,6 +264,10 @@ async def lifespan(app: FastAPI):
     # print it (admin/services/first_run.py). Inert in a product build.
     from admin.services import first_run as _first_run
     await _first_run.on_boot()
+    # Demo mode: the demo admin, the Northwind demo, and the nightly reset.
+    from demo_mode import reset as _demo_reset
+    global _demo_reset_task
+    _demo_reset_task = await _demo_reset.on_boot()
     _call_plugins(_PLUGIN_APPS, "on_startup", app)
     # Keep the main project's JWKS warm in the background (now, then every
     # JWKS_REFRESH_INTERVAL_SEC) so verified requests read a cached key instead
@@ -280,6 +296,10 @@ async def lifespan(app: FastAPI):
         _jwks_refresh_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await _jwks_refresh_task
+    if _demo_reset_task is not None:
+        _demo_reset_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await _demo_reset_task
     if _insights_task is not None:
         _insights_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -342,6 +362,12 @@ app.include_router(admin_router)
 # and — because it doesn't rewrite root_path/path the way Mount does — the
 # inner FastMCP app still sees path "/mcp", which is also its own default
 # streamable_http_path (see admin_mcp/server.py).
+# Demo mode (demo_mode/): switch off what a public demo must never run, before
+# anything below reads it. A no-op unless DEMO_MODE is set.
+from demo_mode.settings import apply_process_lockdown as _demo_lockdown  # noqa: E402
+
+_demo_lockdown()
+
 if os.getenv("ENABLE_ADMIN_MCP", "").lower() in ("1", "true", "yes"):
     # A plugin that serves its own app at /mcp must not be enabled alongside
     # this one; its register() refuses that combination.
@@ -761,6 +787,19 @@ else:
         dynamic_origins=_plugin_cors_origins,
     )
 
+# Demo mode's fictional tool server (demo_mode/northwind.py): answers only
+# while DEMO_MODE is on (404 otherwise), so it is registered unconditionally.
+from demo_mode import northwind as _northwind  # noqa: E402
+
+app.add_route(_northwind.PATH, _northwind.app, methods=["GET", "POST", "DELETE"])
+
+# Demo mode's gate (demo_mode/gate.py): refuses the locked screens and routes
+# and applies the visitor caps, for HTTP and WebSocket alike. Added last, so it
+# is the outermost middleware; it passes everything through when DEMO_MODE is off.
+from demo_mode.gate import DemoGate  # noqa: E402
+
+app.add_middleware(DemoGate)
+
 # Admin portal assets (portal.css, etc.) live under ai_agent/admin/static/
 admin_static_dir = os.path.join(os.path.dirname(__file__), "admin", "static")
 if os.path.exists(admin_static_dir):
@@ -824,6 +863,11 @@ async def root():
 
     from admin.services import first_run as _first_run
 
+    from demo_mode import settings as _demo
+
+    if _demo.enabled():
+        # The public demo: the front door is the portal's "Try the demo" page.
+        return RedirectResponse(url="/admin/", status_code=302)
     if await _first_run.in_first_run():
         return RedirectResponse(url="/admin/setup", status_code=303)
     return {

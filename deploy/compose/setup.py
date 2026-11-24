@@ -9,6 +9,14 @@ three files into the state volume (``ENGINE_STATE_DIR``, /run/engine):
   postgrest.conf   the REST layer's settings (its image has no shell to read
                    an env file with, so it is given a config file instead)
 
+and, for a deployment that cannot mount files from this repository (one
+host, no compose), two more it can read from the volume instead:
+
+  kong.yml         the gateway's config with this install's keys and the
+                   upstream addresses (STACK_REST_UPSTREAM, STACK_AUTH_UPSTREAM)
+  db-init.sql      the database's first-start scripts (deploy/local/db-init),
+                   in one file
+
 Nothing here is committed or passed through the host: the JWT secret, the two
 tokens signed with it, the database password, SECRET_KEY (which encrypts the
 model keys stored in the portal) are generated in the container and kept in
@@ -34,9 +42,22 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "local"))
 import gen_env  # noqa: E402
 
-# Where the services reach each other inside the compose network.
-GATEWAY_URL = "http://gateway:8000"
-DB_HOST = "db:5432"
+# Where the services reach each other inside the compose network. A
+# deployment where every container shares one host (no service names, e.g. a
+# container group) sets these to 127.0.0.1 addresses: docs/deploy/demo.md,
+# "One host, no compose".
+# Read when a file is rendered, so a test or a second run can change them.
+ADDRESSES = {
+    "STACK_GATEWAY_URL": "http://gateway:8000",
+    "STACK_DB_HOST": "db:5432",
+    "STACK_REST_UPSTREAM": "http://rest:3000",
+    "STACK_AUTH_UPSTREAM": "http://auth:9999",
+}
+
+
+def address(name: str) -> str:
+    return (os.getenv(name) or "").strip() or ADDRESSES[name]
+LOCAL = Path(__file__).resolve().parents[1] / "local"
 # A model served on the host machine (Ollama's default port), from a container.
 HOST_OLLAMA_URL = "http://host.docker.internal:11434/v1"
 
@@ -48,8 +69,9 @@ def _env_file(pairs: dict[str, str]) -> str:
 
 def render(admin_email: str | None, admin_password: str | None) -> dict[str, str]:
     """{file name: content} for a new install. No admin_email: no admin login."""
+    gateway_url, db_host = address("STACK_GATEWAY_URL"), address("STACK_DB_HOST")
     env = gen_env.build_env(
-        supabase_url=GATEWAY_URL, database_url_host=DB_HOST,
+        supabase_url=gateway_url, database_url_host=db_host,
         admin_email=admin_email, admin_password=admin_password,
     )
     pg, jwt_secret = env["POSTGRES_PASSWORD"], env["JWT_SECRET"]
@@ -59,14 +81,14 @@ def render(admin_email: str | None, admin_password: str | None) -> dict[str, str
         "SUPABASE_ANON_KEY": env["ANON_KEY"],
         "SUPABASE_SERVICE_KEY": env["SERVICE_ROLE_KEY"],
         "GOTRUE_JWT_SECRET": jwt_secret,
-        "GOTRUE_DB_DATABASE_URL": f"postgres://postgres:{pg}@{DB_HOST}/postgres?search_path=auth",
+        "GOTRUE_DB_DATABASE_URL": f"postgres://postgres:{pg}@{db_host}/postgres?search_path=auth",
     }
     engine = {k: v for k, v in env.items()
               if k not in ("POSTGRES_PASSWORD", "JWT_SECRET", "ANON_KEY", "SERVICE_ROLE_KEY",
                            "GATEWAY_PORT", "DB_PORT")}
     engine["OLLAMA_BASE_URL"] = HOST_OLLAMA_URL
     postgrest = (
-        f'db-uri = "postgres://authenticator:{pg}@{DB_HOST}/postgres"\n'
+        f'db-uri = "postgres://authenticator:{pg}@{db_host}/postgres"\n'
         'db-schemas = "public"\n'
         'db-anon-role = "anon"\n'
         f'jwt-secret = "{jwt_secret}"\n'
@@ -76,6 +98,37 @@ def render(admin_email: str | None, admin_password: str | None) -> dict[str, str
     )
     return {"stack.env": _env_file(stack), "engine.env": _env_file(engine),
             "postgrest.conf": postgrest}
+
+
+def _read_env_file(path: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key.strip():
+            parts = shlex.split(value) if value.strip() else [""]
+            out[key.strip()] = parts[0] if parts else ""
+    return out
+
+
+def write_portable_files(state: Path) -> None:
+    """kong.yml and db-init.sql in the state volume, rendered from stack.env.
+    Rewritten on every run (they hold nothing that is not already there), so
+    a changed upstream address takes effect on the next start."""
+    stack = _read_env_file(state / "stack.env")
+    kong = (LOCAL / "kong.yml").read_text(encoding="utf-8")
+    kong = (kong.replace("__ANON_KEY__", stack.get("SUPABASE_ANON_KEY", ""))
+                .replace("__SERVICE_ROLE_KEY__", stack.get("SUPABASE_SERVICE_KEY", ""))
+                .replace("http://rest:3000", address("STACK_REST_UPSTREAM").rstrip("/"))
+                .replace("http://auth:9999", address("STACK_AUTH_UPSTREAM").rstrip("/")))
+    (state / "kong.yml").write_text(kong, encoding="utf-8")
+    (state / "kong.yml").chmod(0o644)
+    # One file (the scripts in order): the database copies it into its
+    # /docker-entrypoint-initdb.d at first start.
+    scripts = sorted((LOCAL / "db-init").glob("*.sql"))
+    (state / "db-init.sql").write_text(
+        "\n".join(f"-- {p.name}\n" + p.read_text(encoding="utf-8") for p in scripts),
+        encoding="utf-8")
+    (state / "db-init.sql").chmod(0o644)
 
 
 def main() -> int:
@@ -89,6 +142,7 @@ def main() -> int:
         if topped_up != text:
             marker.write_text(topped_up, encoding="utf-8")
             print("[setup] added SECRET_KEY: model keys stored in the portal are encrypted with it")
+        write_portable_files(state)
         return 0
     email = (os.getenv("ADMIN_EMAIL") or "").strip() or None
     password = (os.getenv("ADMIN_PASSWORD") or "").strip() or None
@@ -100,6 +154,8 @@ def main() -> int:
     # engine.env is written last: it is the marker that setup finished, so a
     # run interrupted halfway is redone instead of leaving a partial install.
     for name in ("stack.env", "postgrest.conf", "engine.env"):
+        if name == "engine.env":
+            write_portable_files(state)
         path = state / name
         path.write_text(files[name], encoding="utf-8")
         # Read by services that run as different users (postgres, kong, the

@@ -71,6 +71,7 @@ rows — see [Architecture](./00-architecture.md) for how they compose.
 | `ai_voice_budgets` | Per-tenant daily allowance overriding the engine default | [Configure → Duplex-voice budgets](./02-configure.md#duplex-voice-budgets-settings--voice-budgets) |
 | `api_keys` | Portal-issued API keys: a digest and a display prefix, never the key | [Govern → API keys](./04-govern.md#api-keys) |
 | `engine_setup` | First-run setup state (one row): a digest of the setup code, never the code | [Govern → First-run setup](./04-govern.md#first-run-setup) |
+| `demo_usage_daily` | Demo mode only: per-day usage counters (the daily model-turn cap, the nightly reset marker) | [Govern → Public demo mode](./04-govern.md#public-demo-mode) |
 | `ai_voice_scenarios` / `ai_voice_scenario_runs` | Live-call acceptance scenarios + their executions | [Test → Voice scenarios](./03-test.md#voice-scenarios--live-call-acceptance) |
 | `ai_voice_recordings` / `ai_voice_recording_chunks` | Per-call duplex-voice audio, playable from the explorer's Audio tab | [Operate → Traces](./01-operate.md#conversations) |
 | `user` | Accounts + superuser flag | [Govern → Users & Roles](./04-govern.md#users--roles) |
@@ -1020,6 +1021,15 @@ or left the model-key and API-key steps). Service-role RLS and table privileges 
 `service_role` only. Read and written by `admin/services/first_run.py`, only in a build
 with no product plugin. Not in `db_snapshot`: it is install state, not configuration.
 Added by migration `20261123070000_engine_setup.sql`.
+
+### `demo_usage_daily`
+Demo mode's counters (`demo_mode/limits.py`), one row per (`day` UTC, `bucket`):
+`chat_turns` is the day's model turns against `DEMO_DAILY_TURNS` (agent chats, builder
+assistant turns, test-judge calls), `reset` marks that the nightly reset ran (so of
+several engine processes exactly one runs it). `demo_usage_take(bucket, limit, amount)`
+takes `amount` units atomically, all or none; `demo_usage_used(bucket)` reads the day's
+count. Service-role only. Empty on an install without demo mode; a reset never clears
+it. Not in `db_snapshot`. Added by migration `20261123210000_demo_usage.sql`.
 
 ### `agent_audit_log`
 Append-only. Key columns: `entity_type`, `entity_id` (**nullable** — global / bulk

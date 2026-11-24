@@ -425,6 +425,11 @@ async def kb_update(
     if not payload:
         # Nothing to write; bounce back to detail rather than 400 the user.
         return RedirectResponse(url=f"/admin/kb/{source_id}", status_code=302)
+    from demo_mode import policy as demo_policy
+
+    problem = demo_policy.clamp_kb_payload(payload)
+    if problem:
+        raise HTTPException(400, problem)
 
     client = admin_service_client()
     before = _safe_list(
@@ -467,6 +472,11 @@ async def kb_create(
         raise HTTPException(400, "name and kind are required")
     if "config" not in payload:
         payload["config"] = {}
+    from demo_mode import policy as demo_policy
+
+    problem = demo_policy.clamp_kb_payload(payload)
+    if problem:
+        raise HTTPException(400, problem)
 
     # Default pgvector KBs to the shared tables when no explicit table is set.
     # This means operators can create a pgvector KB with no config and start
@@ -504,6 +514,16 @@ async def kb_create(
 # files want a background queue (see TODO below).
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
 REQUIRED_PGVECTOR_COLUMNS = ("id", "content", "embedding")
+
+
+def upload_limit_bytes() -> int:
+    """The per-file cap: MAX_UPLOAD_BYTES, lower in the public demo
+    (DEMO_MAX_UPLOAD_BYTES, demo_mode/settings.py)."""
+    from demo_mode import settings as demo_settings
+
+    if demo_settings.enabled():
+        return min(MAX_UPLOAD_BYTES, demo_settings.max_upload_bytes())
+    return MAX_UPLOAD_BYTES
 # Most pgvector data sources have a sibling "pages" table. When the source
 # config doesn't name one we only auto-derive for the shared KB table.
 _DEFAULT_PAGES_TABLE_FOR = {
@@ -735,14 +755,15 @@ async def kb_upload(
     # in slot N doesn't leave orphan pages from slots 0..N-1.
     staged: List[Dict[str, Any]] = []  # [{filename, text, title}, ...]
     total_bytes = 0
+    max_bytes = upload_limit_bytes()
     for upload in files:
         raw = await upload.read()
         if not raw:
             continue
-        if len(raw) > MAX_UPLOAD_BYTES:
+        if len(raw) > max_bytes:
             return _redirect_with_error(
                 source_id,
-                f"{upload.filename} exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)}MB cap",
+                f"{upload.filename} exceeds the {max_bytes / (1024 * 1024):g}MB cap",
             )
         try:
             text = _extract_text(upload.filename or "", raw)

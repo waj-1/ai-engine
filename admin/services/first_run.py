@@ -125,6 +125,11 @@ def enabled() -> bool:
     """Whether this build offers first-run setup at all."""
     if plugins.has_product():
         return False
+    from demo_mode import settings as demo_settings
+
+    if demo_settings.enabled():
+        # The public demo signs visitors in as its own demo admin.
+        return False
     return (os.getenv(ENV_FLAG) or "").strip().lower() not in ("0", "false", "no", "off")
 
 

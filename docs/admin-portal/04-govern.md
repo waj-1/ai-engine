@@ -125,6 +125,60 @@ of the two stops the stack with a message.
 
 ---
 
+## Public demo mode
+
+`DEMO_MODE=true` · `demo_mode/` · `admin/demo_handlers.py` · `builder-assistant.js` ·
+operator guide: [`docs/deploy/demo.md`](../deploy/demo.md)
+
+Off by default. With it on, the install is a public, one-click demo:
+
+- **Entry.** No first-run page. `/`, `/admin` and every page a signed-out visitor
+  opens send them to `/admin/login`, which shows only **Try the demo**:
+  `POST /admin/demo/enter` signs in as the demo admin `demo@example.com` (password
+  derived from `SECRET_KEY`, never shown) with a session of its own and redirects to
+  `/admin/agents?env=staging` (and sets the environment cookie to staging).
+  Cross-site posts are refused, like the setup page.
+- **Banner.** Every portal page has a **Public demo** bar (anyone can see what you
+  type, resets every night, link to the repository).
+- **Build with AI.** A side panel on every page (open by default on the first
+  visit) talks to `POST /admin/demo/assistant/chat` (JSON `{message, session_id?,
+  page?}` → SSE: `answer`, `thought`, `step` `{tool, action, label, ok, note,
+  links}` with a plain-words `label`, `working` (a keep-alive while a long step
+  runs), `session`, `changed`, `done`). The assistant is the seeded custom agent
+  `builder-assistant`, run with the admin MCP tools called in process as the
+  visitor (`demo_mode/assistant.py`: `ALLOWED_TOOLS`, `ALLOWED_ARGS`, `check_call`)
+  plus `wait_for_test_run` (waits up to two minutes for a run and returns its score
+  and failing cases). Its chats are ordinary saved conversations. The turn runs
+  apart from the browser's connection, so a visitor who follows a link mid-turn
+  gets the rest from `GET /admin/demo/assistant/history?session_id=` (saved
+  messages, plus the latest turn's steps while the engine holds it).
+- **The Builder assistant is read-only** (`demo_mode/protect.py`): any change to its
+  profile or instructions (`/admin/agents/<id>…`, `/admin/profiles/<id>…`,
+  `/admin/prompts/<id>…`, promote) is refused, the assistant's own tools refuse to
+  change, fork, promote or chat with it, and it is left out of the Agents list,
+  pickers, the Conversations filter and search. The seed puts its instructions, model
+  and status back to the code's on every start and reset.
+- **Locked.** `demo_mode/policy.py` refuses, for GET and POST, Settings › Model keys,
+  API keys, Environment variables (also the `tab=variables` of Releases), Team &
+  access, Voice budgets, Diagnostics (drift, runtime, telemetry, engineering tests),
+  Developer docs, deployments and deploy runs, code deploy / rollback, the background
+  jobs list, prompt optimisation, `/mcp`, `/agents`, and voice calls. Models,
+  scheduled test runs, model comparisons, voice checks and Activity are read-only.
+  Locked screens are hidden from the sidebar, Settings and search too.
+- **Tools.** A tool server or HTTP tool at a local, private or internal address is
+  refused when saved and when called (no allow-list widens it), and no process
+  secret (`auth_env_var`) is sent to any address. Knowledge bases stay on the
+  built-in tables. The Northwind tool server is served at `/demo/northwind/mcp` and
+  called in process.
+- **Caps.** Per-visitor hourly limits on chat turns, assistant messages and tool
+  calls, test runs, uploads and entries; a daily cap on model turns (agent chats,
+  assistant turns and test-judge calls) in `demo_usage_daily`; a lower upload size;
+  an output-length cap on every model.
+- **Reset.** Every night at `DEMO_RESET_HOUR_UTC` (or `python -m scripts.demo_reset`)
+  everything visitors made is deleted and the Northwind demo is seeded again.
+
+---
+
 ## API keys
 
 Settings › **API keys** · `GET /admin/api-keys` · `api_keys.html` ·

@@ -277,6 +277,18 @@ async def mcp_server_update(
         if v is not None:
             payload[field] = v if v != "" else None
 
+    if payload.get("endpoint") or payload.get("auth_env_var"):
+        from urllib.parse import quote_plus
+
+        from demo_mode import policy as demo_policy
+
+        problem = demo_policy.tool_endpoint_problem(
+            payload.get("endpoint") or before.get("endpoint") or "", payload.get("auth_env_var"))
+        if problem:
+            return RedirectResponse(
+                url=f"/admin/agent-mcp-servers/{mcp_server_id}?error={quote_plus(problem)}",
+                status_code=302)
+
     # tool_subset: comma-separated → list (or None)
     if "tool_subset" in form:
         payload["tool_subset"] = _parse_tool_subset(form.get("tool_subset") or "")

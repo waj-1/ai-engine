@@ -98,6 +98,24 @@ def _classify_endpoint(url: str) -> str:
     operator carve out a deliberate exception to the loopback block for local
     rehearsal against a mock — matched entries are 'private', never 'public',
     so `auth_env_var` secrets still aren't forwarded to them."""
+    from demo_mode import northwind, settings as demo_settings
+
+    if demo_settings.enabled():
+        # The public demo: its own in-process tool server is the one exception
+        # (answered without the network); everything else that is local,
+        # private or internal is blocked, and no allow-list widens that.
+        # A public address is reported as private too: the call may go out,
+        # but no secret this process holds (`auth_env_var`) is ever sent
+        # with it, since a visitor could point a tool at their own server
+        # and name the model key as its credential.
+        if northwind.handles(url):
+            return "private"
+        verdict = _classify_host(url, allowlist=False, strict=True)
+        return "blocked" if verdict == "private" else ("private" if verdict == "public" else verdict)
+    return _classify_host(url, allowlist=True)
+
+
+def _classify_host(url: str, *, allowlist: bool, strict: bool = False) -> str:
     parsed = urlparse(url)
     host = parsed.hostname or ""
     if not host:
@@ -110,7 +128,7 @@ def _classify_endpoint(url: str) -> str:
         # an allowlist entry (those are always exact "host:port"), and
         # classification falls through to the normal host-based checks below.
         port = None
-    if f"{host.lower()}:{port}" in _allowlisted_hosts():
+    if allowlist and f"{host.lower()}:{port}" in _allowlisted_hosts():
         # Deliberate operator exception (demo mocks on loopback). PRIVATE, not
         # public: the call may proceed but process secrets are still withheld.
         return "private"
@@ -121,6 +139,9 @@ def _classify_endpoint(url: str) -> str:
     if not ips:
         return "public"
     if any(any(ip in net for net in _BLOCKED_NETS) for ip in ips):
+        return "blocked"
+    if strict and any(not ip.is_global for ip in ips):
+        # Shared (100.64/10), reserved and every other non-internet range.
         return "blocked"
     if any(ip.is_private or any(ip in net for net in _PRIVATE_NETS) for ip in ips):
         return "private"

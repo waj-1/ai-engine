@@ -213,8 +213,10 @@ def agents(ctx: SearchCtx) -> List[Dict[str, Any]]:
         .select("profile_id, display_name, slug, description, agent_kind, status, environment")
         .eq("environment", ctx.env).or_(flt).limit(SCAN).execute()
     )
+    from demo_mode import protect as demo_protect
+
     out = []
-    for r in rows:
+    for r in demo_protect.visible(rows):
         if not _kind_ok(ctx, r.get("agent_kind")):
             continue
         hay = (r.get("display_name"), r.get("slug"), r.get("description"), r.get("agent_kind"))

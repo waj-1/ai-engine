@@ -231,6 +231,11 @@ async def mcp_connect_create(request: Request, ctx: dict = Depends(require_super
         return _err("The __builtin__: prefix is reserved for seeder-managed bundles.")
     if not endpoint or not endpoint.lower().startswith(("http://", "https://")):
         return _err("Endpoint must be an absolute http(s) URL.")
+    from demo_mode import policy as demo_policy
+
+    problem = demo_policy.tool_endpoint_problem(endpoint, form.get("auth_env_var"))
+    if problem:
+        return _err(problem)
     try:
         context_fields = _parse_context_fields(form.get("context_fields") or "")
     except ValueError as exc:
