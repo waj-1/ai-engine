@@ -30,17 +30,17 @@ def live_analytics(hours: int = 24, agent_kind: str = "", channel: str = "",
                    status: _Status = "", trace_env: TraceEnv = "",
                    environment: _TraceEnv = "",
                    include_series: bool = False) -> Dict[str, Any]:
-    """Live KPI dashboard data (read from the tracing store): volume, cost,
-    latency percentiles, error rate, per-agent/channel breakdowns, top tools.
-    Same payload as /admin/live/analytics.json. hours is clamped to
-    [1, 8760]; status must be success | error | '' (both = no filter).
-    trace_env (dev|staging|prod|'') scopes to traces tagged with that
-    environment — unlike env elsewhere, this isn't restricted to staging|prod
-    since traces can carry a dev tag too (`environment` is the
-    deprecated alias). With tracing off (no tracing store configured) the
-    numbers are empty and `notice` says so. The per-bucket time series (`series`, `buckets`) is
-    dropped unless include_series=true — the totals and breakdowns answer
-    most questions and the series is the bulk of the payload."""
+    """Usage numbers read from the tracing store: volume, cost, latency
+    percentiles, error rate, breakdowns per agent and per channel, and top
+    tools. hours is clamped to 1-8760. status is success, error or '' (both).
+    trace_env (dev, staging, prod, or '' for all) keeps only traces tagged
+    with that environment; environment is its deprecated alias. The
+    per-bucket time series (series, buckets) is the bulk of the payload and
+    is left out unless include_series=true. When no tracing store is
+    configured the numbers are empty and notice says so."""
+    # Maintainer notes (kept out of the description clients read):
+    # Same payload as the portal's /admin/live/analytics.json. trace_env is
+    # wider than env elsewhere because traces can carry a dev tag.
     from admin.screens.live_analytics import load_analytics
     if status not in _STATUS_VALUES:
         return err("status must be success | error | ''")
@@ -62,17 +62,18 @@ def caching_analytics(hours: int = 24, agent_kind: str = "",
                       trace_env: TraceEnv = "",
                       environment: _TraceEnv = "",
                       env: Env = "staging") -> Dict[str, Any]:
-    """Prompt-cache insights (read from the tracing store): overall cache hit
-    rate, cache-read tokens, estimated USD saved, a cached-vs-uncached token
-    time series, and a per-agent cache-hit-rate breakdown. A focused slice of
-    the Live Monitor / /admin/live/analytics.json for "how much are we saving
-    from caching / which agents cache well". Cache-read is read from the
-    auto-instrumented gen_ai.usage.cache_read_input_tokens span attribute
-    (deduped to the LLM span); hit rate = cache_read / total input tokens.
-    hours is clamped to [1, 8760]; trace_env (dev|staging|prod|'') scopes to
-    traces tagged with that environment (`environment` is the deprecated alias);
-    env (staging|prod) selects the config branch used to price the savings
-    estimate."""
+    """Prompt-cache numbers read from the tracing store: overall cache hit
+    rate, cache-read tokens, estimated USD saved, a cached against uncached
+    token time series, and the cache hit rate per agent. Use it to see how
+    much caching saves and which agents cache well. Hit rate = cache-read
+    tokens / total input tokens. hours is clamped to 1-8760. trace_env (dev,
+    staging, prod, or '' for all) keeps only traces tagged with that
+    environment; environment is its deprecated alias. env (staging or prod)
+    selects the config branch whose prices are used for the savings estimate."""
+    # Maintainer notes (kept out of the description clients read):
+    # A focused slice of /admin/live/analytics.json. Cache-read comes from the
+    # auto-instrumented gen_ai.usage.cache_read_input_tokens span attribute
+    # (deduped to the LLM span).
     validate_env(env)  # fail fast before the (expensive) tracing-store query
     environment = resolve_alias(trace_env, environment,
                                 new_name="trace_env", old_name="environment")
@@ -137,22 +138,26 @@ def traces(action: Literal["search", "get", "span", "transcript",
            offset: Annotated[int, Field(
                description="search: skip this many traces (paging).")] = 0,
            env: Env = "staging") -> Dict[str, Any]:
-    """Trace explorer (mirrors /admin/observability/explorer). action:
-    search (filters -> recent traces, newest first, paged by limit/offset:
-    {traces, total, offset, limit, has_more, notice, ...}) |
-    get (trace_id -> span tree) | span (trace_id + span_id -> full span
-    detail) | transcript (trace_id -> persisted conversation turns +
-    tool calls) | overview (trace_id -> session, per-tool rollup, errors) |
-    session (session_id -> that chat session's traces, newest first — the
-    portal's /admin/sessions/{id} lookup) | audio (trace_id, or session_id
-    -> call-recording METADATA for that conversation: duration, status and
-    the portal path of the playable WAV; never the audio bytes).
-    hours (search only) is clamped to [1, 8760]; status must be
-    success | error | ''; tool (search only) narrows to traces that called
-    that tool by name. search always returns tool_filter_applied: if a
-    `tool` filter was requested and this is false, the tracing store's
-    match query failed and `traces` is the UNNARROWED list for the window — do
-    not treat it as "every trace called `tool`"."""
+    """Search and read traces of agent conversations.
+
+    Actions:
+    - search (default): recent traces, newest first, paged with limit
+      (1-100) and offset. Filters: hours (1-8760), status (success, error or
+      ''), search_text, tool, channel_slug, agent_kind, include_background.
+      Returns {traces, total, offset, limit, has_more, notice,
+      tool_filter_applied, ...}.
+    - get (trace_id): the span tree.
+    - span (trace_id, span_id): the full detail of one span.
+    - transcript (trace_id): the saved conversation turns and tool calls.
+    - overview (trace_id): session, per-tool summary and errors.
+    - session (session_id): that chat session's traces, newest first.
+    - audio (trace_id or session_id): call-recording METADATA for the
+      conversation: duration, status and the portal path of the playable
+      WAV. Never the audio itself.
+
+    If you pass tool and tool_filter_applied comes back false, the tool
+    filter failed and traces is the UNFILTERED list for the window. Do not
+    read it as "every trace called that tool"."""
     from admin.screens.observability import (load_span_detail_json,
                                              load_span_tree_json,
                                              load_trace_overview_json,
@@ -227,14 +232,13 @@ def traces(action: Literal["search", "get", "span", "transcript",
 @mcp.tool(annotations=READ_ONLY)
 @tool_errors
 def voice_insights(hours: int = 24, trace_env: TraceEnv = "") -> Dict[str, Any]:
-    """Duplex-voice latency rollup — the Live Monitor's voice card
-    (admin.screens.observability.load_voice_live_insights): sessions,
-    assistant turns, tool calls, barge-ins, and p50/p95 of end-of-turn ->
-    first audio, end-of-turn -> spoken answer, delegate wall time and brain
-    LLM time, over the last `hours` (clamped to [1, 8760]). `ch_ok: false` +
-    `notice` means the tracing store was unreachable or is not set up
-    (numbers are blanks, not
-    zeros). For one call's audio use traces(action="audio")."""
+    """Latency summary for voice calls over the last `hours` (clamped to
+    1-8760): sessions, assistant turns, tool calls, barge-ins, and p50/p95 of
+    end of turn to first audio, end of turn to spoken answer, delegate wall
+    time and the answering model's LLM time. trace_env filters by environment
+    tag. ch_ok=false with a notice means the tracing store could not be
+    reached or is not set up; the numbers are then blank, not zero. For one
+    call's audio use traces(action="audio")."""
     from admin.screens.observability import load_voice_live_insights
     return load_voice_live_insights(past_hours=max(1, min(8760, hours)),
                                     env=trace_env or None)
@@ -251,18 +255,23 @@ def conversation_insights(
             description="Only this agent kind ('' = every agent this build "
                         "serves).")] = "") -> Dict[str, Any]:
     """How conversations ended, what they were about and which language
-    customers used — the Overview's "What happened in conversations" section
-    (admin.screens.insights.build_insights), same payload: `outcomes`
-    (resolved / escalated / abandoned / unknown with count, pct and the
-    change in points vs the previous period), `topics` (top labels, merged
-    across agents), `languages`, `channels` (chat/voice), `agents` (per-agent
-    outcome mix, resolved %, top topic). `available: false` = the insights
-    table could not be read (unknown, not zero); `has_data: false` = nothing
-    analysed in the period yet (collecting). Outcomes are an estimate: a
-    hand-off action in telemetry, else an AI reading of the transcript.
-    Partner builds only ever see their own agents. Rows come from the
-    background sweep in core/conversation_insights.py (~30 min after a
-    conversation goes quiet; the last 30 days are backfilled in batches)."""
+    customers used. period is 24h, 7d or 30d. Returns outcomes (resolved,
+    escalated, abandoned, unknown; each with count, pct and the change in
+    points against the previous period), topics (top labels, merged across
+    agents), languages, channels (chat or voice) and agents (per agent:
+    outcome mix, resolved %, top topic).
+
+    available=false means the data could not be read (unknown, not zero).
+    has_data=false means nothing has been analysed in the period yet.
+    Outcomes are an estimate: a recorded hand-off, or else an AI reading of
+    the transcript. Conversations are analysed in the background, about 30
+    minutes after they go quiet. A build limited to one partner only sees
+    its own agents."""
+    # Maintainer notes (kept out of the description clients read):
+    # Same payload as the Overview's "What happened in conversations" section
+    # (admin.screens.insights.build_insights). Rows come from the background
+    # sweep in core/conversation_insights.py (the last 30 days are backfilled in
+    # batches).
     from admin.screens import plain_language as pl
     from admin.screens.insights import build_insights
     from admin.screens.overview import resolve_period
@@ -282,12 +291,12 @@ def conversation_insights(
 def search(q: str, env: Env = "staging",
            limit: Annotated[int, Field(
                description="Max results (1-30, default 30).")] = 30) -> Dict[str, Any]:
-    """Global search: screens and tabs, agents, models, tools, toolsets,
-    knowledge bases, skills, channels, tests, team, conversations and the
-    people in them (masked), Help/docs sections. Prefix `>` actions, `@`
-    people, `?` docs. Returns {results: [{group, type, label, context,
-    sublabel, href, ...}]} ranked, max `limit` (<= 30). Same rows as
-    /admin/search.json."""
+    """Search across the admin portal: screens and tabs, agents, models,
+    tools, toolsets, knowledge bases, skills, channels, tests, team,
+    conversations and the people in them (masked), and help sections. Prefix
+    the query with > for actions, @ for people or ? for docs. Required: q.
+    Returns ranked {results: [{group, type, label, context, sublabel, href,
+    ...}]}, at most limit (up to 30)."""
     from admin.search import search as _search
     results = _search(q, validate_env(env))
     return {"results": results[:max(1, min(30, limit))]}

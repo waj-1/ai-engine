@@ -21,7 +21,16 @@ for name in GOOGLE_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY AZURE_OPENAI_API_KEY
   if [ -z "$value" ]; then unset "$name"; fi
 done
 
+# The setup step allows agents to use MCP servers and HTTP tools on private
+# addresses, which suits one machine. A value given to the container wins, so
+# a server on a shared network can turn it off (MCP_ALLOW_LOCAL_ENDPOINTS=0).
+allow_local="${MCP_ALLOW_LOCAL_ENDPOINTS:-}"
+
 set -a
 . "$STATE/engine.env"
 set +a
+if [ -n "$allow_local" ]; then
+  MCP_ALLOW_LOCAL_ENDPOINTS="$allow_local"
+  export MCP_ALLOW_LOCAL_ENDPOINTS
+fi
 exec "$@"

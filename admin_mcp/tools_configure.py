@@ -29,12 +29,12 @@ def list_profiles(env: Env = "staging",
                                   "'none' for uncategorised agents. '' = no "
                                   "filter.")] = "",
                   limit: int = 100, offset: int = 0) -> Dict[str, Any]:
-    """List agent profiles in an environment (staging|prod), optionally
-    filtered by agent_kind, status (active|draft|specialist|archived|
-    template) and/or category (`agent_type`). Returns id, kind, slug, status,
-    model ids, endpoint, served version pin and `agent_type` (the agent's
-    category slug, or null) — paged by limit/offset (`total`, `has_more` say
-    what was cut)."""
+    """List agent profiles in one environment (env: staging or prod).
+    Optional filters: agent_kind, status (active, draft, specialist, archived
+    or template) and agent_type (a category slug). Each row has id, kind,
+    slug, status, model ids, endpoint, served version pin and agent_type (the
+    category slug, or null). Paged with limit and offset; total and has_more
+    say what was cut."""
     client = client_for_env(env)
     profiles = list_rows(
         client, "agent_profiles",
@@ -68,27 +68,26 @@ def get_profile(profile_id: str = "", agent_kind: str = "", slug: str = "",
                                 "row (e.g. ['voice_config','memory_config']). "
                                 "Omit for the whole row.")] = None,
                 ) -> Dict[str, Any]:
-    """Full config of one profile (by profile_id, or agent_kind+slug+env):
-    the row plus resolved names for its tools, data sources, MCP servers,
-    models, and prompt-version pins. When looked up by agent_kind without a
-    slug, restricts to status="active" (matching what the portal serves) so
-    the result is deterministic even if drafts/forks share the agent_kind;
-    passing an explicit slug bypasses that filter and can return any status.
+    """Return the full config of one profile. Look it up by profile_id, or
+    by agent_kind with an optional slug in env. With agent_kind and no slug,
+    only the profile with status=active is returned. With a slug, a profile
+    of any status can be returned.
 
-    Returns BOTH the legacy `mcp_servers` label list (resolved from
-    `mcp_server_ids[]`, still driving the dark-launch snapshot) and the new
-    `mcp_attachments` (resolved from `agent_profile_mcp_servers`, the join
-    the flag-on resolver reads — see
-    core/agent_profile.py::_fetch_mcp_attachments). The two can disagree
-    while a profile still carries old labels; `mcp_attachments` is the
-    source of truth. `agent_type` is the agent's
-    user-defined category ({slug, display_name, color}) or null.
+    Returns the profile row plus resolved names for its tools, data sources,
+    MCP servers, models and prompt version pins. mcp_attachments lists the
+    MCP servers the runtime binds tools from and is the source of truth.
+    mcp_servers is an older label list and can disagree with it. agent_type
+    is the agent's category ({slug, display_name, color}) or null.
 
-    `fields` trims the raw `profile` row to the named columns (the row
-    carries large JSON blobs — voice_config, memory_config,
-    input_validators); the resolved label lists are always returned.
-    Prompt TEXT is not here — prompts(action="get", profile_id=...)
-    returns the served prompt content."""
+    fields limits the profile row to the named columns (the row holds large
+    JSON such as voice_config and memory_config). The resolved lists are
+    always returned. Prompt text is not included: use
+    prompts(action="get", profile_id=...)."""
+    # Maintainer notes (kept out of the description clients read):
+    # `mcp_servers` is resolved from `mcp_server_ids[]`; `mcp_attachments` from
+    # the `agent_profile_mcp_servers` join via
+    # core/agent_profile.py::_fetch_mcp_attachments, which is what the tool
+    # resolver reads.
     client = client_for_env(env)
     if profile_id:
         profile = get_row(client, "agent_profiles", "profile_id", profile_id)
@@ -177,50 +176,41 @@ def update_profile(profile_id: str,
                                    "takes it out of its category. Omit to "
                                    "leave the category unchanged.")] = None,
                    env: Env = "staging") -> Dict[str, Any]:
-    """Update an agent profile's config. Only supplied fields change; list
-    fields REPLACE the stored list (to add/remove ONE tool, KB source, MCP
-    server, skill or sub-agent without re-sending the rest, use
-    profile_attachments). Same audit trail as the portal.
+    """Update an agent profile's config. Only the fields you pass change.
+    List fields replace the stored list. To add or remove one tool, KB
+    source, MCP server, skill or sub-agent, use profile_attachments instead.
+    Changes are audited. Returns {updated, profile_id, changed, profile}.
 
-    `env` is the config branch the row is looked up in. `row_environment`
-    MOVES the row's own environment column (rarely what you want — promote
-    with promote_profile instead); `environment` is its deprecated alias.
+    - env: the config branch the profile is looked up in.
+    - row_environment: moves the profile to another environment. This is
+      rarely what you want; use promote_profile. environment is its
+      deprecated alias.
+    - status: active, draft, archived or specialist. template is refused;
+      copy a template with templates(action="use"). Setting active is refused
+      while another active, enabled profile serves the same agent_kind and
+      environment. Deactivate or archive that one first.
+    - delegatable: expose this profile to its parent as an ask_<slug>
+      delegation tool, or stop exposing it.
+    - agent_type: the agent's category, by slug (manage categories with
+      agent_types). It is organisational only, applies at once to this agent
+      in every environment and needs no promote.
+    - voice_config: replaces the whole voice config. Every key you do not
+      send is removed, with no warning.
+    - voice_config_patch: merges into the current voice config. Nested
+      objects merge key by key, a null value deletes that key, and scalars
+      and lists are replaced. Prefer this to change one setting.
 
-    `status`: one of active | draft | archived | specialist ('template' is
-    refused — that status is seeder-managed, fork one instead via
-    templates(action='use')). Setting status='active' is refused if
-    another row already serves this profile's (agent_kind, environment) as
-    status='active' + is_active=true — deactivate/archive that row first;
-    the core loader has no deterministic tie-break between two active rows.
-
-    `delegatable`: opt this profile in (or out) of being exposed to its
-    parent as an ask_<slug> delegation tool at runtime.
-
-    `agent_type`: the agent's user-defined category, by slug (manage the
-    list with agent_types). Organisational only — it does not change how
-    the agent runs, takes effect at once in every environment's row of the
-    same agent, and needs no promote.
-
-    `voice_config` is a FLAT block of voice settings since 2026-08-17 (the
-    duplex keys — barge_in_enabled, answer_watchdog_sec, agent_profile_slug,
-    persona_prompt_slug, the budget/ceiling knobs — sit at the top level; there
-    is no `live` sub-object any more). Both voice arguments REFUSE a top-level
-    `live` key: the runtime's compat shim resolves a nested block ALONE, so
-    re-creating one does not add a setting, it hides every flat key and takes
-    the agent's voice config offline silently.
-
-    `voice_config` REPLACES the entire column — passing
-    `{"barge_in_enabled": true}` WIPES every other voice key
-    (answer_watchdog_sec, agent_profile_slug, budget/ceiling knobs, ...),
-    and nothing reports it. Use
-    `voice_config_patch` instead to set one lever: it's deep-merged onto the
-    profile's CURRENT voice_config (nested dicts merged key-by-key; a
-    `null` value in the patch deletes that key; scalars/lists replace
-    wholesale) — see `admin.services.profiles.deep_merge_voice_config`. A row
-    still carrying the pre-unification nested shape is promoted to flat before
-    the merge, so patching also repairs it.
-    Passing both `voice_config` and `voice_config_patch` in the same call is
-    refused; pick one."""
+    Voice settings are flat, top-level keys (for example barge_in_enabled,
+    answer_watchdog_sec). A top-level "live" object is refused in both voice
+    arguments, because it would hide every other voice setting. Passing both
+    voice arguments in one call is refused."""
+    # Maintainer notes (kept out of the description clients read):
+    # The 'template' status is seeder-managed. Two active rows are refused
+    # because the core loader has no deterministic tie-break between them.
+    # voice_config_patch goes through
+    # admin.services.profiles.deep_merge_voice_config; a row still in the old
+    # nested voice shape is promoted to flat before the merge, so patching also
+    # repairs it.
     from admin.services.profiles import (DualActiveProfileError,
                                          ProfileNotFoundError,
                                          TemplateProtectedError,
@@ -292,14 +282,16 @@ def update_profile(profile_id: str,
 @mcp.tool()
 @tool_errors
 def fork_profile(profile_id: str, env: Env = "staging") -> Dict[str, Any]:
-    """Fork a profile into a new staging draft (slug auto-suffixed). `env`
-    is the branch the SOURCE profile is read from. The copy carries the
-    source's model, prompt-version pins (the same version rows — not
-    copies), tool/KB/legacy-MCP id lists, sub-agents, endpoint and
-    voice/memory config. It does NOT copy the join-table attachments — MCP
-    attachments (what binds tools at runtime) and platform skills — so
-    re-attach them with profile_attachments. It starts as status='draft'
-    and delegatable=false, so it serves nothing until activated/promoted."""
+    """Copy a profile into a new draft in staging. The slug gets an
+    automatic suffix. env is the branch the source profile is read from.
+
+    The copy keeps the source's model, prompt version pins (the same
+    versions, not copies), tool, KB and MCP label lists, sub-agents, endpoint,
+    and voice and memory config. It does not copy MCP attachments (what binds
+    tools at runtime) or platform skills; re-attach them with
+    profile_attachments. The copy starts with status=draft and
+    delegatable=false, so it serves nothing until it is activated or
+    promoted. Returns {forked, profile_id, slug, environment}."""
     from admin.services.profiles import ProfileNotFoundError, fork_profile_row
     try:
         with use_env(validate_env(env)):
@@ -316,13 +308,12 @@ def fork_profile(profile_id: str, env: Env = "staging") -> Dict[str, Any]:
 def diff_profiles(profile_a: str = "", profile_b: str = "",
                   env: Env = "staging",
                   ids: Annotated[Optional[List[str]], Field(
-                      description="The pair as [a, b] profile ids — same "
+                      description="The pair as [a, b] profile ids, same "
                                   "as profile_a/profile_b.")] = None,
                   ) -> Dict[str, Any]:
-    """Field-by-field diff of two profiles a -> b (scalars, tools, data
-    sources, MCP servers, sub-agents, prompt lineage). Pass the pair as
-    ids=[a, b] (the convention every pair-taking tool shares) or as
-    profile_a/profile_b."""
+    """Compare two profiles field by field, a to b: scalar fields, tools,
+    data sources, MCP servers, sub-agents and prompt versions. Pass the pair
+    as ids=[a, b] or as profile_a and profile_b. Returns {a, b, diff}."""
     from admin.profile_fork_handlers import compute_profile_diff
     if ids:
         if len(ids) != 2:
@@ -354,49 +345,40 @@ def profile_versions(action: Literal["list", "view", "save", "restore", "pin",
                          description="diff: also return the full structured "
                                      "diff (default: summary lines only).")] = False,
                      ) -> Dict[str, Any]:
-    """Per-(profile, environment) version history + served-version pin — the
-    MCP surface for the agents screen's version bar (save / view / pin /
-    restore), delegating to admin.services.profile_versions so the portal
-    and MCP stay in lockstep (the eval-work lesson). Mixed read/write
-    (list/view read; save/restore/pin mutate) — left unannotated rather
-    than READ_ONLY, same reasoning as prompts/models/tools.
+    """Version history and the served-version pin of one profile in one
+    environment. Required: action and profile_id.
 
-    action:
-      list — version history for profile_id in env, newest first:
-        [{version_id, version_number, promoted_at, notes, is_served}].
-      view (version_id) — that version's resolved config snapshot.
-        version_id must belong to profile_id (same ownership guard
-        restore/pin use) — errors otherwise.
-      save (notes optional) — snapshot the profile's CURRENT live/draft
-        config into a brand-new version via the same
-        runtime.compiler.compile_profile_snapshot promote uses; does NOT
-        change what's served. Returns {version_id, version_number}.
-      restore (version_id) — copy that version's config back onto the live
-        draft row (identity fields agent_kind/slug/display_name/
-        description untouched), filtering out any tool/data-source/
-        MCP-server/model/prompt-version reference that no longer exists in
-        this env (reported in `dropped`); never changes served_version_id
-        — save afterwards to turn "editing a copy of vN" into a new
-        version. Returns {restored, dropped}.
-      pin (version_id, or "" to clear) — set/clear
-        agent_profiles.served_version_id, the exact
-        agent_profile_versions snapshot AgentProfileLoader serves for this
-        profile+env (clearing reverts to default resolution). Returns
-        {served_version_id}.
-      diff (version_id → that version vs the LIVE/draft row; or
-        ids=[version_a, version_b] → two saved versions) — the portal's
-        version-diff view: {changes: ["model_main_id: 'x' -> 'y'",
-        "tools: +a, -b", ...]}; include_detail=true adds the full
-        structured diff. Read-only.
+    Actions:
+    - list: versions in env, newest first: [{version_id, version_number,
+      promoted_at, notes, is_served}].
+    - view (version_id): that version's config snapshot. The version must
+      belong to profile_id.
+    - save (notes optional): save the profile's current config as a new
+      version. Does not change what is served. Returns {version_id,
+      version_number}.
+    - restore (version_id): copy that version's config back onto the
+      editable profile. Kind, slug, name and description are not touched.
+      References to tools, data sources, MCP servers, models or prompt
+      versions that no longer exist in this env are left out and listed in
+      dropped. Does not change the served version; save afterwards to make a
+      new version. Returns {restored, dropped}.
+    - pin (version_id, or "" to clear): set or clear the exact version
+      served for this profile and env. This changes what callers get.
+      Clearing returns to the default. Returns {served_version_id}.
+    - diff (version_id, or ids=[version_a, version_b]): compare a version
+      with the current profile, or two saved versions. Returns {changes:
+      ["model_main_id: 'x' -> 'y'", "tools: +a, -b", ...]}.
+      include_detail=true adds the full structured diff.
 
-    All writes run inside use_env(env) so reused portal service code
-    resolves the right env branch, and are audited by
-    admin.services.profile_versions itself (its own record_change calls —
-    no separate MCP-level audit, so a save/restore/pin produces exactly
-    one audit_log row, not two). ValueError from the service layer
-    (profile/version not found, or a version_id that belongs to a
-    different profile) surfaces as the standard err() payload via
-    @tool_errors."""
+    Writes are audited. Errors, such as a version that belongs to another
+    profile, come back as {error, hint}."""
+    # Maintainer notes (kept out of the description clients read):
+    # Not annotated READ_ONLY: list/view/diff read, save/restore/pin write.
+    # Delegates to admin.services.profile_versions so the portal's version bar
+    # and this tool stay in step. Writes run inside use_env(env) and are audited
+    # by that service itself, so each write produces exactly one audit row.
+    # `save` uses the same runtime.compiler.compile_profile_snapshot as promote;
+    # `pin` sets agent_profiles.served_version_id.
     from admin.services.profile_versions import (diff_version, list_versions,
                                                   pin_served_version,
                                                   restore_version, save_version,
@@ -676,77 +658,58 @@ def prompts(action: Literal["get", "list", "list_versions", "create_version",
             constant: str = "", slug: str = "",
             confirm: bool = False,
             override_validation: bool = False) -> Dict[str, Any]:
-    """Prompt text + prompt-version operations. action:
-    get — the FULL TEXT of one version: by version_id | prompt_id
-      (+ version_number, default newest) | profile_id + prompt_key (the
-      version that profile SERVES — what callers actually get). Returns
-      {prompt_id, slug, agent_kind, version_number, prompt_version_id,
-      content, notes, chars, is_served?}. max_chars truncates.
-    list — prompt slots with short previews: profile_id → that profile's
-      pinned prompts (key, version, preview); agent_kind → every
-      agent_prompts slot of that kind with its newest version's preview;
-      prompt_id → that prompt's versions with previews.
-    list_versions (prompt_id) — versions without content (legacy shape).
-    create_version (prompt_id, content, notes; for a custom agent pass
-      profile_id + content instead — its own prompt is used and the new
-      version is pinned in the same call) | serve (pin a version on a
-    profile: profile_id, prompt_key, version_id) |
-    diff — ids=[version_id_a, version_id_b] (or prompt_id + version_a +
-      version_b numbers): a unified diff (capped at 400 lines) + diff_stat;
-      include_content=true adds both bodies |
-    publish_from_repo (see below). To rewrite a prompt from a failing eval
-    run, use the prompt_optimize tool.
+    """Read and manage prompt text and prompt versions. Required: action.
 
-    publish_from_repo is the way to get a repo prompt constant onto a live
-    stack: it imports the constant itself (so a half-Arabic body never
-    passes through the MCP client/shell, where quoting would corrupt it),
-    diffs it against what's actually served, and — with confirm — inserts
-    the new version and repoints in one call.
+    Actions:
+    - get: the full text of one version. Select it by version_id, by
+      prompt_id (plus version_number, default newest), or by profile_id and
+      prompt_key (the version that profile serves). Returns {prompt_id, slug,
+      agent_kind, version_number, prompt_version_id, content, notes, chars,
+      truncated}. max_chars truncates content.
+    - list: short previews. profile_id lists that profile's pinned prompts
+      (key, version, preview). agent_kind lists every prompt of that kind
+      with its newest version. prompt_id lists that prompt's versions.
+    - list_versions (prompt_id): versions without content.
+    - create_version (prompt_id, content; notes optional): add a version.
+      For a custom agent pass profile_id and content instead: its own prompt
+      is used and the new version is pinned in the same call.
+    - serve (profile_id, version_id; prompt_key, default "system"): pin a
+      version on a profile. This changes what the agent says.
+    - diff: ids=[version_id_a, version_id_b], or prompt_id with version_a
+      and version_b numbers. Returns a unified diff (at most 400 lines) and
+      diff_stat. include_content=true adds both texts.
+    - publish_from_repo (constant, profile_id, and prompt_id or slug):
+      publish a prompt constant from the engine's code. constant is a dotted
+      path under runtime.prompts, e.g.
+      "runtime.prompts.agents_demo.SUPPORT_SYSTEM_PROMPT". Without prompt_id,
+      the prompt is found by the profile's agent_kind and slug. prompt_key
+      (default "system") is the pin to repoint. If the served text already
+      equals the constant, returns {already_current: true} and writes
+      nothing. Without confirm it is a dry run: the current version,
+      diff_stat (sizes and the first differing line, never the prompt text)
+      and validation problems. With confirm=true it adds a new version, pins
+      it and returns {published: true, ...}. If notes is empty, the served
+      version's notes are carried over.
 
-    Params: `constant` (dotted path, must resolve under the
-    `runtime.prompts` package — e.g.
-    "runtime.prompts.agents_demo.SUPPORT_SYSTEM_PROMPT"); `prompt_id` to target
-    directly, OR `profile_id` + `slug` to resolve one (looked up as the
-    `agent_prompts` row for `(that profile's agent_kind, slug)`, same
-    (agent_kind, slug) keying seed_prompts.py uses); `profile_id` +
-    `prompt_key` (default "system") for the repoint target; `notes`
-    (optional — if omitted, the CURRENTLY SERVED version's notes are
-    carried onto the new one, so publishing a chat prompt fix never
-    accidentally reuses a voice profile's notes string or vice versa, a
-    known seeding gotcha); `confirm` (default False).
+    Validation: create_version, serve and a confirmed publish_from_repo check
+    the prompt first. A problem of error severity refuses the write and
+    returns {error, problems}; nothing is added or pinned.
+    override_validation=true forces the write. It only works together with
+    confirm=true and is audited. publish_from_repo runs the full checks for
+    the named constant (size and both-language rules); create_version and
+    serve run only the general checks.
 
-    Behavior: if the served version's content already equals the constant,
-    returns `{"already_current": True, ...}` and writes nothing. Without
-    confirm, returns a dry run — current version number/id, a `diff_stat`
-    (char counts + first differing line — never the prompt body), AND a
-    `validation` block (the same problems a confirmed call would be
-    checked against, so a human sees red flags before deciding to
-    confirm). With confirm, VALIDATES the constant's content
-    (core.prompt_validator.validate_prompt) before writing anything —
-    inserts version N+1 via the same path create_version uses and
-    repoints via the same path serve uses, and returns
-    `{"published": True, ...}`.
-
-    VALIDATION GATES EVERY WRITE PATH — create_version, serve and
-    publish_from_repo's confirm branch all run
-    `core.prompt_validator.validate_prompt` before writing. An
-    error-severity problem (a size-budget breach, a missing/reverted
-    bilingual half, or a descriptive-instead-of-imperative `ask_agent`
-    instruction — see that module) REFUSES the write and returns
-    `{"error": ..., "problems": [...]}` with nothing inserted or repointed.
-    `serve` is included deliberately: pinning an existing bad version onto
-    a profile is the same failure as publishing a new bad one.
-
-    `override_validation` (default False) forces a write through a
-    validation failure. It is deliberately a TWO-flag act — it does
-    nothing without `confirm=true` too — and every override is recorded
-    via `actor_audit` (action="validation_override", carrying the full
-    problem list) so a forced publish stays visible in the audit trail
-    even though it succeeded. `create_version` and `serve` validate with no
-    named repo constant to check size/bilingual rules against (they accept
-    arbitrary content with no such provenance) — only the universal
-    `ask_agent`-imperative rule runs there; `publish_from_repo` resolves a
-    canonical name from `constant` and gets the full check."""
+    To rewrite a prompt from a failing eval run, use prompt_optimize."""
+    # Maintainer notes (kept out of the description clients read):
+    # publish_from_repo imports the constant in-process, so a body with
+    # non-ASCII text never passes through the MCP client or a shell, where
+    # quoting could corrupt it. Its slug lookup uses the same (agent_kind, slug)
+    # key as seed_prompts.py. Notes are carried from the served version so a
+    # chat prompt fix never reuses another profile's notes by accident.
+    # Every write path runs core.prompt_validator.validate_prompt. `serve` is
+    # gated on purpose: pinning an existing bad version is the same failure as
+    # publishing a new one. Overrides are recorded with actor_audit
+    # (action="validation_override", with the full problem list).
     client = client_for_env(env)
     if action == "get":
         row = _resolve_prompt_version(
@@ -1028,8 +991,8 @@ async def prompt_optimize(
                                                     "(its NEWEST version is the input).")],
         run_id: Annotated[str, Field(description="Eval run whose FAILING "
                                                  "scenarios drive the rewrite.")],
-        model_id: Annotated[str, Field(description="agent_models row (a chat "
-                                                   "model) that writes the rewrite.")],
+        model_id: Annotated[str, Field(description="Model UUID of the chat "
+                                                   "model that writes the rewrite.")],
         env: Env = "staging",
         confirm: Annotated[bool, Field(
             description="false (default) = return the proposal only. true = "
@@ -1042,17 +1005,21 @@ async def prompt_optimize(
         include_content: Annotated[bool, Field(
             description="Return the proposed prompt text (default true).")] = True,
 ) -> Dict[str, Any]:
-    """LLM-assisted prompt rewrite from a failing eval run — the portal's
-    /admin/prompts/{id}/optimize, non-streaming. Same helpers: the failing
-    scenarios of `run_id` and the prompt's newest version go into
-    build_optimizer_meta_prompt, and `model_id` writes the rewrite.
+    """Ask a model to rewrite a prompt so that a failing eval run passes.
+    Required: prompt_id, run_id (a run with failing scenarios) and model_id
+    (the chat model that writes the rewrite). The prompt's newest version and
+    the run's failing scenarios are the input. Takes as long as one model
+    call.
 
-    Returns {proposal: {content, chars}, diff_stat (vs the current newest
-    version), validation: {problems}, failing_scenarios}. With
-    confirm=true the proposal is saved IN-PROCESS as version N+1 (so a
-    half-Arabic body never round-trips through the client) after the same
-    validation gate create_version uses; it is NOT served until you pin it
-    (prompts action=serve). Takes as long as one LLM call."""
+    Returns {proposal: {content, chars}, diff_stat (against the newest
+    version), validation: {problems}, failing_scenarios}. With confirm=true
+    the proposal is also saved as a new version, after the same validation as
+    prompts(action="create_version"). It is not served until you pin it with
+    prompts(action="serve")."""
+    # Maintainer notes (kept out of the description clients read):
+    # Non-streaming twin of the portal's /admin/prompts/{id}/optimize, using
+    # the same helpers (build_optimizer_meta_prompt). The proposal is saved
+    # in-process so a non-ASCII body never round-trips through the client.
     import json as _json
 
     from admin.prompt_handlers import (_failing_scenarios_from_run,
@@ -1128,10 +1095,17 @@ def models(action: Literal["list", "get", "create", "update", "promote"],
            extra_config: Optional[Dict[str, Any]] = None,
            is_active: Optional[bool] = None,
            target_env: Literal["", "staging", "prod"] = "") -> Dict[str, Any]:
-    """Agent-model registry (agent_models). action: list | get |
-    create (name, provider, model_string, ...) | update (model_id + fields) |
-    promote (model_id, target_env) — clones the model to the sibling env,
-    idempotent on (name, environment)."""
+    """Model registry. Required: action.
+
+    Actions:
+    - list: the models in env.
+    - get (model_id).
+    - create (name, provider, model_string; optional temperature,
+      max_output_tokens, extra_config, is_active).
+    - update (model_id plus the fields to change).
+    - promote (model_id, target_env): copy the model to the other
+      environment. If a model with the same name already exists there,
+      nothing is written and its id is returned."""
     client = client_for_env(env)
     if action == "list":
         return {"models": list_rows(client, "agent_models",
@@ -1212,19 +1186,21 @@ async def provider_keys(
                         "extra_config.credential.")] = "",
         env: Env = "staging",
         confirm: Confirm = False) -> Dict[str, Any]:
-    """Model provider keys stored encrypted (table provider_keys; the portal's
-    Settings > Model keys). A stored key is used before the provider's
-    environment variable (GOOGLE_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY,
-    AZURE_OPENAI_API_KEY). No action ever returns a key: only its hint (last
-    four characters), who set it and when.
-    action: list (per provider: source = portal | environment | none, the
-    stored default key and named credentials; `can_store` is false, with the
-    reason in `problem`, when the server has no SECRET_KEY) | set (provider +
-    value, optional name; refused when SECRET_KEY is unset: a key is never
-    stored as plain text) | remove (provider, optional name, confirm=true;
-    the provider falls back to its environment variable) | test (provider,
-    optional name: asks the provider for its model list and returns
-    {ok, source, detail}, with the provider's own error on failure)."""
+    """Model provider API keys, stored encrypted. A stored key is used
+    before the provider's environment variable (GOOGLE_API_KEY,
+    OPENAI_API_KEY, ANTHROPIC_API_KEY, AZURE_OPENAI_API_KEY). No action ever
+    returns a key: only its hint (last four characters), who set it and when.
+
+    Actions:
+    - list: per provider, the source (portal, environment or none), the
+      stored default key and named credentials. can_store is false, with the
+      reason in problem, when the server has no SECRET_KEY.
+    - set (provider, value; optional name): store or replace a key. Refused
+      when SECRET_KEY is unset; a key is never stored as plain text.
+    - remove (provider; optional name; confirm=true): delete a stored key.
+      The provider falls back to its environment variable.
+    - test (provider; optional name): ask the provider for its model list.
+      Returns {ok, source, detail}, with the provider's own error on failure."""
     import asyncio
 
     from admin.services import provider_keys as service
@@ -1270,14 +1246,21 @@ def voice_budgets(action: Literal["list", "get", "set", "delete"],
                   daily_seconds: Optional[int] = None,
                   note: str = "",
                   env: Env = "staging") -> Dict[str, Any]:
-    """Per-tenant daily duplex-voice allowances (ai_voice_budgets, audio
-    seconds/day). action: list (each row includes used_today) | get |
-    set (business_id + daily_seconds; upsert — business_id may be any
-    tenant id, non-UUIDs are mapped to the same derived row the voice edge
-    charges) | delete (tenant falls back to the engine default,
-    VOICE_LIVE_DAILY_SECONDS). Mirrors the portal's Duplex-voice budgets card
-    (on any realtime model's detail page — the allowance is per TENANT, not
-    per model; POST /admin/voice-budgets is still the write route)."""
+    """Daily voice-call allowance per tenant, in audio seconds per day. The
+    allowance is per tenant, not per model. Required: action.
+
+    Actions:
+    - list: every allowance, each with used_today, plus the engine default.
+    - get (business_id).
+    - set (business_id, daily_seconds; optional note): create or update an
+      allowance. business_id may be any tenant id; one that is not a UUID is
+      mapped to a stable UUID.
+    - delete (business_id): the tenant falls back to the engine default
+      (VOICE_LIVE_DAILY_SECONDS)."""
+    # Maintainer notes (kept out of the description clients read):
+    # Table ai_voice_budgets. Mirrors the portal's Duplex-voice budgets card
+    # (POST /admin/voice-budgets is the portal's write route). A non-UUID
+    # business_id maps to the same derived row the voice edge charges.
     import uuid as _uuid
     from datetime import datetime, timezone
 
@@ -1348,19 +1331,27 @@ def tools(action: Literal["list", "get", "create", "update", "delete", "dry_run"
           context_fields: Optional[Dict[str, Any]] = None,
           args: Optional[Dict[str, Any]] = None,
           confirm: bool = False) -> Dict[str, Any]:
-    """agent_tools registry. Only kind="http" tools are writable here —
-    Python tools are source-of-truth in code, same rule the portal
-    enforces. action: list | get | create (python_name, description,
-    endpoint_url, ...) | update (tool_id + HTTP config and/or metadata
-    fields) | delete (tool_id, confirm=true — soft delete via
-    is_deprecated) | dry_run (tool_id to test a saved tool, or
-    endpoint_url/http_method/auth_env_var/timeout_seconds/argument_schema
-    to test an unsaved config; args = sample kwargs).
+    """Tool registry. Only HTTP tools (kind="http") can be created, changed
+    or deleted here; Python tools are defined in code. Required: action.
 
-    `usage_guidance` (free text) and `context_fields` (JSON object) are
-    optional agent_tools columns consumed by the MCP tool resolver;
-    create/update accept them when supplied (usage_guidance empty→omit,
-    context_fields None→omit — no further validation)."""
+    Actions:
+    - list.
+    - get (tool_id).
+    - create (python_name, description, endpoint_url, agent_kind,
+      argument_schema; optional display_name, category, scope (read or
+      write, default read), http_method (default POST), auth_env_var,
+      timeout_seconds (1-300, default 30), additional_agent_kinds).
+    - update (tool_id plus the fields to change): the HTTP settings and/or
+      display_name, description, category, scope, additional_agent_kinds.
+    - delete (tool_id, confirm=true): marks the tool deprecated. The row is
+      kept.
+    - dry_run: call a tool once to test it. Pass tool_id for a saved tool,
+      or endpoint_url, http_method, auth_env_var, timeout_seconds and
+      argument_schema for an unsaved one. args holds the sample arguments.
+
+    usage_guidance (text shown to the model with the tool) and context_fields
+    (a JSON object) are optional on create and update. They are stored as
+    given."""
     from admin.tool_handlers import (_HTTP_METHODS, _PYTHON_NAME_RE,
                                      _SCOPE_OPTIONS, _parse_additional_kinds,
                                      _tool_agent_kinds)
@@ -1629,51 +1620,39 @@ def mcp_servers(action: Literal["list", "get", "create", "update", "delete",
                  is_active: Optional[bool] = None,
                  timeout_seconds: Optional[int] = None,
                  confirm: bool = False) -> Dict[str, Any]:
-    """CRUD + bundle-membership for the MCP-server registry
-    (agent_mcp_servers / agent_mcp_tools / agent_profile_mcp_servers):
-    both kinds of server, bundles and external endpoints.
+    """Registry of the MCP servers that agents get tools from. A server is
+    either external (source="external": a remote MCP endpoint reached over
+    transport and endpoint) or a bundle (source="bundle": a named group of
+    registered tools, with no endpoint of its own). Built-in bundles are
+    read-only: update, delete and members refuse them. Names starting with
+    "__builtin__:" are reserved. Required: action.
 
-    A server row is either source="external" (a live MCP endpoint reached
-    over transport/endpoint, optionally filtered by the legacy server-level
-    tool_subset) or source="bundle" (a named group of agent_tools wired via
-    agent_mcp_tools membership; no endpoint/transport of its own). Built-in
-    bundles (is_builtin=True) are seeder-managed and read-only here —
-    update/delete/members all refuse them with the same message the portal
-    uses. The reserved `__builtin__:` name prefix can't be claimed via
-    create/update either.
-
-    action:
-      list — every server (both sources).
-      get (mcp_server_id) — the row + `members` (bundle membership, as
-        [{tool_id, python_name, position}]) + `attached_count` (profiles
-        wired to this server via agent_profile_mcp_servers).
-      create (source="bundle"|"external", name, ...) —
-        external needs endpoint (+ transport, default "http"; optional
-        auth_env_var/tool_subset/context_fields);
-        bundle needs name (+ optional usage_guidance/context_fields);
-        member_tool_ids seeds agent_mcp_tools membership in the given
-        order (validated against non-deprecated agent_tools first).
-      update (mcp_server_id + fields) — name/transport/endpoint/
-        auth_env_var/usage_guidance/tool_subset/context_fields/is_active.
-        Refused for is_builtin rows.
-      delete (mcp_server_id, confirm=true) — detaches the id from every
-        profile's legacy mcp_server_ids[], deletes its agent_mcp_tools and
-        agent_profile_mcp_servers rows, then the server itself. Refused
-        for is_builtin rows.
-      members (mcp_server_id, member_tool_ids) — reconciles a BUNDLE's
-        agent_mcp_tools membership: delete-all then re-insert in the given
-        order (position 0..N-1). Only valid for source="bundle"; refused
-        for is_builtin rows.
-      discover (endpoint, auth_env_var) — live tools/list probe of a
-        candidate external endpoint, SSRF-guarded (blocks loopback/
-        link-local/cloud-metadata hosts unless MCP_ALLOW_LOCAL_ENDPOINTS
-        is set truthy). Read-only — no DB write, no audit. Always returns
-        an {"ok": bool, "tools": [...], "error", "error_class"} envelope,
-        never raises.
-
-    Unknown action: list | get | create | update | delete | members |
-    discover.
-    """
+    Actions:
+    - list: every server of both kinds.
+    - get (mcp_server_id): the server, its members ([{tool_id, python_name,
+      position}]) and attached_count (profiles that use it).
+    - create (source, name): external also needs endpoint; optional
+      transport (stdio, sse or http; default http), auth_env_var,
+      tool_subset, context_fields. A bundle takes optional usage_guidance,
+      context_fields and member_tool_ids (its tools, in order; each must be a
+      registered tool that is not deprecated).
+    - update (mcp_server_id plus fields): name, transport, endpoint,
+      auth_env_var, usage_guidance, tool_subset, context_fields, is_active.
+    - delete (mcp_server_id, confirm=true): detaches the server from every
+      profile, then deletes it and its membership.
+    - members (mcp_server_id, member_tool_ids): replace a bundle's tool
+      list, in the given order. Bundles only.
+    - discover (endpoint; optional auth_env_var): connect to a candidate
+      external endpoint and list its tools. Writes nothing. Loopback,
+      link-local and cloud-metadata hosts are blocked unless
+      MCP_ALLOW_LOCAL_ENDPOINTS is set. Always returns {ok, tools, error,
+      error_class}."""
+    # Maintainer notes (kept out of the description clients read):
+    # Tables: agent_mcp_servers, agent_mcp_tools (bundle membership) and
+    # agent_profile_mcp_servers (attachments). Built-in bundles (is_builtin) are
+    # seeder-managed and refused with the same message the portal uses. The
+    # server-level tool_subset is the legacy filter; per-profile subsets live on
+    # the attachment.
     if action == "discover":
         return _mcp_discover(endpoint, auth_env_var)
 
@@ -1862,15 +1841,23 @@ def kb_sources(action: Literal["list", "get", "create", "update", "delete",
                confirm: bool = False,
                filename: str = "", content: str = "", title: str = "",
                page_type: str = "user_guide", language: str = "en") -> Dict[str, Any]:
-    """CRUD + inline upload for the KB registry (agent_data_sources).
-    action: list | get | create (name, kind, ...; pgvector sources default
-    to the shared ai_kb_embeddings/ai_kb_pages tables when config.table is
-    omitted) | update (source_id + fields) | delete (source_id,
-    confirm=true — detaches from every profile's data_source_ids, then
-    hard-deletes) | upload_document (source_id, filename, content — stages
-    a page row and queues background chunk/embed ingestion; pgvector
-    sources only; refused with what to set when no embedding model is
-    configured). `list` also returns `embedding`: the model in force."""
+    """Knowledge base (KB) sources and document upload. Required: action.
+
+    Actions:
+    - list: every source, plus embedding (the embedding model in use).
+    - get (source_id).
+    - create (name, kind; optional agent_kind, config, refresh_cadence,
+      freshness_sla_hours, is_active): kind is pgvector, ms_drive, gitbook,
+      supabase_table or http. A pgvector source without config.table uses
+      the shared KB tables.
+    - update (source_id plus the fields to change).
+    - delete (source_id, confirm=true): detaches the source from every
+      profile, then deletes it permanently.
+    - upload_document (source_id, filename, content; optional title,
+      page_type, language): store one document and queue chunking and
+      embedding in the background. pgvector sources only. Refused, with what
+      to set, when no embedding model is configured. Returns {queued, job_id,
+      page_id}; poll with jobs(action="get")."""
     from admin.kb_handlers import KB_KINDS, _is_shared_kb, embedding_status, upload_blocker
     client = client_for_env(env)
     if action == "list":
@@ -2067,17 +2054,25 @@ def _apply_mcp_attachments(client, profile: Dict[str, Any],
 def profile_mcp_attachments(profile_id: str, action: Literal["list", "set"] = "list",
                             attachments: Optional[List[Dict[str, Any]]] = None,
                             env: Env = "staging") -> Dict[str, Any]:
-    """Manage a profile's MCP attachments (agent_profile_mcp_servers — the
-    source the flag-on MCP resolver reads). action:
-    list → current attachments + the attachable MCP set for this profile;
-    set → REPLACE the profile's attachments with `attachments`, a list of
-    {mcp_server_id, tool_subset?} (tool_subset omitted/null = all of the
-    MCP's tools). Detaches any MCP not in the list. Each MCP must be
-    attachable (scope-visible) and every pinned tool_subset name must
-    be one of that MCP's real tools; validated before any write.
+    """List or replace the MCP servers attached to a profile. These
+    attachments are what the runtime binds the agent's tools from. Required:
+    profile_id.
 
-    No confirm gate — matches the portal, which reconciles this join
-    freely (it's reversible config, not a destructive delete)."""
+    Actions:
+    - list (default): the current attachments, plus attachable (the MCP
+      servers this profile may attach).
+    - set (attachments): replace the attachments with a list of
+      {mcp_server_id, tool_subset?}. A missing or null tool_subset means all
+      of that server's tools. Any server not in the list is detached. Every
+      server must be attachable and every tool_subset name must be one of
+      its real tools; this is checked before anything is written. There is
+      no confirm step.
+
+    To add or remove one server, use profile_attachments(kind="mcp")."""
+    # Maintainer notes (kept out of the description clients read):
+    # Writes the agent_profile_mcp_servers join. No confirm gate, matching the
+    # portal, which reconciles this join freely (reversible config, not a
+    # destructive delete).
     client = client_for_env(env)
     profile = get_row(client, "agent_profiles", "profile_id", profile_id)
     if not profile:
@@ -2111,9 +2106,10 @@ def profile_mcp_attachments(profile_id: str, action: Literal["list", "set"] = "l
 @mcp.tool(annotations=READ_ONLY)
 @tool_errors
 def mentionables(profile_id: str, env: Env = "staging") -> Dict[str, Any]:
-    """The @-mention catalog for a profile's system prompt: its own tools,
-    MCPs, and KBs (names usable as @[tool|mcp|kb:name] tokens). Scoped to
-    the profile — no org-wide/cross-tenant catalog."""
+    """List the names a profile's system prompt can mention: its own tools,
+    MCP servers and KB sources, usable as @[tool:name], @[mcp:name] and
+    @[kb:name] tokens. Only this profile's items are returned. Returns
+    {tools, mcps, kbs}."""
     client = client_for_env(env)
     profile = get_row(client, "agent_profiles", "profile_id", profile_id)
     if not profile:
@@ -2162,21 +2158,24 @@ def templates(action: Literal["list", "get", "use"] = "list",
               slug: str = "", as_subagent_of: str = "", model_id: str = "",
               agent_type: Annotated[str, Field(
                   description="use: put the new agent (and the sub-agents "
-                              "made with it) in this category — a category "
+                              "made with it) in this category: a category "
                               "slug from agent_types(action='list'). '' = "
                               "uncategorised.")] = "",
               env: Env = "staging") -> Dict[str, Any]:
-    """Protected catalog of forkable agent templates ("architecture molds").
-    action: list (browse the molds) | get (template_id → full config) |
-    use (template_id + display_name → fork the mold into a NEW named draft
-    agent; composite molds fork their sub-agent templates too; optional
-    as_subagent_of=<profile_id> wires the new agent into that parent's
-    sub-agents; optional model_id sets the new agent's model instead of the
-    template's; slug, left blank where generic agents are on, is made from
-    the name — "Support desk" -> support-desk; optional agent_type=<category
-    slug> files the new agent under that category, and an unknown category
-    refuses the call before anything is created). Templates are read-only —
-    there is no create/edit/delete."""
+    """Catalog of agent templates that can be copied into a new agent.
+    Templates are read-only: there is no create, edit or delete.
+
+    Actions:
+    - list (default): browse the templates.
+    - get (template_id): a template's full config.
+    - use (template_id, display_name): create a new draft agent from the
+      template. A composite template also copies its sub-agent templates.
+      Optional: as_subagent_of (a profile_id; adds the new agent to that
+      parent's sub-agents), model_id (use this model instead of the
+      template's), slug (left blank where generic agents are enabled, it is
+      made from the name: "Support desk" becomes support-desk) and agent_type
+      (a category slug; an unknown category refuses the call before anything
+      is created)."""
     client = client_for_env(env)
     if action == "list":
         from admin.services.templates import list_templates
@@ -2233,19 +2232,23 @@ def agent_types(
                         "category.")] = None,
         confirm: Confirm = False,
         env: Env = "staging") -> Dict[str, Any]:
-    """User-defined agent categories ("Support", "Sales", "Internal
-    tools"): groups for the Agents list, its filter and reporting. A
-    category is data, not an agent kind — it never changes how an agent
-    runs, is not part of a promote snapshot, and a fresh install has none.
-    action: list (every category in order, each with `agent_count`) |
-    create (display_name; optional slug, description, color, sort_order) |
-    update (agent_type + any of display_name, description, color,
-    sort_order) | delete (agent_type, confirm=true — the agents in it are
-    NOT deleted, they become uncategorised; without confirm it reports how
-    many agents that is). Put an agent in a category with
-    update_profile(agent_type=...) or templates(action="use",
-    agent_type=...); filter with list_profiles(agent_type=...). Mirrors the
-    portal's Agents › Categories screen."""
+    """Agent categories, such as Support, Sales or Internal tools. They
+    group agents in the agent list, its filter and reports. A category never
+    changes how an agent runs and is not part of a promote. A fresh install
+    has none.
+
+    Actions:
+    - list (default): every category in order, each with agent_count.
+    - create (display_name; optional slug, description, color, sort_order).
+    - update (agent_type plus any of display_name, description, color,
+      sort_order).
+    - delete (agent_type, confirm=true): the agents in the category are not
+      deleted; they become uncategorised. Without confirm it reports how
+      many agents that is.
+
+    Put an agent in a category with update_profile(agent_type=...) or
+    templates(action="use", agent_type=...). Filter with
+    list_profiles(agent_type=...)."""
     from admin.services import agent_types as svc
     client = client_for_env(env)
     actor_id = current_actor()["user_id"]
@@ -2322,33 +2325,39 @@ def skills(action: Literal["list", "get", "create", "update", "create_version",
                description="Resource actions: the skill version the file "
                            "belongs to ('' = the newest version).")] = "",
            resource_id: Annotated[str, Field(
-               description="delete_resource: the agent_skill_resources row.")] = "",
+               description="delete_resource: the resource id (list_resources).")] = "",
            filename: Annotated[str, Field(
                description="add_resource: file name (re-adding the same name "
                            "on the same version replaces it).")] = "",
            content_type: Annotated[str, Field(
                description="add_resource: MIME type (default text/markdown).")] = "",
            confirm: Confirm = False) -> Dict[str, Any]:
-    """Manage agent skills (versioned instruction bundles with progressive
-    disclosure — catalog in-prompt, bodies via the read_skill tool). action:
-    list (all skills; filter with agent_kind/business_id) |
-    get (skill + versions + latest version's resources; needs skill_id) |
-    create (needs slug, display_name, description, agent_kind, content;
-    optional business_id for a tenant skill, always_on) |
-    update (metadata patch; needs skill_id — also archive/unarchive by
-    passing status="archived"|"active"|"draft" and/or is_active; setting
-    status="archived" forces is_active=False alongside it, mirroring the
-    portal's "Archive skill" button (admin/skill_handlers.py::skill_archive),
-    which always writes both columns together since core/skills.py's live
-    resolver requires BOTH is_active=True AND status="active" to serve a
-    skill) |
-    create_version (needs skill_id, content; optional notes) |
-    list_resources (skill_id [+ version_id]) — the version's bundled files
-    (filename, content_type, size; no bodies) |
-    add_resource (skill_id, filename, content [+ version_id, content_type])
-    — attach a file the agent can read on demand; same 64 KB cap and
-    replace-by-filename behaviour as the portal |
-    delete_resource (skill_id, resource_id, confirm=true)."""
+    """Agent skills: versioned instruction documents. The agent sees a
+    catalog of its skills and reads a skill's body when it needs it.
+    Required: action.
+
+    Actions:
+    - list: all skills; filter with agent_kind and business_id.
+    - get (skill_id): the skill, its versions and the newest version's
+      resources.
+    - create (slug, display_name, description, agent_kind, content; optional
+      business_id for a tenant skill, always_on, linked_data_source_ids,
+      notes).
+    - update (skill_id plus fields): display_name, description, always_on,
+      linked_data_source_ids, status (active, draft or archived) and
+      is_active. status="archived" also sets is_active=false. A skill is
+      served only when it is both is_active and status="active".
+    - create_version (skill_id, content; optional notes).
+    - list_resources (skill_id; optional version_id): the version's files
+      (filename, content_type, size; no content).
+    - add_resource (skill_id, filename, content; optional version_id,
+      content_type): attach a file the agent can read on demand. At most
+      64 KB. A file with the same name on the same version is replaced.
+    - delete_resource (skill_id, resource_id, confirm=true)."""
+    # Maintainer notes (kept out of the description clients read):
+    # Archiving mirrors the portal's "Archive skill" button
+    # (admin/skill_handlers.py::skill_archive), which always writes status and
+    # is_active together because core/skills.py's resolver requires both.
     from core.skills import (MAX_BODY_BYTES, MAX_RESOURCE_BYTES,
                              invalidate_skills_cache, validate_skill_metadata)
 
@@ -2616,15 +2625,17 @@ def profile_skill_attachments(profile_id: str,
                               action: Literal["list", "set"] = "list",
                               skill_ids: Optional[List[str]] = None,
                               env: Env = "staging") -> Dict[str, Any]:
-    """List or replace a profile's PLATFORM skill attachments
-    (agent_profile_skills — the set the runtime catalogs each turn). action:
-    list → current attachment rows in position order;
-    set → REPLACE the join with skill_ids in order (position = index).
-    Only active platform skills (business_id null) matching the profile's
-    agent_kind attach; tenant skills resolve dynamically and are never
-    pinned. No confirm gate — reversible config, matching the portal.
-    To add/remove ONE skill without re-sending the list, use
-    profile_attachments(kind="skills")."""
+    """List or replace the platform skills attached to a profile. Required:
+    profile_id.
+
+    Actions:
+    - list (default): the current attachments in order.
+    - set (skill_ids): replace the attachments with skill_ids, in that
+      order. Only active platform skills (no business_id) of the profile's
+      agent_kind can be attached. Tenant skills are resolved at run time and
+      are never attached. There is no confirm step.
+
+    To add or remove one skill, use profile_attachments(kind="skills")."""
     client = client_for_env(env)
     profile = get_row(client, "agent_profiles", "profile_id", profile_id)
     if not profile:
@@ -2664,11 +2675,11 @@ _ATTACH_LIST_COLUMNS = {
 def profile_attachments(
         profile_id: Annotated[str, Field(description="Profile to change.")],
         kind: Annotated[Literal["tools", "kb", "mcp", "skills", "downstream"], Field(
-            description="What to attach: tools (agent_tools ids, the profile's "
-                        "tool_ids list) | kb (agent_data_sources ids) | mcp "
-                        "(agent_mcp_servers ids — the attachments the runtime "
-                        "binds tools from) | skills (platform agent_skills ids) "
-                        "| downstream (sub-agent profile ids).")],
+            description="What to attach: tools (tool ids, the profile's "
+                        "tool_ids list) | kb (KB source ids) | mcp (MCP server "
+                        "ids: the attachments the runtime binds tools from) | "
+                        "skills (platform skill ids) | downstream (sub-agent "
+                        "profile ids).")],
         action: Annotated[Literal["list", "add", "remove"], Field(
             description="list = current items; add/remove = change ONLY the "
                         "given ids, keeping everything else attached.")] = "list",
@@ -2678,20 +2689,28 @@ def profile_attachments(
             description="kind=mcp add only: pin these tool names on every MCP "
                         "being added (omit = all of the MCP's tools).")] = None,
         env: Env = "staging") -> Dict[str, Any]:
-    """Attach or detach individual tools, KB sources, MCP servers, skills or
-    sub-agents on a profile WITHOUT re-sending the whole list. `add` keeps
-    every existing item (and its order/tool_subset) and appends the new
-    ids; `remove` drops only the given ids. Re-adding an attached id or
-    removing one that isn't attached is a no-op, reported in `unchanged`.
-    Every id is validated before any write (unknown/deprecated tools,
-    missing KB sources/profiles, non-attachable MCPs, non-platform or
-    wrong-kind skills are refused with nothing written). Same audit trail
-    and cache invalidation as the replace-all paths, which still work:
-    update_profile(tool_ids=...), profile_mcp_attachments(set),
-    profile_skill_attachments(set).
+    """Attach or detach single items on a profile without re-sending the
+    whole list. Required: profile_id and kind (tools, kb, mcp, skills, or
+    downstream for sub-agents).
 
-    Returns {kind, profile_id, items: [...] (after), added, removed,
-    unchanged}."""
+    Actions:
+    - list (default): the current items.
+    - add (ids): append the ids. Existing items keep their order and
+      tool_subset. For kind=mcp, tool_subset limits the added servers to
+      those tool names.
+    - remove (ids): detach only those ids.
+
+    Adding an id that is already attached, or removing one that is not,
+    changes nothing and is reported in unchanged. Every new id is checked
+    before any write. Unknown or deprecated tools, missing KB sources or
+    profiles, MCP servers that cannot be attached, and skills that are not
+    active platform skills of the profile's kind are refused, and nothing is
+    written. Changes are audited.
+
+    Returns {kind, profile_id, items, added, removed, unchanged}. The
+    replace-all tools still work: update_profile(tool_ids=...),
+    profile_mcp_attachments(action="set") and
+    profile_skill_attachments(action="set")."""
     client = client_for_env(env)
     profile = get_row(client, "agent_profiles", "profile_id", profile_id)
     if not profile:

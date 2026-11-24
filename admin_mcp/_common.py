@@ -31,9 +31,8 @@ ALLOWED_ENVS = ("staging", "prod")
 #                     `environment`.
 # The old names stay accepted as deprecated aliases (resolve_alias below).
 Env = Annotated[Literal["staging", "prod"], Field(
-    description="Config branch: which `environment` rows of the AI config DB "
-                "to read/write. staging = the editable working set (default); "
-                "prod = what production serves.")]
+    description="Config branch to read or write: staging = the editable "
+                "working set (default); prod = what production serves.")]
 # Row-environment filters where "" means "default / no filter".
 EnvFilter = Literal["", "staging", "prod"]
 RowEnv = Annotated[EnvFilter, Field(

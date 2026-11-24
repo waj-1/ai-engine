@@ -27,7 +27,7 @@ secrets made on the first start and kept in a volume.
 
 - A server managed by Coolify v4, `linux/amd64`. 2 vCPU and 4 GB of memory is
   a comfortable start.
-- A published engine image. The file pulls release `0.1.0` unless you set
+- A published engine image. The file pulls release `0.1.1` unless you set
   `AI_ENGINE_VERSION`.
 - A domain for the engine, or a wildcard domain set on the Coolify server.
 
@@ -68,7 +68,7 @@ All are optional. Set them under **Environment variables**, then redeploy.
 
 | Setting | Effect |
 |---|---|
-| `AI_ENGINE_VERSION` | The engine release to run. Default `0.1.0` |
+| `AI_ENGINE_VERSION` | The engine release to run. Default `0.1.1` |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Create the admin account at the first deploy (set both) |
 | `GOOGLE_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` | A model provider key from the environment. A key saved in the portal under **Settings › Model keys** wins |
 | `EMBED_MODEL`, `EMBED_BASE_URL`, `EMBED_API_KEY`, `EMBED_PROVIDER` | An embedding model for knowledge bases |
@@ -99,12 +99,14 @@ new database migrations when it starts.
   unhealthy. That key is Coolify's own: plain `docker compose` rejects it.
 - Only the engine has a domain. The database, the REST layer, the auth
   service and the gateway are reachable inside the stack's network only.
-- The setup step turns on `MCP_ALLOW_LOCAL_ENDPOINTS`, as on a developer's
-  machine. Admins of this install can then point an agent's tools at
-  addresses inside your server's network. Give admin accounts only to people
-  you trust with that.
+- `MCP_ALLOW_LOCAL_ENDPOINTS` is off in this file, so an agent's tools cannot
+  be pointed at addresses inside your server's network. Set it to `1` in the
+  service's environment variables if you want agents to use an MCP server or
+  an HTTP tool on the host or its private network. Admins of the install can then
+  reach those addresses, so give admin accounts only to people you trust.
 - An Ollama server on the Coolify host is reachable from the engine at
-  `http://host.docker.internal:11434`.
+  `http://host.docker.internal:11434`. Model addresses are not affected by
+  that setting.
 
 ## Getting into Coolify's one-click catalog
 
@@ -124,7 +126,7 @@ When both are cleared, the steps are:
    `coollabsio/coolify`. This repository has no SVG logo yet.
 2. Copy `deploy/coolify/waj-ai-engine.yaml` to
    `templates/compose/waj-ai-engine.yaml` in that fork. Replace
-   `${AI_ENGINE_VERSION:-0.1.0}` with the fixed release number if reviewers
+   `${AI_ENGINE_VERSION:-0.1.1}` with the fixed release number if reviewers
    ask for a plain tag.
 3. Test it on a Coolify server through **Docker Compose Empty**, from a fresh
    resource.

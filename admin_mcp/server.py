@@ -26,6 +26,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from admin_mcp.auth import MCPAuthMiddleware
 
+# `mcp_attachments` is the agent_profile_mcp_servers join.
 # Lands in the caller's system prompt on initialize — the cross-tool
 # conventions that don't fit any single tool description.
 _INSTRUCTIONS = """\
@@ -38,7 +39,7 @@ evaluate (eval_runs compare) -> ship (promote_profile) -> monitor \
 (live_analytics, traces).
 
 Conventions:
-- `env` selects the environment branch of the config DB (staging|prod). Most \
+- `env` selects the config branch (staging|prod). Most \
 tools default to env="staging" (the edit-then-promote workflow); pass \
 env="prod" explicitly to read or change what production serves. `env` \
 never means anything else: a row's own environment column is \
@@ -51,11 +52,10 @@ preview.
 - Large bodies are opt-in (include_results, include_content, \
 include_series, fields); lists page with limit/offset.
 - Long operations (eval runs, pytest, e2e, KB uploads) return a \
-run_id/job_id immediately — poll with `jobs action=get` or the tool's own \
+run_id/job_id immediately. Poll with `jobs action=get` or the tool's own \
 get action.
-- Profile→MCP wiring: `mcp_attachments` (agent_profile_mcp_servers) is what \
-the runtime tool resolver reads; the legacy `mcp_server_ids` label list is \
-informational only.
+- MCP servers on a profile: `mcp_attachments` is what the runtime binds \
+tools from; the older `mcp_server_ids` label list is informational only.
 - Operator docs are exposed as wajdocs:// resources (index, operate, \
 configure, test, govern, deploy, mcp, architecture, data-model)."""
 

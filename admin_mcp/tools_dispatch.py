@@ -192,41 +192,44 @@ async def chat(
         env: Env = "staging",
         locale: Annotated[str, Field(description="en | ar | tr | ru.")] = "en",
         profile_version_id: Annotated[str, Field(
-            description="Answer with this saved agent_profile_versions snapshot "
-                        "(X-WAJ-Profile-Version, operator-only) instead of "
-                        "profile_id's current config.")] = "",
+            description="Answer with this saved profile version (profile_versions "
+                        "action=list) instead of profile_id's current "
+                        "config.")] = "",
         case_id: Annotated[str, Field(
-            description="AI-agents demo kinds only: the use case to play "
+            description="Demo agent kinds only: the use case to play "
                         "(e.g. 'O01'; '' = the agent's first case).")] = "",
         state: Annotated[str, Field(
-            description="AI-agents demo kinds only: the `state` token the "
-                        "previous turn returned — pass it back with session_id "
+            description="Demo agent kinds only: the `state` token the "
+                        "previous turn returned. Pass it back with session_id "
                         "to continue (it carries verification/sent status).")] = "",
         timeout_seconds: Annotated[int, Field(
             description="Give up after this many seconds (10-300).")] = 120,
 ) -> Dict[str, Any]:
-    """Run ONE chat turn against an agent through the same path the
-    portal's test-chat widget uses: a POST to the profile's endpoint_path
-    with your operator JWT, collected server-side. Returns {reply,
-    tool_calls, trace_id, session_id, latency_ms, errors, served_by,
-    status}. Pass the returned session_id back to continue the
+    """Send one chat message to an agent and return its reply. This is a
+    REAL turn: it runs the agent's tools and writes chat history. Required:
+    profile_id and message.
+
+    Returns {reply, tool_calls, trace_id, session_id, latency_ms, errors,
+    served_by, status}. Pass the returned session_id back to continue the
     conversation.
 
-    Which config answers: profile_id ITSELF — a draft copy or a specialist
-    answers as itself (X-WAJ-Profile-Id, operator-only, same agent_kind as
-    the endpoint), exactly like the widget. profile_version_id instead pins a
-    saved snapshot. Each kind's own body is built for you (the AI-agents
-    demo's `agent` key + case_id); pass back the returned `state` with
-    session_id to continue a demo conversation.
-    env = this process's own environment runs in-process; the other env
-    goes to its default deployment target (deployment_targets).
+    profile_id answers as itself, so a draft copy or a specialist can be
+    tested. profile_version_id answers with a saved version instead. For demo
+    agent kinds, case_id picks the use case; pass the returned state back
+    with session_id to continue. When env is this engine's own environment
+    the turn runs in this process. Otherwise it is sent to that environment's
+    default deployment target (see deployment_targets).
 
-    tool_calls come from the persisted assistant message (name, input,
-    output — outputs capped at 2000 chars); trace_id is the turn's trace
-    (open with traces action=overview / transcript). Both can be null if
-    the agent doesn't persist/trace that turn; the reply is still
-    returned. This is a REAL turn: it runs the agent's tools and writes
-    chat history, as the widget does."""
+    tool_calls lists name, input and output (outputs capped at 2000
+    characters). trace_id is the turn's trace; open it with
+    traces(action="overview") or traces(action="transcript"). Both can be
+    empty when the agent does not save or trace the turn. The reply is still
+    returned."""
+    # Maintainer notes (kept out of the description clients read):
+    # Same path as the portal's test-chat widget: a POST to the profile's
+    # endpoint_path with the operator's JWT, collected server-side. The profile
+    # pin travels as X-WAJ-Profile-Id (operator-only, same agent_kind as the
+    # endpoint); a version pin as X-WAJ-Profile-Version.
     validate_env(env)
     if not message.strip():
         return err("message is empty")
