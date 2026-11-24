@@ -6,7 +6,7 @@
 [![Tests](https://github.com/waj-1/ai-engine/actions/workflows/ai-agent-tests.yaml/badge.svg)](https://github.com/waj-1/ai-engine/actions/workflows/ai-agent-tests.yaml)
 [![Release](https://img.shields.io/github/v/release/waj-1/ai-engine)](https://github.com/waj-1/ai-engine/releases)
 [![Discussions](https://img.shields.io/github/discussions/waj-1/ai-engine)](https://github.com/waj-1/ai-engine/discussions)
-<!-- listings-badges -->
+[![waj-1/ai-engine MCP server](https://glama.ai/mcp/servers/waj-1/ai-engine/badges/score.svg)](https://glama.ai/mcp/servers/waj-1/ai-engine)
 
 ### ▶ [Try the live demo](https://engine-demo.waj.ai)
 
