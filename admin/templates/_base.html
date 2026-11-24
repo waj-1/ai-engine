@@ -156,6 +156,7 @@
       <div class="demo-banner" role="note" data-demo-banner>
         <strong>Public demo</strong>
         <span>Anyone can see what you type here, so do not enter anything private. Everything resets every night.</span>
+        {% if _demo.voice %}<a href="/admin/demo/call" data-demo-call>Talk to the Support desk: place a voice call</a>{% endif %}
         <a href="{{ _demo.repo_url }}" target="_blank" rel="noopener">Run your own: get it on GitHub</a>
       </div>
       {% endif %}

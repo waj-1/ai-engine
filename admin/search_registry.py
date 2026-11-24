@@ -258,6 +258,7 @@ ROUTE_EXCLUSIONS: Dict[str, str] = {
     "/admin/": "redirects to the default screen",
     "/admin/login": "sign-in page, not a destination",
     "/admin/demo/assistant/history": "JSON for the demo's assistant panel, not a page",
+    "/admin/demo/call": "a redirect to the Support desk's Voice tab (the demo banner's call link)",
     "/admin/setup": "first-run page; exists only until the admin account is created",
     "/admin/setup/model-key": "first-run walkthrough step, shown once to the admin who set up",
     "/admin/setup/api-key": "first-run walkthrough step, shown once to the admin who set up",

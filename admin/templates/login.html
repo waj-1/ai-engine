@@ -37,7 +37,7 @@
     {% set _demo = demo_chrome() %}
     {% if _demo.enabled %}
     {# The public demo (demo_mode): one click, no account. #}
-    {{ hint_text("A public demo of the engine with sample agents for a fictional internet provider. No sign-up: one click and you are in.") }}
+    {{ hint_text("A public demo of the engine with sample agents for a fictional internet provider. No sign-up: one click and you are in." ~ (" You can chat with the agents or call one from your browser." if _demo.voice else "")) }}
     {% if error %}
     {% call alert('error') %}{{ error }}{% endcall %}
     {% endif %}

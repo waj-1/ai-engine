@@ -2,7 +2,7 @@
 
 Per visitor
     Sliding one-hour windows, per bucket (`chat`, `tests`, `uploads`,
-    `entry`, `assistant`, `assistant_tools`), kept in this process's memory. A visitor is their session (the
+    `entry`, `assistant`, `assistant_tools`, `voice`), kept in this process's memory. A visitor is their session (the
     `session_id` claim of the token "Try the demo" gave them) AND their
     network address: both are counted, the address with
     ``DEMO_IP_MULTIPLIER`` times the room, so opening a new session does not
@@ -67,6 +67,7 @@ def _limit_for(bucket: str) -> int:
         "entry": settings.entries_per_hour,
         "assistant": settings.assistant_per_hour,
         "assistant_tools": settings.assistant_tools_per_hour,
+        "voice": settings.voice_calls_per_hour,
     }.get(bucket, settings.chat_per_hour)()
 
 

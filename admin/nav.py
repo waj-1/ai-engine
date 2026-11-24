@@ -345,7 +345,9 @@ def demo_chrome() -> Dict[str, Any]:
 
     if not demo_settings.enabled():
         return {"enabled": False}
-    return {"enabled": True, "repo_url": demo_settings.repo_url()}
+    return {"enabled": True, "repo_url": demo_settings.repo_url(),
+            # Voice calls are on: the banner and the entry page offer one.
+            "voice": demo_settings.voice_enabled()}
 
 
 def section_tabs_for(path: Optional[str], query: Optional[Mapping[str, str]] = None) -> Optional[Dict[str, Any]]:

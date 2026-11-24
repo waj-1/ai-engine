@@ -88,6 +88,7 @@ POST, and hidden from the sidebar, Settings and search:
 - Deployment targets, deploy runs, code deploy and rollback
 - The background jobs list, prompt optimisation, the first-run page
 - `/mcp` (the admin MCP server), `/agents` (the sample-agents portal), voice calls
+  (unless `DEMO_VOICE` is on, see "Voice calls" below)
 
 Read-only (GET works, changes are refused): Models, scheduled test runs, model
 comparisons, voice checks, Activity.
@@ -120,6 +121,51 @@ Once it is used up, chats and the assistant answer that the demo has reached tod
 limit and that the engine can be self-hosted for free; no model is called.
 
 Every model answer is capped at `DEMO_MAX_OUTPUT_TOKENS`, whatever its model row says.
+
+## Voice calls
+
+Off by default: the voice socket (`WS /v1/agents/<slug>/voice`) is refused, and an
+agent's Voice tab says so. A realtime model bills by the minute, so turn it on only
+with the caps below in mind.
+
+With `DEMO_VOICE=true` and a realtime model set up, the seed adds a model row named
+"Demo voice model" and turns voice on for the Support desk, so a visitor can open its
+Voice tab and press **Call** with nothing to set up. The banner and the entry page link
+to it (`/admin/demo/call`). Visitors can turn voice on for their own agents too, with
+that model.
+
+The realtime model, one of:
+
+- `DEMO_VOICE_PROVIDER=azure_voice_live` (the default): an Azure AI Foundry resource
+  that serves Voice Live. Set `DEMO_VOICE_ENDPOINT` to its address and
+  `DEMO_VOICE_API_KEY` to its key. The key has a name of its own, so it unlocks this
+  one model and nothing else.
+- `DEMO_VOICE_PROVIDER=google_genai`: Gemini Live, with `GOOGLE_API_KEY`. Note that
+  this key also makes every Gemini chat model row usable by visitors, so prefer a key
+  made for the demo, with its own quota.
+
+Every call runs under `demo_mode/voice.py`, whatever the agent's own voice settings
+say (a visitor can edit those):
+
+- one call lasts at most `DEMO_VOICE_MAX_CALL_SECONDS`;
+- at most `DEMO_VOICE_MAX_CALLS` calls are open at the same time;
+- the whole demo has `DEMO_VOICE_DAILY_SECONDS` seconds of calls per UTC day, every
+  agent and visitor together, counted in the database next to the turn cap (in memory
+  when the database cannot be reached, so the cap never switches off);
+- one visitor may place `DEMO_VOICE_CALLS_PER_HOUR` calls an hour.
+
+A call is charged every 15 seconds while it runs and for its last part when it ends.
+When the day's seconds run out, running calls end and new ones are refused, each with
+a sentence the Call button shows. The first three caps do not depend on the visitor's
+address, so they hold for a caller who reaches the server without the CDN. The engine's
+own voice budget (`VOICE_LIVE_DAILY_SECONDS`) is per agent and still applies; it does
+not bound the demo, because a visitor can make agents.
+
+Calls are never recorded in demo mode (`VOICE_RECORDING_ENABLED` is forced off). The
+transcript is saved like a chat and is wiped by the nightly reset. The answers come
+from the agent's chat model; those turns are not taken from `DEMO_DAILY_TURNS`, they
+are bounded by the day's voice seconds. The plain `/voice/live` socket, Settings ›
+Voice budgets and running voice checks stay locked.
 
 ## The nightly reset
 
@@ -172,10 +218,23 @@ All read at call time. Only `DEMO_MODE` and the model settings matter to most ho
 | `DEMO_IP_MULTIPLIER` | 3 | One network address may use this many visitors' worth of each limit. |
 | `DEMO_CLIENT_IP_HEADER` | | A header that carries the visitor's address, set by a CDN in front of the demo (`cf-connecting-ip` behind Cloudflare). Blank: the connection's address, as the proxy settings resolve it. Set it only when every request comes through that CDN. |
 | `DEMO_MAX_OUTPUT_TOKENS` | 2000 | The longest answer any model may write (reasoning included). |
+| `DEMO_VOICE` | off | Let visitors place voice calls. Needs a realtime model (next rows). |
+| `DEMO_VOICE_PROVIDER` | `azure_voice_live` | `azure_voice_live` or `google_genai` (Gemini Live, key in `GOOGLE_API_KEY`). |
+| `DEMO_VOICE_ENDPOINT` | | The Azure Voice Live resource, e.g. `https://<resource>.services.ai.azure.com`. |
+| `DEMO_VOICE_API_KEY` | | The key of that resource. A secret: set it the way you set `AZURE_OPENAI_API_KEY`. |
+| `DEMO_VOICE_MODEL` | `gpt-4.1-mini` (Azure), `gemini-3.1-flash-live-preview` (Gemini) | The realtime model. |
+| `DEMO_VOICE_API_VERSION` | `2026-04-10` | Azure Voice Live API version. |
+| `DEMO_VOICE_NAME` | `en-US-AvaMultilingualNeural` (Azure), `Kore` (Gemini) | The voice callers hear. |
+| `DEMO_VOICE_LANGUAGE` | `en-US` | The language of the seeded agent's calls. |
+| `DEMO_VOICE_DAILY_SECONDS` | 1800 | Seconds of calls per UTC day for the whole demo. |
+| `DEMO_VOICE_MAX_CALL_SECONDS` | 180 | The longest one call may last (30 at least). |
+| `DEMO_VOICE_MAX_CALLS` | 2 | Calls open at the same time. |
+| `DEMO_VOICE_CALLS_PER_HOUR` | 6 | Calls per visitor per hour. |
 | `DEMO_RESET_HOUR_UTC` | 3 | The hour of the nightly reset, or `off` when an outside scheduler runs `scripts.demo_reset`. |
 
 Demo mode also sets, in its own process: `ENABLE_GENERIC_AGENTS=1`,
-`CONVERSATION_INSIGHTS=0` (a background model call per chat), `EMBED_PROVIDER=azure`
+`CONVERSATION_INSIGHTS=0` (a background model call per chat),
+`VOICE_RECORDING_ENABLED=0` (a visitor's voice is never kept), `EMBED_PROVIDER=azure`
 unless another embedder is set (`AZURE_EMBED_DEPLOYMENT`, default
 `text-embedding-3-small`), and removes `ENABLE_ADMIN_MCP`, `MCP_ALLOW_LOCAL_ENDPOINTS`,
 `HTTP_TOOL_ALLOW_HOSTS` and `VOICE_LIVE_SIM_ENABLED`. It does not seed the sample-agents

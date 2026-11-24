@@ -229,14 +229,28 @@ async def agent_voice(
     from runtime.agents.custom import CUSTOM_AGENT_KIND
 
     pin = (profileId or "").strip()
-    await serve_voice_route(
-        websocket,
-        VoiceRoute(
-            agent_slug=slug,
-            # Looked up at call time so the caller check stays the chat route's.
-            authenticate=lambda authorization: _require_caller(authorization),
-            profile_pin=pin if re.fullmatch(r"[0-9a-fA-F-]{32,36}", pin) else None,
-        ),
-        agent_kind=CUSTOM_AGENT_KIND,
-        session_id=sessionId, locale=locale, provider=provider, sim_run=simRun,
-    )
+
+    async def _serve() -> None:
+        await serve_voice_route(
+            websocket,
+            VoiceRoute(
+                agent_slug=slug,
+                # Looked up at call time so the caller check stays the chat route's.
+                authenticate=lambda authorization: _require_caller(authorization),
+                profile_pin=pin if re.fullmatch(r"[0-9a-fA-F-]{32,36}", pin) else None,
+            ),
+            agent_kind=CUSTOM_AGENT_KIND,
+            session_id=sessionId, locale=locale, provider=provider, sim_run=simRun,
+        )
+
+    from demo_mode import settings as demo_settings
+
+    if demo_settings.enabled():
+        # The public demo's voice caps (demo_mode/voice.py): call length,
+        # calls at once and the day's seconds, whatever the agent's own
+        # voice settings say.
+        from demo_mode import voice as demo_voice
+
+        await demo_voice.guard(websocket, _serve)
+        return
+    await _serve()

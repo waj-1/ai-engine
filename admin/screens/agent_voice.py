@@ -1531,7 +1531,15 @@ def generic_voice_panel(
         problem = "No realtime voice model is set for this agent."
     else:
         problem = realtime_problem(model_row.get("provider"), model_row.get("extra_config"))
+    # The public demo: calls may be switched off, or today's seconds used up.
+    from demo_mode import settings as demo_settings
+    from demo_mode import voice as demo_voice
+
+    demo_problem = demo_voice.problem()
+    if demo_problem and (problem is None or not demo_settings.voice_enabled()):
+        problem = demo_problem
     return {
+        "demo_note": demo_voice.note(),
         "path": f"/v1/agents/{slug}/voice",
         "slug": slug,
         "profile_id": owner.get("profile_id"),

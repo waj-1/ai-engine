@@ -181,6 +181,81 @@ def reasoning_effort() -> str:
     return _str("DEMO_REASONING_EFFORT", "low").lower()
 
 
+# --------------------------------------------------------------------------
+# Voice calls (demo_mode/voice.py). Off unless DEMO_VOICE is on.
+# --------------------------------------------------------------------------
+
+#: The variable that holds the key of the demo's Azure Voice Live resource.
+#: A name of its own, so setting it unlocks the demo's voice model and nothing else.
+VOICE_KEY_ENV = "DEMO_VOICE_API_KEY"
+_VOICE_PROVIDERS = ("azure_voice_live", "google_genai")
+_VOICE_MODEL_DEFAULTS = {"azure_voice_live": "gpt-4.1-mini",
+                         "google_genai": "gemini-3.1-flash-live-preview"}
+_VOICE_NAME_DEFAULTS = {"azure_voice_live": "en-US-AvaMultilingualNeural",
+                        "google_genai": "Kore"}
+
+
+def voice_enabled() -> bool:
+    """``DEMO_VOICE``: let visitors place voice calls with the demo's agents.
+    Off by default: a realtime model bills by the minute."""
+    return enabled() and (os.getenv("DEMO_VOICE") or "").strip().lower() in _TRUE
+
+
+def voice_daily_seconds() -> int:
+    """``DEMO_VOICE_DAILY_SECONDS``: seconds of voice calls the whole demo may
+    run per UTC day, all agents and all visitors together."""
+    return _int("DEMO_VOICE_DAILY_SECONDS", 1800)
+
+
+def voice_max_call_seconds() -> int:
+    """``DEMO_VOICE_MAX_CALL_SECONDS``: the longest one call may last."""
+    return _int("DEMO_VOICE_MAX_CALL_SECONDS", 180, 30)
+
+
+def voice_max_calls() -> int:
+    """``DEMO_VOICE_MAX_CALLS``: calls that may be open at the same time."""
+    return _int("DEMO_VOICE_MAX_CALLS", 2, 1)
+
+
+def voice_calls_per_hour() -> int:
+    """``DEMO_VOICE_CALLS_PER_HOUR``: calls one visitor may place per hour."""
+    return _int("DEMO_VOICE_CALLS_PER_HOUR", 6, 1)
+
+
+def voice_provider() -> str:
+    """``DEMO_VOICE_PROVIDER``: ``azure_voice_live`` (default: the resource at
+    ``DEMO_VOICE_ENDPOINT``, key in ``DEMO_VOICE_API_KEY``) or ``google_genai``
+    (Gemini Live, key in ``GOOGLE_API_KEY``)."""
+    value = _str("DEMO_VOICE_PROVIDER", _VOICE_PROVIDERS[0]).lower()
+    return value if value in _VOICE_PROVIDERS else _VOICE_PROVIDERS[0]
+
+
+def voice_endpoint() -> str:
+    """``DEMO_VOICE_ENDPOINT``: the Azure Voice Live resource, e.g.
+    ``https://<resource>.services.ai.azure.com``."""
+    return _str("DEMO_VOICE_ENDPOINT", "").rstrip("/")
+
+
+def voice_model() -> str:
+    """``DEMO_VOICE_MODEL``: the realtime model the demo's calls use."""
+    return _str("DEMO_VOICE_MODEL", _VOICE_MODEL_DEFAULTS[voice_provider()])
+
+
+def voice_api_version() -> str:
+    """``DEMO_VOICE_API_VERSION``: the Azure Voice Live API version."""
+    return _str("DEMO_VOICE_API_VERSION", "2026-04-10")
+
+
+def voice_name() -> str:
+    """``DEMO_VOICE_NAME``: the voice callers hear."""
+    return _str("DEMO_VOICE_NAME", _VOICE_NAME_DEFAULTS[voice_provider()])
+
+
+def voice_language() -> str:
+    """``DEMO_VOICE_LANGUAGE``: the language of the demo's calls."""
+    return _str("DEMO_VOICE_LANGUAGE", "en-US")
+
+
 #: Variables that would loosen the demo's lock-down, and what demo mode makes of them.
 _REMOVED_IN_DEMO = (
     "MCP_ALLOW_LOCAL_ENDPOINTS",   # tools on local/internal addresses (the SSRF guard's escape)
@@ -191,6 +266,7 @@ _REMOVED_IN_DEMO = (
 _FORCED_IN_DEMO = {
     "CONVERSATION_INSIGHTS": "0",  # a background sweep that calls a model on every chat
     "ENABLE_GENERIC_AGENTS": "1",  # the demo agents answer at /v1/agents/<slug>/chat
+    "VOICE_RECORDING_ENABLED": "0",  # a visitor's voice is never kept (everyone shares one login)
 }
 
 
