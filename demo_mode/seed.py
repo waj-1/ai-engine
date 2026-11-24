@@ -20,6 +20,8 @@ install):
 * the agents Support desk (tools, knowledge, and the Billing helper as its
   specialist), Billing helper, Sales assistant and IT helpdesk, each with
   its own instructions, and the Builder assistant (demo_mode/assistant.py);
+* with ``DEMO_VOICE`` on and its model set up, the realtime model row and
+  voice turned on for the Support desk (demo_mode/voice.py);
 * a five-case test suite for the Support desk;
 * the channel "Northwind website", allowed to talk to the demo agents only;
 * a handful of stored example conversations (no model is called).
@@ -125,6 +127,38 @@ def ensure_models(client, env: str) -> Dict[str, str]:
             ids[role] = _first(client.table("agent_models").insert(row).execute())["model_id"]
     ids.setdefault("judge", ids["builder"])
     return ids
+
+
+def ensure_voice(client, env: str, agents: Dict[str, str]) -> Optional[str]:
+    """The demo's realtime model row, and voice turned on for the Support
+    desk so a visitor can press Call without setting anything up. Nothing
+    unless ``DEMO_VOICE`` is on and its model is set up (`demo_mode.voice`).
+    The model row follows the settings, like the chat rows. The agent's voice
+    settings are written only while it has none, so a visitor's change stays
+    until the nightly reset. Returns the model id."""
+    from demo_mode import voice
+
+    if not voice.ready():
+        return None
+    row = voice.voice_model_row(env)
+    found = _first(client.table("agent_models").select("model_id")
+                   .eq("name", row["name"]).eq("environment", env).limit(1).execute())
+    if found:
+        client.table("agent_models").update(
+            {k: row[k] for k in ("provider", "model_string", "extra_config", "is_active")}
+        ).eq("model_id", found["model_id"]).execute()
+        model_id = found["model_id"]
+    else:
+        model_id = _first(client.table("agent_models").insert(row).execute())["model_id"]
+    profile_id = agents.get(voice.CALL_SLUG)
+    if profile_id:
+        current = _first(client.table("agent_profiles").select("voice_config")
+                         .eq("profile_id", profile_id).limit(1).execute()) or {}
+        if not current.get("voice_config"):
+            client.table("agent_profiles").update(
+                {"voice_config": voice.voice_config(model_id)}
+            ).eq("profile_id", profile_id).execute()
+    return model_id
 
 
 def ensure_categories(client) -> Dict[str, str]:
@@ -384,6 +418,7 @@ def seed(client=None) -> Dict[str, Any]:
     kb_id = ensure_knowledge(client)
     server_id = ensure_tool_server(client)
     agents = ensure_agents(client, env, models, categories, kb_id, server_id)
+    voice_model_id = ensure_voice(client, env, agents)
     suite_id = ensure_suite(client, agents[content.SUPPORT_SLUG], models["judge"])
     channel_id = ensure_channel(client)
     conversations = ensure_conversations(client, env)
@@ -395,4 +430,4 @@ def seed(client=None) -> Dict[str, Any]:
         pass
     return {"environment": env, "models": models, "agents": agents, "suite_id": suite_id,
             "knowledge_id": kb_id, "tool_server_id": server_id, "channel_id": channel_id,
-            "conversations_added": conversations}
+            "conversations_added": conversations, "voice_model_id": voice_model_id}

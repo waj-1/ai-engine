@@ -162,9 +162,18 @@ Off by default. With it on, the install is a public, one-click demo:
   API keys, Environment variables (also the `tab=variables` of Releases), Team &
   access, Voice budgets, Diagnostics (drift, runtime, telemetry, engineering tests),
   Developer docs, deployments and deploy runs, code deploy / rollback, the background
-  jobs list, prompt optimisation, `/mcp`, `/agents`, and voice calls. Models,
+  jobs list, prompt optimisation, `/mcp`, `/agents`, and voice calls (see **Voice** below). Models,
   scheduled test runs, model comparisons, voice checks and Activity are read-only.
   Locked screens are hidden from the sidebar, Settings and search too.
+- **Voice.** Off unless `DEMO_VOICE=true` (`demo_mode/voice.py`). With it on and a
+  realtime model set up, the seed turns voice on for the Support desk, the banner
+  links to its Call button (`GET /admin/demo/call`), and every call on
+  `WS /v1/agents/<slug>/voice` runs under the demo's own caps: call length, calls at
+  the same time, calls per visitor per hour, and seconds per day for the whole demo
+  (bucket `voice_seconds` in `demo_usage_daily`). A refused or ended call closes
+  with code 4429 and a sentence the Call button shows. The Voice tab shows the
+  limits instead of the Voice budgets link. Calls are never recorded in demo mode.
+  `/voice/live` and Settings › Voice budgets stay locked.
 - **Tools.** A tool server or HTTP tool at a local, private or internal address is
   refused when saved and when called (no allow-list widens it), and no process
   secret (`auth_env_var`) is sent to any address. Knowledge bases stay on the

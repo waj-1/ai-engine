@@ -8,6 +8,7 @@ unchanged. ``docs/deploy/demo.md`` describes what it does and every setting.
     policy       which routes a visitor may not reach, and the refusal
     gate         the ASGI middleware that applies the policy and the caps
     limits       per-visitor rate limits and the global daily turn cap
+    voice        voice calls: the switch, the caps and the seeded voice setup
     account      the demo admin user and the "Try the demo" sign-in
     northwind    the fictional Northwind tool server, served in-process
     content      the demo's agents, documents, tests and conversations

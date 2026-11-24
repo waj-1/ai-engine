@@ -70,6 +70,34 @@ async def demo_enter(request: Request) -> Response:
     return redirect
 
 
+def _call_page_sync() -> str:
+    """The Voice tab of the agent a visitor can call (demo_mode.voice.CALL_SLUG)."""
+    from core.auth import get_service_client
+    from demo_mode import voice
+
+    rows = (get_service_client().table("agent_profiles").select("profile_id")
+            .eq("agent_kind", "custom").eq("slug", voice.CALL_SLUG).eq("environment", "staging")
+            .limit(1).execute().data or [])
+    if not rows:
+        return PORTAL
+    return f"/admin/agents/{rows[0]['profile_id']}/voice?env=staging#voice-call"
+
+
+@router.get("/demo/call")
+async def demo_call() -> Response:
+    """The banner's "place a voice call" link: straight to the Call button."""
+    from demo_mode import settings
+
+    if not settings.voice_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
+    try:
+        target = await asyncio.to_thread(_call_page_sync)
+    except Exception as exc:  # noqa: BLE001 — the agents list is a fine fallback
+        logger.warning("demo: call page lookup failed (%s)", type(exc).__name__)
+        target = PORTAL
+    return RedirectResponse(url=target, status_code=303)
+
+
 # ---------------------------------------------------------------------------
 # The builder assistant: POST /admin/demo/assistant/chat
 # ---------------------------------------------------------------------------

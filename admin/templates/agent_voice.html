@@ -81,7 +81,11 @@
     <dt>Address</dt>
     <dd><code>WS {{ generic_voice.path }}</code>{% if not generic_voice.published %} <span class="chip chip-neutral">draft: only a test call from here reaches it</span>{% endif %}</dd>
     <dt>Daily call budget</dt>
+    {% if generic_voice.demo_note %}
+    <dd data-demo-voice-note>{{ generic_voice.demo_note }}</dd>
+    {% else %}
     <dd>Counted per agent, under <code>{{ generic_voice.budget_id }}</code>. Give it its own allowance in <a href="/admin/voice-budgets">Settings › Voice budgets</a>; otherwise the server default applies.</dd>
+    {% endif %}
   </dl>
   {% if generic_voice.problem %}
   {% call alert('warning') %}

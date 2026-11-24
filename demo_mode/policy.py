@@ -35,7 +35,7 @@ BLOCKED_PREFIXES: Tuple[str, ...] = (
     "/admin/demo/reset",           # reserved: never a visitor action
     "/mcp",                        # the admin MCP server
     "/agents",                     # the anonymous sample-agents portal
-    "/voice/live",                 # voice calls (realtime models are not capped)
+    "/voice/live",                 # the plain voice socket (a call names its agent, below)
 )
 
 # Refused for anything but GET/HEAD: the page may be read, not changed.
@@ -52,8 +52,12 @@ _BLOCKED_PATTERNS = (
     re.compile(r"^/admin/env/[^/]+/(deploy|rollback)$"),     # code deploys
     re.compile(r"^/admin/jobs/?$"),                           # the background jobs list
     re.compile(r"^/admin/prompts/[^/]+/optimize$"),           # an extra model call per click
-    re.compile(r"^/v1/agents/[^/]+/voice$"),                  # voice calls
 )
+
+# A voice call with one of the demo's agents: refused unless ``DEMO_VOICE`` is
+# on, and then capped by `demo_mode.voice` (call length, calls at once, the
+# day's seconds).
+_VOICE_CALL = re.compile(r"^/v1/agents/[^/]+/voice$")
 
 #: Requests counted against a visitor's limits: (bucket, method, path pattern).
 _LIMITED = (
@@ -96,6 +100,8 @@ def refusal(method: str, path: str, query: Optional[Mapping[str, str]] = None) -
     for pattern in _BLOCKED_PATTERNS:
         if pattern.match(p):
             return "This part of the engine is switched off in the public demo."
+    if _VOICE_CALL.match(p) and not voice_on():
+        return "Voice calls are switched off in the public demo."
     if m not in ("GET", "HEAD"):
         for prefix in READ_ONLY_PREFIXES:
             if _under(p, prefix):
@@ -123,6 +129,12 @@ def demo_on() -> bool:
     from demo_mode import settings
 
     return settings.enabled()
+
+
+def voice_on() -> bool:
+    from demo_mode import settings
+
+    return settings.voice_enabled()
 
 
 def tool_endpoint_problem(endpoint: str, auth_env_var: Optional[str] = None) -> Optional[str]:
