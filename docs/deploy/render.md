@@ -26,7 +26,8 @@ Five services in one region, on Render's private network:
 | `ai-engine-db` | Private service | Postgres with pgvector, built from `deploy/paas/db.Dockerfile`, with a 10 GB disk | `standard` |
 
 All five are paid instances, and the disk is billed too. A persistent disk
-and private services are not available on Render's free plan. Check Render's
+and private services are not available on Render's free plan. Render asks for a
+payment card on the account before it applies this Blueprint. Check Render's
 pricing page before you deploy. You can change a plan in the dashboard later.
 
 Why not Render's managed Postgres: the engine reaches its data through the
