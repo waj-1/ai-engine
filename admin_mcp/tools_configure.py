@@ -80,8 +80,8 @@ def get_profile(profile_id: str = "", agent_kind: str = "", slug: str = "",
     `mcp_attachments` (resolved from `agent_profile_mcp_servers`, the join
     the flag-on resolver reads — see
     core/agent_profile.py::_fetch_mcp_attachments). The two can disagree
-    during the #1222 dark-launch window; `mcp_attachments` is the
-    forward-looking source of truth. `agent_type` is the agent's
+    while a profile still carries old labels; `mcp_attachments` is the
+    source of truth. `agent_type` is the agent's
     user-defined category ({slug, display_name, color}) or null.
 
     `fields` trims the raw `profile` row to the named columns (the row
@@ -207,12 +207,12 @@ def update_profile(profile_id: str,
     is no `live` sub-object any more). Both voice arguments REFUSE a top-level
     `live` key: the runtime's compat shim resolves a nested block ALONE, so
     re-creating one does not add a setting, it hides every flat key and takes
-    the tenant's voice config offline silently.
+    the agent's voice config offline silently.
 
     `voice_config` REPLACES the entire column — passing
     `{"barge_in_enabled": true}` WIPES every other voice key
     (answer_watchdog_sec, agent_profile_slug, budget/ceiling knobs, ...),
-    exactly the silent-config-lever failure mode CLAUDE.md warns about. Use
+    and nothing reports it. Use
     `voice_config_patch` instead to set one lever: it's deep-merged onto the
     profile's CURRENT voice_config (nested dicts merged key-by-key; a
     `null` value in the patch deletes that key; scalars/lists replace
@@ -697,8 +697,7 @@ def prompts(action: Literal["get", "list", "list_versions", "create_version",
     publish_from_repo (see below). To rewrite a prompt from a failing eval
     run, use the prompt_optimize tool.
 
-    publish_from_repo replaces the docker-exec-a-python-snippet recipe
-    CLAUDE.md documents for getting a repo prompt constant onto a live
+    publish_from_repo is the way to get a repo prompt constant onto a live
     stack: it imports the constant itself (so a half-Arabic body never
     passes through the MCP client/shell, where quoting would corrupt it),
     diffs it against what's actually served, and — with confirm — inserts
@@ -1273,8 +1272,8 @@ def voice_budgets(action: Literal["list", "get", "set", "delete"],
                   env: Env = "staging") -> Dict[str, Any]:
     """Per-tenant daily duplex-voice allowances (ai_voice_budgets, audio
     seconds/day). action: list (each row includes used_today) | get |
-    set (business_id + daily_seconds; upsert — business_id may be a raw
-    merchant id, non-UUIDs are mapped to the same derived row the voice edge
+    set (business_id + daily_seconds; upsert — business_id may be any
+    tenant id, non-UUIDs are mapped to the same derived row the voice edge
     charges) | delete (tenant falls back to the engine default,
     VOICE_LIVE_DAILY_SECONDS). Mirrors the portal's Duplex-voice budgets card
     (on any realtime model's detail page — the allowance is per TENANT, not
@@ -1631,8 +1630,8 @@ def mcp_servers(action: Literal["list", "get", "create", "update", "delete",
                  timeout_seconds: Optional[int] = None,
                  confirm: bool = False) -> Dict[str, Any]:
     """CRUD + bundle-membership for the MCP-server registry
-    (agent_mcp_servers / agent_mcp_tools / agent_profile_mcp_servers) —
-    covers the #1222 bundle-vs-external model.
+    (agent_mcp_servers / agent_mcp_tools / agent_profile_mcp_servers):
+    both kinds of server, bundles and external endpoints.
 
     A server row is either source="external" (a live MCP endpoint reached
     over transport/endpoint, optionally filtered by the legacy server-level

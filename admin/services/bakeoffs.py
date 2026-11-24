@@ -99,35 +99,26 @@ def create_bakeoff(*, name: str, profile_id: str,
     # written. Suites whose runner_kind has a built-in deterministic scorer
     # (a plugin runner's `default_scorer`) grade themselves and are
     # correctly evaluator-less, so they're exempt — see runner_kind_needs_judge.
-    from admin.services.eval_scorers import suite_needs_judge
+    from admin.services.eval_scorers import JUDGE_MODEL_HINT, suite_judge_problem
 
     suite_rows = (client.table("agent_eval_suites")
                   .select("suite_id, name, evaluator_model_id, runner_kind, scenarios")
                   .in_("suite_id", suite_ids)
                   .execute().data or [])
     suite_by_id = {r.get("suite_id"): r for r in suite_rows}
-    missing_judge = [
-        sid for sid in suite_ids
-        if suite_needs_judge(suite_by_id.get(sid) or {})
-        and not (suite_by_id.get(sid) or {}).get("evaluator_model_id")
-    ]
-    if missing_judge:
+    problems = []
+    for sid in suite_ids:
+        suite = suite_by_id.get(sid) or {}
+        problem = suite_judge_problem(client, suite)
+        if problem:
+            problems.append(f"{suite.get('name') or sid} ({problem})")
+    if problems:
         # Name the suites and the actual fix location: the suite editor's
-        # Evaluator model field. The boot seeder only fills evaluator_model_id
-        # when a judge-capable (Gemini/Claude) model row exists — an
-        # Azure-only catalog legitimately seeds judged suites evaluator-less,
-        # and the operator fixing THIS error needs to know where to go, not
-        # just which UUIDs are unhappy.
-        labels = [
-            (suite_by_id.get(sid) or {}).get("name") or str(sid)
-            for sid in missing_judge
-        ]
+        # Judge model field. The check matches what the runner can build
+        # (admin/e2e_runner._build_judge): any provider the engine calls.
         raise ValueError(
-            "comparison runs require a model judge on every judged suite, and "
-            "no evaluator model is set on: " + ", ".join(labels) + ". "
-            "Set one in the suite editor (/admin/evals/suites/{suite_id} → "
-            "\"Evaluator model\" — the judge must be a Gemini or Claude model; "
-            "other providers cannot be built as judges)."
+            "comparison runs require a model judge on every judged suite: "
+            + "; ".join(problems) + ". " + JUDGE_MODEL_HINT + "."
         )
 
     # Pre-flight #2: every variant's pinned profile_version_id must belong to

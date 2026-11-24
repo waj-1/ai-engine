@@ -11,7 +11,7 @@
       <h2 class="section-title">People</h2>
       <p class="caption mt-xs" style="max-width:640px;">
         <strong>Admins</strong> can sign in to this portal and change every agent and setting.
-        Everyone else keeps their access to the WAJ apps but can't open the portal.
+        {{ team_copy.others }}
         Each change is recorded in <a href="/admin/audit?what=team">Activity</a>.
       </p>
     </div>
@@ -39,8 +39,7 @@
               <div>
                 <div>{{ p.label }}{% if p.is_me %} <span class="caption">(you)</span>{% endif %}</div>
                 <div class="caption">
-                  {% if p.phone and p.email %}{{ p.phone }} · {% endif %}{% if p.app_role %}{{ p.app_role }} in the WAJ app{% endif %}
-                  {% if p.is_service %} · service account{% endif %}
+                  {% set _bits = [] %}{% if p.phone and p.email %}{% set _ = _bits.append(p.phone) %}{% endif %}{% if p.app_role_text %}{% set _ = _bits.append(p.app_role_text) %}{% endif %}{% if p.is_service %}{% set _ = _bits.append('service account') %}{% endif %}{{ _bits|join(' · ') }}
                 </div>
               </div>
             </div>

@@ -156,6 +156,14 @@ def list_tools_cached(endpoint: str, auth_token: Optional[str] = None, *,
     return tools
 
 
+def last_listed_tools(endpoint: str, auth_token: Optional[str] = None) -> Optional[list]:
+    """The tools this process last saw ``endpoint`` list (Test connection,
+    an agent's turn, a portal read), however old; None if it never listed.
+    Never calls out — for screens that count a server's tools."""
+    cached = _TOOLS_CACHE.get((endpoint, auth_token))
+    return cached[1] if cached is not None else None
+
+
 def clear_mcp_pool() -> None:
     """Drop pooled sessions + cached tool lists (tests / admin reconnect)."""
     _POOL.clear()

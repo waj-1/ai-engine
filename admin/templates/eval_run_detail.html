@@ -1,6 +1,7 @@
 {% extends "_base.html" %}
 {% from "_components/chip.html" import chip %}
 {% from "_components/status_chip.html" import run_status, delta %}
+{% from "_components/callout.html" import alert %}
 {# Defaults so the template also renders from a bare context (tests, older callers). #}
 {% set target = target if target is defined else none %}
 {% set suite = suite if suite is defined and suite else {} %}
@@ -14,7 +15,9 @@
 {% set total = cases|length %}
 {% set n_failed = cases|selectattr('outcome', 'equalto', 'failed')|list|length %}
 {% set n_flaky = cases|selectattr('outcome', 'equalto', 'flaky')|list|length %}
-{% set n_passed = total - n_failed - n_flaky %}
+{% set ungraded_cases = cases|selectattr('outcome', 'equalto', 'ungraded')|list %}
+{% set n_ungraded = ungraded_cases|length %}
+{% set n_passed = total - n_failed - n_flaky - n_ungraded %}
 {% set n_broke = cases|selectattr('broke')|list|length %}
 {% set n_fixed = cases|selectattr('fixed')|list|length %}
 {% set title = (suite.name|humanize) if suite else ('Real conversations check' if not run.suite_id else 'Test run') %}
@@ -50,12 +53,14 @@
     <p class="verdict-sentence">
       {% if run.status in ('queued','running') %}
         Running now — results appear here as soon as it finishes.
+      {% elif run.status == 'errored' and n_ungraded and n_ungraded == total %}
+        No case could be judged, so the run has no score.
       {% elif run.status == 'errored' %}
         The run stopped with an error before it could be scored.
       {% elif run.status == 'cancelled' %}
         The run was cancelled; cases that finished are kept below.
       {% elif total %}
-        {{ n_passed }} of {{ total }} cases passed{% if n_flaky %}, {{ n_flaky }} only some of the time{% endif %}.
+        {{ n_passed }} of {{ total }} cases passed{% if n_flaky %}, {{ n_flaky }} only some of the time{% endif %}{% if n_ungraded %}; {{ n_ungraded }} could not be judged and {{ 'is' if n_ungraded == 1 else 'are' }} left out of the score{% endif %}.
         {% if target is not none and run.score is not none %}
           {% if run.score >= target %}Meets the target{% else %}{{ (target - run.score)|pts(signed=False) }} below the target{% endif %}{% if prev_run %}; {% if n_broke %}{{ n_broke }} case{{ 's' if n_broke != 1 else '' }} broke{% else %}nothing broke{% endif %}{% if n_fixed %} and {{ n_fixed }} got fixed{% endif %} since the previous run{% endif %}.
         {% endif %}
@@ -64,7 +69,7 @@
       {% endif %}
     </p>
     {% if total %}
-    <div class="passbar" role="img" aria-label="{{ n_passed }} passed, {{ n_flaky }} flaky, {{ n_failed }} failed">
+    <div class="passbar" role="img" aria-label="{{ n_passed }} passed, {{ n_flaky }} flaky, {{ n_failed }} failed{% if n_ungraded %}, {{ n_ungraded }} not judged{% endif %}">
       <span class="ok" style="width:{{ (n_passed / total * 100)|round(2) }}%"></span><span class="warn" style="width:{{ (n_flaky / total * 100)|round(2) }}%"></span><span class="err" style="width:{{ (n_failed / total * 100)|round(2) }}%"></span>
     </div>
     {% endif %}
@@ -95,6 +100,13 @@
 </form>
 {% endif %}
 
+{% if n_ungraded %}
+{% set ug_note = (ungraded_cases[0].attempts|selectattr('grading_note')|map(attribute='grading_note')|first) or '' %}
+<section class="section" data-ungraded-note>
+  {% call alert('warning') %}<strong>{{ n_ungraded }} case{{ 's' if n_ungraded != 1 else '' }} could not be judged.</strong> {{ ug_note }}{% endcall %}
+</section>
+{% endif %}
+
 {% if run.error %}
 <section class="section">
   <h2>Error</h2>
@@ -117,11 +129,12 @@
   <div class="row between">
     <h2 class="section-title mb-0">Cases</h2>
     {% if total %}
-    {% set default_filter = show if show in ('failed','broke','passed','all') else ('failed' if (n_failed + n_flaky) else 'all') %}
+    {% set default_filter = show if show in ('failed','broke','passed','ungraded','all') else ('failed' if (n_failed + n_flaky) else ('ungraded' if n_ungraded else 'all')) %}
     <div class="segmented" role="group" aria-label="Show cases" data-case-filter data-default="{{ default_filter }}">
       <button type="button" data-filter="failed">Failed only ({{ n_failed + n_flaky }})</button>
       {% if prev_run %}<button type="button" data-filter="broke">Broke since last run ({{ n_broke }})</button>{% endif %}
       <button type="button" data-filter="passed">Passed ({{ n_passed }})</button>
+      {% if n_ungraded %}<button type="button" data-filter="ungraded">Not judged ({{ n_ungraded }})</button>{% endif %}
       <button type="button" data-filter="all">All ({{ total }})</button>
     </div>
     {% endif %}
@@ -138,9 +151,10 @@
         <span class="case-status">
           {% if c.outcome == 'passed' %}{{ run_status('passed') }}
           {% elif c.outcome == 'flaky' %}<span class="chip chip-warn"><span class="chip-dot"></span>Flaky {{ c.passes }}/{{ c.n }}</span>
+          {% elif c.outcome == 'ungraded' %}<span class="chip chip-neutral" title="No judge could grade this case and it has nothing else to check">Not judged</span>
           {% else %}{{ run_status('failed') }}{% endif %}
         </span>
-        <span class="case-name">{{ c.scenario_id|humanize }}</span>
+        <span class="case-name" dir="auto">{{ c.display_name or (c.scenario_id|humanize) }}</span>
         {% set n_tool_err = c.attempts|map(attribute='tool_error_count')|select('number')|sum %}
         <span class="case-flag">{% if c.broke %}<span class="chip chip-err" title="Passed in the previous run">Broke</span>{% elif c.fixed %}<span class="chip chip-ok" title="Failed in the previous run">Fixed</span>{% endif %}{% if n_tool_err %} <span class="chip chip-warn" title="Tool calls that returned an error">{{ n_tool_err }} tool error{{ 's' if n_tool_err != 1 else '' }}</span>{% endif %}</span>
         <span class="case-reason" dir="auto">{{ c.reason }}</span>
@@ -153,9 +167,10 @@
         </div>
 
         {% set fails = (vd.checks or [])|rejectattr('ok')|list %}
-        {% if c.outcome != 'passed' and (failing.reason or fails or vd.limit_breaches or failing.missing_substrings or failing.missing_expected_tools or failing.errored_expected_tools or failing.error) %}
+        {% if c.outcome != 'passed' and (failing.reason or fails or vd.limit_breaches or failing.missing_substrings or failing.missing_expected_tools or failing.errored_expected_tools or failing.error or failing.grading_note) %}
         <div>
-          <div class="eyebrow">Why it failed</div>
+          <div class="eyebrow">{{ 'Why it was not judged' if c.outcome == 'ungraded' else 'Why it failed' }}</div>
+          {% if failing.grading_note and not failing.reason %}<p dir="auto">{{ failing.grading_note }}</p>{% endif %}
           {% if failing.reason %}<div class="markdown-body" data-md>{{ failing.reason }}</div>{% endif %}
           {% if failing.error %}<p class="error-text">{{ failing.error }}</p>{% endif %}
           {% if fails %}
@@ -372,7 +387,7 @@
       var shown = 0;
       rows.forEach(function (r) {
         var o = r.getAttribute('data-outcome');
-        var on = f === 'all' || (f === 'failed' && o !== 'passed') || (f === 'passed' && o === 'passed')
+        var on = f === 'all' || (f === 'failed' && (o === 'failed' || o === 'flaky')) || (f === o && (o === 'passed' || o === 'ungraded'))
           || (f === 'broke' && r.getAttribute('data-broke') === '1');
         r.hidden = !on; if (on) shown++;
       });

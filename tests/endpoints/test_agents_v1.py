@@ -49,8 +49,8 @@ def wired(monkeypatch):
         seen["built"].append((slug, kw))
         return _StubAgent()
 
-    async def _run_turn(*, agent, message, identity, profile):
-        seen.update(message=message, identity=identity)
+    async def _run_turn(*, agent, message, identity, profile, extra_context=None):
+        seen.update(message=message, identity=identity, extra_context=extra_context)
         yield {"type": "answer", "content": "Hi!"}
         yield {"type": "done"}
 
@@ -76,6 +76,8 @@ def test_streams_a_turn_for_the_agent_named_by_slug(wired):
     assert identity.session_id == SESSION and identity.source == "api"
     assert identity.session_metadata == {"agent_slug": "helpdesk"}
     assert seen["message"] == "hello"
+    # The caller reaches the agent, so it can read ITS memories about them.
+    assert seen["extra_context"] == {"user_id": "u-1"}
 
 
 def test_session_id_and_locale_are_optional(wired):

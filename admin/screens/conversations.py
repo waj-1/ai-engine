@@ -97,7 +97,7 @@ def _session_rows(client, sids: List[str]) -> Dict[str, Dict[str, Any]]:
     try:
         rows = (
             client.schema("public").table("ai_chat_sessions")
-            .select("id, business_id, title, message_count, agent_kind")
+            .select("id, business_id, title, message_count, agent_kind, metadata")
             .in_("id", sids).execute().data or []
         )
     except Exception as exc:  # noqa: BLE001
@@ -155,7 +155,11 @@ def enrich_groups(groups: List[Dict[str, Any]], *, env: str,
         srow = sessions.get(cid or "") or {}
         kind = g.get("agent_kind") or srow.get("agent_kind")
         is_voice = any((t.get("topSpanName") or "") in VOICE_TOP_SPANS for t in ts)
-        g["agent_name"] = pl.agent_label(kind, agent_names)
+        meta = srow.get("metadata") if isinstance(srow.get("metadata"), dict) else {}
+        slug = g.get("agent_slug") or meta.get("agent_slug")
+        # Every generic agent shares one kind; its slug names the agent.
+        g["agent_name"] = (_agent_slug_name(kind, slug) if slug
+                           else pl.agent_label(kind, agent_names))
         g["channel_name"] = (
             channel_names.get(g.get("channel_slug")) or
             (pl.humanize_slug(g.get("channel_slug")) if g.get("channel_slug") else None)
@@ -173,6 +177,41 @@ def enrich_groups(groups: List[Dict[str, Any]], *, env: str,
         g["started"] = friendly_time(g.get("earliest_start"), now)
         g["duration"] = friendly_duration(g.get("duration_ms_total"))
         g["newest_trace_id"] = ts[0].get("id") if ts else None
+
+
+def _agent_slug_name(kind: Optional[str], slug: str) -> str:
+    from admin.agent_kinds import agent_choice, agent_label
+
+    return agent_label(agent_choice(kind or "", slug)) or pl.humanize_slug(slug)
+
+
+def agent_filter_options(kinds: List[str], agent_names: Dict[str, str],
+                         env: Optional[str]) -> List[Dict[str, str]]:
+    """The Agent filter: one option per AGENT. A product kind is one agent;
+    the generic agents, which all share the kind ``custom``, are offered one
+    by one as ``custom:<slug>`` (the value ``load_traces_list`` and the saved
+    chats narrow on). Name order.
+
+    The options come from the agent profiles (``build_agent_choices``, the
+    list every Build-area picker uses), whatever the screen reads its
+    conversations from, and across environments: Conversations opens on
+    production, where an agent made from a template has no row until it is
+    released, yet its test chats are already listed."""
+    from admin.agent_kinds import (agent_label, build_agent_choices,
+                                   expand_agent_choices)
+
+    from admin.screens.observability import _BACKGROUND_AGENT_KINDS
+
+    kinds = list(kinds)
+    for k in build_agent_choices():
+        if k not in kinds and k not in _BACKGROUND_AGENT_KINDS:
+            kinds.append(k)
+    out = []
+    for value in expand_agent_choices(kinds):
+        name = (agent_label(value) if ":" in value
+                else pl.agent_label(value, agent_names))
+        out.append({"kind": value, "name": name})
+    return sorted(out, key=lambda o: o["name"].lower())
 
 
 def _single_groups(traces: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -265,10 +304,7 @@ def build_conversations_context(
         # Every agent with a name — on a partner build only its own.
         if k not in kinds and k not in _BACKGROUND_AGENT_KINDS and in_build(k):
             kinds.append(k)
-    agent_options = sorted(
-        ({"kind": k, "name": pl.agent_label(k, agent_names)} for k in kinds),
-        key=lambda o: o["name"].lower(),
-    )
+    agent_options = agent_filter_options(kinds, agent_names, env)
     more_filters_active = bool(tool) or include_background or not group_by_session or bool(status)
     return {
         "groups": groups,

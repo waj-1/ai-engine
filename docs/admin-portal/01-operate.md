@@ -330,7 +330,12 @@ Sidebar **Conversations** · `GET /admin/observability` (same page:
 
 Answers "what happened in this conversation?" and "what went wrong?".
 
-**Filters** (one row above the panes): period, agent (display names), channel,
+**Filters** (one row above the panes): period, agent (display names; one entry per
+agent, built from the agent profiles of every environment with
+`agent_kinds.build_agent_choices()` whether or not tracing is on, so an agent that
+only exists in staging is offered on the production view too — a generic agent is `?agent_kind=custom:<slug>`, matched on the trace's
+`waj.agent_slug` (set by `/v1/agents/{slug}/chat` and its voice route), else on the
+chat session's `metadata.agent_slug`; the row's agent name comes from the same slug), channel,
 **outcome** (`?outcome=attention|handoff|ok`), search. **More filters** (collapsed):
 action used (tool), technical status (`?status=success|error`, kept for old links),
 *One row per agent reply* (`?group=none`, the old flat trace list) and *Include
@@ -368,7 +373,9 @@ or first message, agent · channel · started · duration · messages, outcome c
   above the transcript. Token counts, cache badges, heat colours and raw model
   output are not shown here.
 - **Call audio** — every recording of the conversation (unchanged loader).
-- **Technical** — the old Details (trace metrics, linked chat session, tools and
+- **Technical** — the old Details (trace metrics, linked chat session — its
+  **Messages** is the count of saved user and agent messages in `ai_chat_messages`,
+  never the unmaintained `ai_chat_sessions.message_count` column — tools and
   error steps), the **Steps** waterfall + **Step detail** (former middle/right
   panes) and per-reply token counts / raw model output.
 

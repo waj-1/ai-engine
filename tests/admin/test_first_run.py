@@ -694,3 +694,41 @@ def test_setup_posts_are_rate_limited_like_the_login(stack):
 
     source = inspect.getsource(main.security_and_rate_limit_middleware)
     assert '"/admin/login", "/admin/logout", "/admin/setup"' in source
+
+
+# --------------------------------------------------------------------------
+# 7. The brand mark (each step showed an empty accent square next to its title)
+# --------------------------------------------------------------------------
+
+_EMPTY_TILE = re.compile(r'<span style="width:28px;height:28px;background:var\(--accent\)[^"]*"></span>')
+
+
+def _mark(html):
+    return html[html.index("<body"):html.index('<ol class="setup-steps"')]
+
+
+def test_every_setup_step_shows_the_engine_mark(stack, client, capsys, monkeypatch):
+    """The mark the sidebar draws, not an empty tile: in a build without a
+    product, the engine's own glyph."""
+    monkeypatch.setattr("admin.nav.has_product", lambda: False)
+    monkeypatch.setattr(handlers, "_first_agent_slug", lambda: None)
+    install_api_keys(monkeypatch)
+    code = boot(capsys)
+    pages = [client.get("/admin/setup")]
+    submit(client, code)
+    pages += [client.get("/admin/setup/model-key"), client.get("/admin/setup/api-key")]
+    for page in pages:
+        assert page.status_code == 200
+        head = _mark(page.text)
+        assert 'data-brand-glyph="engine"' in head and "<svg" in head
+        assert not _EMPTY_TILE.search(page.text)
+    login = client.get("/admin/login")
+    assert 'data-brand-glyph="engine"' in login.text
+
+
+def test_the_sidebar_draws_the_same_mark(client, monkeypatch):
+    monkeypatch.setattr("admin.nav.has_product", lambda: False)
+    monkeypatch.delenv("PORTAL_NAME", raising=False)
+    page = client.get("/admin/live")
+    nav = page.text[page.text.index('class="nav-brand"'):page.text.index('class="nav-label"')]
+    assert 'data-brand-glyph="engine"' in nav

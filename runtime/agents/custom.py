@@ -11,6 +11,9 @@ one has no behaviour of its own. What a custom agent does is entirely its
                  (resolved by `runtime.tools._mcp_resolver`, same as every agent)
   knowledge      `data_source_ids` -> the `search_knowledge` tool
   sub-agents     delegatable downstream profiles -> `ask_<slug>` tools
+  memory         `memory_config` (off unless enabled): facts about the caller,
+                 kept under THIS agent's slug, never shared with another
+                 custom agent (core/memory/store.scope_query)
 
 So an agent is created in the portal or over MCP, never by a code change.
 MANY profiles share the kind and are told apart by slug, which is why the
@@ -36,6 +39,9 @@ from common.announce import contains_announce, reply_ends_in_question
 from core.agent_profile import AgentProfileLoader, Profile, _default_environment
 from core.base_agent import BaseStreamingAgent, TokenBudgetExceeded
 from core.config import AGENT_CONFIG
+from core.memory import service as memory_service
+from core.memory.config import resolve_memory_config
+from core.memory.store import default_client as _memory_client
 from core.tool_provenance import record_tool_result
 from runtime.agent import RuntimeAgent
 from runtime.prompt_cache import cached_system_message
@@ -47,6 +53,9 @@ logger = logging.getLogger(__name__)
 CUSTOM_AGENT_KIND = "custom"
 
 _MAX_ITERATIONS = 8
+
+# Background memory saves, held so they are not collected mid-flight.
+_MEMORY_WRITES: set = set()
 
 # Served only when a profile has no instructions yet (a just-created draft).
 # Deliberately says nothing about who the agent is: that is the operator's job.
@@ -117,6 +126,37 @@ class CustomRuntimeAgent(RuntimeAgent, BaseStreamingAgent):
             return None
 
     # --- per-turn context ---------------------------------------------------
+    def _memory_on(self, user_id: Optional[str], voice_turn: bool) -> bool:
+        """Memory runs for a text turn with a known caller, when the agent's
+        memory settings turn it on. Voice turns skip it: the read path awaits
+        an embedding before the model call."""
+        if voice_turn or not user_id:
+            return False
+        return bool(resolve_memory_config(getattr(self.profile, "memory_config", None) or {}).get("enabled"))
+
+    async def _memory_block(self, user_id: str, session_id: Optional[str], message: str):
+        """(block, retrieved ids, summary used) for this agent's own memories."""
+        try:
+            return await memory_service.build_context_block(
+                profile=self.profile, user_id=user_id, business_id=None,
+                agent_kind=CUSTOM_AGENT_KIND, agent_slug=self.slug,
+                session_id=session_id, current_message=message, client=_memory_client(),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("custom agent %s: memory block skipped (%s)", self.slug, exc)
+            return "", [], False
+
+    def _save_memory(self, user_id: str, session_id: Optional[str], message: str,
+                     answer: str, previous: List[Dict[str, Any]]) -> None:
+        """Fire-and-forget write path, under this agent's slug."""
+        task = asyncio.create_task(memory_service.process_turn(
+            profile=self.profile, user_id=user_id, business_id=None,
+            agent_kind=CUSTOM_AGENT_KIND, agent_slug=self.slug, session_id=session_id,
+            user_message=message, assistant_response=answer, previous_messages=previous,
+        ))
+        _MEMORY_WRITES.add(task)
+        task.add_done_callback(_MEMORY_WRITES.discard)
+
     def _turn_context(self, voice_turn: bool, prefetched: Optional[str]) -> str:
         parts = [
             f"Today's date is {date.today().isoformat()}.",
@@ -172,10 +212,21 @@ class CustomRuntimeAgent(RuntimeAgent, BaseStreamingAgent):
                     tools.append(tool)
                     tools_by_name[tool.name] = tool
 
+            user_id = context.get("user_id")
+            session_id = context.get("session_id")
+            memory_on = self._memory_on(user_id, voice_turn)
+            memory_ids: List[str] = []
+            summary_used = False
+            turn_context = self._turn_context(voice_turn, context.get("prefetched_docs"))
+            if memory_on:
+                block, memory_ids, summary_used = await self._memory_block(user_id, session_id, message)
+                if block:
+                    turn_context += "\n\n" + block
+
             messages = self.build_messages(previous, message)
             full_messages: List[Any] = [
                 cached_system_message(system_prompt, self.profile.model_main),
-                SystemMessage(content=self._turn_context(voice_turn, context.get("prefetched_docs"))),
+                SystemMessage(content=turn_context),
             ] + messages
             llm = self.llm.bind_tools(tools) if tools else self.llm
 
@@ -276,11 +327,18 @@ class CustomRuntimeAgent(RuntimeAgent, BaseStreamingAgent):
                    "model": (self.profile.model_main or {}).get("model_string") or AGENT_CONFIG.main_model,
                    "input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"],
                    "iterations": iteration, "tool_count": tool_count}
-            yield {"type": "turn_meta", "metadata": {
+            if memory_on and (final or "").strip():
+                self._save_memory(user_id, session_id, message, final, previous)
+            turn_meta: Dict[str, Any] = {
                 "iteration_count": iteration,
                 "cache_read_tokens": usage.get("cache_read_tokens", 0),
                 "cache_creation_tokens": usage.get("cache_creation_tokens", 0),
-            }}
+            }
+            if memory_ids or summary_used:
+                # run_turn stamps it on the assistant row for Memory › Inspector.
+                turn_meta["memory"] = {"retrieved_memory_ids": memory_ids,
+                                       "summary_used": summary_used}
+            yield {"type": "turn_meta", "metadata": turn_meta}
         except TokenBudgetExceeded as exc:
             logger.warning("custom agent %s stopped on token budget: %s", self.slug, exc)
             yield {"type": "error", "message": "Please try again with a shorter message."}

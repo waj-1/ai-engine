@@ -8,7 +8,7 @@ A model comparison runs the same test suites on two or more options, usually dif
 
 1. On **Testing**, open the **Model comparison** tab and click **New comparison**. Under **Agent**, pick the agent, for example Lina.
 2. Under **Options to compare**, fill in at least two options. For each one, type a **Label** and pick a **Model**. Keep **Agent version** on **— live —** to test the agent as it is now. Click **+ Add option** for more. You can usually leave **Advanced settings** as they are.
-3. Under **Test suites**, tick at least one suite.
+3. Under **Test suites**, tick at least one suite. Each suite needs a **Judge model** (any model your portal has, a local one included), unless its cases only check tools or expected words.
 4. Type a **Name**, leave **Repeat each case** on **Once**, and click **Run comparison**.
 
 Each option runs every case, so a comparison takes longer and costs more than a single run. Repeating each case makes the result more reliable, and slower.

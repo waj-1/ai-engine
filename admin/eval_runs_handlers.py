@@ -1849,7 +1849,11 @@ def _fmt_metric(value: Any, kind: str) -> str:
         if kind == "pct":
             return f"{float(value) * 100:.0f}%"
         if kind == "ms":
-            return f"{int(round(float(value)))} ms"
+            # People-readable, like every other duration in the portal
+            # ("8.4 s", "1 min 26 s"), not raw milliseconds ("85559 ms").
+            from admin.testing_view import ms as _fmt_ms
+
+            return _fmt_ms(float(value))
         if kind == "int":
             return f"{int(value):,}"
         if kind == "usd":
@@ -2189,6 +2193,34 @@ async def eval_runs_report_json(
 # ===========================================================================
 
 
+def _run_refused_page(request: Request, message: str, *, suite_id: str = "",
+                      profile_id: str = "") -> Response:
+    """The portal page for a run the trigger refused (no usable judge for a
+    comparison run, a version of another agent, ...), with a way back to the
+    form it came from. Same-origin Referer only, else the suite's page."""
+    from urllib.parse import quote, urlsplit
+
+    from admin.router import render_error_page
+
+    back = ""
+    ref = request.headers.get("referer") or ""
+    if ref:
+        parts = urlsplit(ref)
+        if (not parts.netloc or parts.netloc == request.url.netloc) and parts.path.startswith("/admin/"):
+            back = parts.path + (f"?{parts.query}" if parts.query else "")
+    if not back:
+        back = f"/admin/evals/suites/{quote(suite_id, safe='')}" if suite_id else "/admin/evals"
+    if "?" not in back:
+        # Reopen the run panel the operator submitted from.
+        if back.startswith("/admin/evals/suites/"):
+            back += "?run=1"
+        elif profile_id or suite_id:
+            back += (f"?run_profile={quote(profile_id, safe='')}"
+                     f"&run_suite={quote(suite_id, safe='')}")
+    return render_error_page(request, 400, detail=message, heading="This run can't start",
+                             retry=(back, "Back to the run form"))
+
+
 @router.post("/eval-runs/trigger")
 async def eval_runs_trigger(
     request: Request,
@@ -2283,6 +2315,11 @@ async def eval_runs_trigger(
                 voice_mode=(voice_mode or "").strip() or None,
             )
         except ValueError as exc:
+            if "text/html" in (request.headers.get("accept") or ""):
+                # A browser form post (the Run tests / Start run panel): a
+                # portal page that says what to fix and links back, not the
+                # API's raw JSON error body.
+                return _run_refused_page(request, str(exc), suite_id=sid, profile_id=profile_id)
             raise HTTPException(400, str(exc))
     else:
         kind = (agent_kind or "").strip()

@@ -26,9 +26,9 @@ Under **Create a key**, type a name such as "Website chat", pick when it **Expir
 ![Model keys screen with the Providers table](media/3-model-keys.jpg)
 
 ### 4. Set a daily voice allowance
-**Voice budgets** caps how many seconds of voice calls a business can use each day. Businesses without their own budget get the default shown at the top.
+**Voice budgets** caps how many seconds of voice calls each agent can use each day. A budget belongs to the budget ID shown on the agent's **Voice** tab; an ID without its own budget gets the default shown at the top.
 
-![Voice budgets screen with Business ID, Daily limit and Note](media/4-voice-budgets.jpg)
+![Voice budgets screen with Budget ID, Daily limit and Note](media/4-voice-budgets.jpg)
 
 ### 5. See who changed what
 **Activity** lists every change, newest first. Filter by **Who**, **What** and **When**.
@@ -49,6 +49,6 @@ Click **Details** to see who, what, the item, when, and each field that changed.
 ## In this section
 - [Choose who can use the portal](01-team.md): give or remove admin access.
 - [See who changed what](02-activity.md): find a change and see exactly what changed.
-- [Set the daily voice allowance](03-voice-budgets.md): cap voice minutes per business per day.
+- [Set the daily voice allowance](03-voice-budgets.md): cap each agent's voice minutes per day.
 - [Create and revoke API keys](04-api-keys.md): let your own programs use your agents.
 - [Add a model key](04-model-keys.md): connect an AI provider.

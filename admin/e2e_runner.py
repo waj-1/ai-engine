@@ -188,6 +188,7 @@ def run_e2e(
     pass_count = 0
     fail_count = 0
     judge_scores: List[float] = []
+    ungraded_count = 0
     results: List[Dict[str, Any]] = []
 
     client.table("agent_e2e_runs").insert({
@@ -216,6 +217,10 @@ def run_e2e(
                                         request_shape=kind_shape)
             results.append(outcome)
             judge_block = outcome.get("judge") or {}
+            if judge_block.get("ungraded"):
+                # Not judged: neither a pass nor a 0% fail (see _run_one_scenario).
+                ungraded_count += 1
+                continue
             if "score" in judge_block:
                 judge_scores.append(float(judge_block["score"]))
             if outcome["passed"]:
@@ -248,6 +253,14 @@ def run_e2e(
         }
 
     total = pass_count + fail_count
+    if total == 0 and ungraded_count:
+        # Nothing could be graded: say so instead of a 0% "failed" run.
+        return _record_errored(
+            client, profile_id, environment, triggered_by,
+            f"no case could be judged: {judge_unavailable_reason(evaluator_model, judge_model_id) or 'no judge model'}"
+            "; give the cases expected words the reply must contain, or pick a judge model",
+            run_id=run_id, results=results,
+        )
     if judge_scores:
         # Judge-mode: aggregate is mean of per-scenario judge scores.
         score = round(sum(judge_scores) / len(judge_scores), 3)
@@ -337,19 +350,26 @@ def _run_one_scenario(
 
     if judge_result is not None:
         passed = bool(judge_result.get("pass"))
-    elif expected:
-        # The scenario declares an expected_answer that needs a judge, but none
-        # ran (no evaluator model / GOOGLE_API_KEY). Don't pass an answer we
-        # never graded — surface why instead of a bogus smoke "pass".
-        passed = False
-        judge_result = {
-            "score": 0.0,
-            "pass": False,
-            "rationale": (
-                "ungraded: expected_answer set but no evaluator model is "
-                "configured / judge unavailable"
-            ),
-        }
+    elif expected and smoke_ok:
+        # The scenario declares an expected_answer but no judge ran (none is
+        # configured, or it couldn't be built). The deterministic check still
+        # runs: the reply passes when it contains the expected words. When it
+        # doesn't, the case is NOT JUDGED rather than failed at 0%: it carries
+        # no score, so it doesn't drag the run's score to 0 (2026-11-23).
+        if expected_text_found(expected, body_full):
+            passed = True
+            judge_result = {"pass": True, "rationale": (
+                "no judge model: checked that the reply contains the expected words")}
+        else:
+            passed = False
+            judge_result = {
+                "pass": False,
+                "ungraded": True,
+                "rationale": (
+                    "not judged: the reply does not contain the expected words, and "
+                    "no judge model could grade it for meaning"
+                ),
+            }
     else:
         passed = smoke_ok
 
@@ -362,6 +382,24 @@ def _run_one_scenario(
         "passed": passed,
         "judge": judge_result,
     }
+
+
+_WORD_RE = re.compile(r"\w+", re.UNICODE)
+
+
+def expected_text_found(expected: Any, actual: Any) -> bool:
+    """The deterministic grade of an expected answer when no judge runs: the
+    reply contains the expected text (case and spacing ignored), or every
+    word of it. A full-sentence expected answer rarely passes this; that case
+    is reported as not judged, not as a wrong answer."""
+    want = " ".join(str(expected or "").lower().split())
+    have = " ".join(str(actual or "").lower().split())
+    if not want or not have:
+        return False
+    if want in have:
+        return True
+    words = _WORD_RE.findall(want)
+    return bool(words) and set(words) <= set(_WORD_RE.findall(have))
 
 
 def _resolve_evaluator_model_id(client: Any, suite: Dict[str, Any]) -> Optional[str]:
@@ -392,98 +430,111 @@ def _resolve_evaluator_model_id(client: Any, suite: Dict[str, Any]) -> Optional[
     return (rows[0].get("model_string") if rows else None) or None
 
 
-def _try_build_azure_judge(model_string: str, model_id: Optional[str] = None) -> Optional[Any]:
-    """A judge built from an azure_openai `agent_models` row, or None when
-    there is no such row or it can't be built. With `model_id` (the suite's
-    evaluator_model_id) that exact row is built: model_string is not unique
-    (rows are unique on name + environment), so looking it up by model_string
-    could take another row's endpoint or settings. Without one, the first
-    active row whose model_string (the deployment name) matches. Temperature 0
-    (dropped again by the row's omit_temperature for reasoning models) and
-    room for the rubric verdict."""
-    try:
-        from core.auth import get_service_client
-        from runtime.llm_factory import build_chat_model
-
-        query = get_service_client().table("agent_models").select("*").eq("provider", "azure_openai")
-        if model_id:
-            query = query.eq("model_id", model_id)
-        else:
-            query = query.eq("model_string", model_string).eq("is_active", True)
-        rows = query.limit(1).execute().data or []
-        if not rows:
-            return None
-        return build_chat_model({**rows[0], "temperature": 0.0, "max_output_tokens": 4096})
-    except Exception as exc:
-        logger.warning("e2e: failed to build Azure judge %s (%s)", model_string, exc)
-        return None
+# Providers `_build_judge` builds from the model NAME (their own key handling,
+# kept as it was); every other provider is built from its agent_models row.
+_NAME_ROUTED_PROVIDERS = frozenset({"anthropic", "google_genai", "google"})
 
 
-def _try_build_judge(model_string: str, model_id: Optional[str] = None) -> Optional[Any]:
-    """Best-effort build of a LangChain judge LLM, PROVIDER-AWARE.
+def _judge_row(model_string: str, model_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """The agent_models row a judge is built from, or None.
 
-    Gemini model ids build a `ChatGoogleGenerativeAI` judge; Claude model ids
-    (``claude*``) build a direct-Anthropic-API judge via the LLM factory.
-    Previously this always built a Gemini client regardless of the id, so picking
-    a Claude model as a suite's evaluator made every judge call throw and
-    silently scored every scenario 0.0. Returns None when the judge can't be
-    built (missing creds, etc.) so the runner falls back to smoke checks.
-    `model_id` is the suite's chosen agent_models row; only the Azure branch
-    needs it (see _try_build_azure_judge).
+    With `model_id` (the suite's evaluator_model_id) that exact row:
+    model_string is not unique (rows are unique on name + environment), so a
+    lookup by model_string could take another row's endpoint or settings.
+    Without one, the first active row whose model_string matches."""
+    from core.auth import get_service_client
+
+    query = get_service_client().table("agent_models").select("*")
+    if model_id:
+        query = query.eq("model_id", model_id)
+    else:
+        query = query.eq("model_string", model_string).eq("is_active", True)
+    rows = query.limit(1).execute().data or []
+    return rows[0] if rows else None
+
+
+def _build_row_judge(row: Dict[str, Any]) -> Any:
+    """A judge built from an agent_models row the way agents build their model
+    (runtime.llm_factory.build_chat_model), so a judge can be ANY model the
+    engine can call: Ollama, an OpenAI-compatible base URL, Azure OpenAI, the
+    Automatic row, ... Temperature 0 (dropped again by the row's
+    omit_temperature for reasoning models) and room for the rubric verdict."""
+    from runtime.llm_factory import build_chat_model
+
+    judge = build_chat_model({**row, "temperature": 0.0, "max_output_tokens": 4096})
+    if judge is None:
+        raise RuntimeError("the model row names no model")
+    return judge
+
+
+def _build_judge(model_string: Optional[str], model_id: Optional[str] = None) -> Tuple[Optional[Any], str]:
+    """Build a LangChain judge LLM, PROVIDER-AWARE: ``(judge, "")`` or
+    ``(None, why)``, where `why` is a plain sentence for the run page.
+
+    Any model the engine can call works as a judge. The suite's chosen row (or,
+    without one, the active row whose model_string matches) is built through
+    the same factory agents use, whatever its provider. Two providers keep
+    their name-based builders: Claude ids (``claude*``) build a
+    direct-Anthropic-API judge, Gemini ids a `ChatGoogleGenerativeAI` one.
+
+    Until 2026-11-23 only Gemini, Claude and Azure OpenAI could be built: a
+    local (Ollama) or OpenAI-compatible judge fell through to the Gemini
+    builder, which logged "no Gemini key set" on a keyless install and every
+    case of the run was left ungraded.
     """
     if not model_string:
-        return None
+        return None, "no judge model is set on this suite"
+    lowered = model_string.lower()
+
+    # --- the model's own row, any provider ---------------------------------
+    # Looked up whenever the suite picked a row, or the name is neither a
+    # Gemini nor a Claude id (those resolve by name, with no query).
+    row: Optional[Dict[str, Any]] = None
+    if model_id or ("claude" not in lowered and "gemini" not in lowered):
+        try:
+            row = _judge_row(model_string, model_id)
+        except Exception as exc:
+            logger.warning("e2e: judge model lookup failed for %s (%s)", model_string, exc)
+    if row is not None and (row.get("provider") or "").lower() not in _NAME_ROUTED_PROVIDERS:
+        try:
+            return _build_row_judge(row), ""
+        except Exception as exc:
+            logger.warning("e2e: failed to build judge %s (%s); smoke-only", model_string, exc)
+            return None, f"the judge model {model_string} could not be set up ({exc})"
 
     # --- Claude evaluators → direct-Anthropic-API judge -------------------
     # The Gemini SDK can't serve a `claude-*` id, so route it to the Anthropic
     # builder (single invoke, no tool loop).
     #
-    # Was `_build_anthropic_vertex` until 2026-08-16. That builder needed GCP
-    # Application Default Credentials, which do not exist on Azure compute, so
-    # this branch had already stopped producing a judge — it raised, got caught
-    # below, and every Claude-evaluator suite quietly downgraded to smoke-only.
-    # `_build_anthropic` needs ANTHROPIC_API_KEY instead; unset → still
-    # smoke-only, but now for a reason an operator can fix.
-    #
-    # "unset → smoke-only" is only true because `_build_anthropic` RAISES on an
-    # empty key. It used to pass `api_key=os.getenv(..., "")` straight through,
-    # and `''` is ChatAnthropic's own field default — so the builder returned a
-    # perfectly-constructed judge that 401'd on every invoke. `_run_one_scenario`
-    # catches that as {'score': 0.5, 'pass': False, 'rationale': 'judge_error:
-    # …'}, i.e. a red run scored 0.5 after a ~30s failed API round-trip per
-    # scenario, instead of the documented degrade. ANTHROPIC_API_KEY is bound
-    # nowhere in this repo today, so that was the default outcome of the first
-    # claude-evaluator suite anyone ran.
-    if "claude" in model_string.lower():
+    # `_build_anthropic` needs ANTHROPIC_API_KEY and RAISES on an empty key
+    # (an empty key used to build a judge that 401'd on every invoke, scoring
+    # a red run 0.5 after a failed API round-trip per scenario), so an unset
+    # key degrades to "no judge" for a reason an operator can fix.
+    if "claude" in lowered or (row is not None and (row.get("provider") or "").lower() == "anthropic"):
         try:
             from runtime.llm_factory import _build_anthropic
 
             extra: Dict[str, Any] = {}
             # Opus 4.8+ deprecated `temperature` (the API 400s if it's sent).
-            if "opus" in model_string.lower():
+            if "opus" in lowered:
                 extra["omit_temperature"] = True
             return _build_anthropic({
                 "model_string": model_string,
                 "temperature": 0.0,
                 "max_output_tokens": 4096,
                 "extra_config": extra,
-            })
+            }), ""
         except Exception as exc:
             logger.warning(
                 "e2e: failed to build Claude judge %s (%s); smoke-only",
                 model_string, exc,
             )
-            return None
+            return None, f"the judge model {model_string} could not be set up ({exc})"
 
-    # --- Azure OpenAI evaluators ---------------------------------------------
-    # A stack whose only keys are Azure (no GOOGLE_API_KEY / ANTHROPIC_API_KEY)
-    # had no judge at all. An Azure deployment is only reachable through its
-    # agent_models row (endpoint, api_version, omit_temperature, …), so look
-    # the row up by model_string and build it the way the runtime does.
-    if "gemini" not in model_string.lower():
-        azure_judge = _try_build_azure_judge(model_string, model_id)
-        if azure_judge is not None:
-            return azure_judge
+    google_row = row is not None and (row.get("provider") or "").lower() in ("google_genai", "google")
+    if "gemini" not in lowered and not google_row:
+        logger.info("e2e: no model row for judge %s; smoke-only", model_string)
+        return None, f"the judge model {model_string} is not a model this engine has set up"
 
     # --- Gemini evaluators (default) ---------------------------------------
     try:
@@ -492,13 +543,14 @@ def _try_build_judge(model_string: str, model_id: Optional[str] = None) -> Optio
         from langchain_google_genai import ChatGoogleGenerativeAI
     except Exception as exc:
         logger.warning("e2e: judge LLM unavailable (%s); falling back to smoke", exc)
-        return None
+        return None, f"the judge model {model_string} could not be set up ({exc})"
     from core.provider_keys import env_or_stored
 
     google_key = env_or_stored("GOOGLE_API_KEY")
     if not google_key:
         logger.info("e2e: no Gemini key set; judge mode disabled, smoke-only")
-        return None
+        return None, (f"the judge model {model_string} needs a Google API key, "
+                      "and none is set (add one under Settings → Model keys)")
     try:
         return ChatGoogleGenerativeAI(
             model=model_string,
@@ -509,10 +561,25 @@ def _try_build_judge(model_string: str, model_id: Optional[str] = None) -> Optio
             # RUBRIC json to ~10 tokens (criteria came back empty). 4096 leaves
             # room for thinking + the full rubric verdict json.
             max_output_tokens=4096,
-        )
+        ), ""
     except Exception as exc:
         logger.warning("e2e: failed to build judge %s (%s); smoke-only", model_string, exc)
-        return None
+        return None, f"the judge model {model_string} could not be set up ({exc})"
+
+
+def _try_build_judge(model_string: Optional[str], model_id: Optional[str] = None) -> Optional[Any]:
+    """The judge for `model_string` / the suite's `model_id` row, or None when
+    it can't be built (missing key, unknown model, ...) so the runner falls
+    back to its deterministic checks. See `_build_judge`."""
+    return _build_judge(model_string, model_id)[0]
+
+
+def judge_unavailable_reason(model_string: Optional[str], model_id: Optional[str] = None) -> str:
+    """Why no judge could be built for this model, as a plain sentence ('' when
+    one can). For the run page and the comparison pre-flight; building a
+    judge makes no network call."""
+    judge, why = _build_judge(model_string, model_id)
+    return "" if judge is not None else why
 
 
 def _invoke_judge(

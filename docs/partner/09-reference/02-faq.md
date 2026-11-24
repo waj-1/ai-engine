@@ -6,6 +6,7 @@ Quick answers to the problems that come up most. Each one points to the guide wi
 
 - **Did you save?** Each tab has its own Save button, such as **Save instructions**. While **Unsaved changes** shows at the bottom of the page, your change isn't saved yet.
 - **Start a new conversation.** A change reaches people on their **next** message, or their next call for voice settings. A test chat that was already open may still be on the old setup. Close it and click **Test** again.
+- **Is it on Production?** If your portal has a STAGING / PRODUCTION switch, Production serves the version you last promoted. Edit on Staging, then promote the agent in **Settings › Releases** (or **More ▾ → Promote to Production…**). A new agent is **Not live yet** in Production until its first promote.
 - **Is a version pinned?** If someone pinned an earlier version on the **Versions** tab, people keep getting that one. Choose **Default (latest)** again.
 - **Did you change the right agent?** Check the name at the top of the page. A **Draft** copy doesn't serve anyone.
 

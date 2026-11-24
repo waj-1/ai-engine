@@ -1502,8 +1502,9 @@ See [Configure → Memory](./02-configure.md#memory).
   writing `agent_audit_log` with before/after. Best-effort: it never fails the user's
   request. Secret values are masked before logging. See [Govern](./04-govern.md).
 - **Cache invalidation** — profile/tool/source edits invalidate the profile loader
-  cache; channel edits invalidate the channel cache and mark CORS dirty (banner on
-  the Channels screen until restart — the CORS allow-list is captured at boot).
+  cache; channel edits invalidate the channel cache, which the CORS middleware reads
+  at request time, so a channel's allowed websites need no restart (other processes
+  re-read it after `CHANNELS_CACHE_TTL_SEC`).
 - **Background jobs** — eval runs, E2E runs, pytest runs and KB ingestion run on
   daemon threads tracked in `admin_jobs`, with cooperative cancellation. See
   [Operate → Jobs](./01-operate.md) and [Test](./03-test.md).

@@ -172,7 +172,7 @@
    Settings › Voice budgets. A realtime model page only points there. #}
 {% if is_realtime %}
 <p class="caption" style="margin-top:var(--space-m);">
-  Daily voice-call limits are set per business, for all realtime models, in
+  Daily voice-call limits are set per {{ 'business' if business_field_label() else 'agent' }}, for all realtime models, in
   <a href="/admin/voice-budgets">Settings › Voice budgets</a>.
 </p>
 {% endif %}

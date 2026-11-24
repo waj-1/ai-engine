@@ -5,7 +5,9 @@
    (2) Tool catalog — every agent_tools row, collapsed per server that
        exposes it, with search + agent / access / guidance filters. Each row
        opens its /admin/tools/{id} editor. A catalog, not a binding: a tool
-       reaches an LLM only through an agent's MCP attachment.
+       reaches an LLM only through an agent's MCP attachment. External
+       servers follow, each with the tools it lists itself (read-only rows,
+       admin/external_mcp_tools.py).
    (3) Platform services — backing integrations + credential status
        (collapsed; engineering detail).
    Context: admin/router.build_integrations_context(env). #}
@@ -63,7 +65,8 @@
 {# ── Tool catalog ───────────────────────────────────────────────────────── #}
 <section class="section" id="tools">
   <div class="row between">
-    <h2 class="mb-0">Tool catalog <span class="caption num">({{ all_tools|length }})</span></h2>
+    {% set catalog_total = catalog_count if catalog_count is defined else all_tools|length %}
+    <h2 class="mb-0">Tool catalog <span class="caption num">({{ catalog_total }})</span></h2>
     {% if all_tools %}
     {% set guided = all_tools | selectattr('usage_guidance') | list %}
     <span class="caption num" title="Usage guidance tells the agent when and how to call a tool">{{ guided|length }} of {{ all_tools|length }} tools have usage guidance</span>
@@ -71,7 +74,7 @@
   </div>
   <span class="caption" style="display:block;margin:var(--space-xxs) 0 var(--space-m);">Open a tool to edit its name, description and usage guidance &mdash; the notes that tell the agent when to use it.</span>
 
-  {% if all_tools %}
+  {% if catalog_total %}
   <div class="filter-row" id="tool-filters">
     <input type="search" id="tool-search" placeholder="Search tools…" aria-label="Search tools">
     <select id="tool-agent" aria-label="Agent">
@@ -91,11 +94,12 @@
   <div class="group-list" id="tool-groups">
     {% set _groups = tool_groups if tool_groups is defined else [{'server': none, 'tools': all_tools}] %}
     {% for g in _groups %}
-    <details data-group>
+    <details data-group data-agent="{{ (g.agent_values or [])|join(' ') }}">
       <summary>
         {% if g.server %}
           <strong>{{ g.server.display_name }}</strong>
           <span class="technical">{{ g.server.name }}</span>
+          {% if g.external %}{{ chip('External', variant='info') }}{% endif %}
         {% else %}
           <strong>Not in any server</strong>
         {% endif %}
@@ -107,6 +111,18 @@
           <tbody>
           {% for t in g.tools %}
             {% set label = t.display_name or (t.python_name|replace('_', ' ')|capitalize) %}
+            {% if t.external %}
+            {# Listed by the external server itself: nothing to edit here. #}
+            <tr data-tool
+                data-search="{{ (label ~ ' ' ~ t.python_name ~ ' ' ~ (t.description or ''))|lower }}"
+                data-agent="" data-scope="" data-guided="0" data-deprecated="0">
+              <td><div class="name-cell"><span>{{ label }}</span><span class="technical">{{ t.python_name }}</span></div></td>
+              <td class="caption"><span class="clamp-1" style="max-width:420px;" title="{{ t.description or '' }}">{{ t.description or '—' }}</span></td>
+              <td class="caption">—</td>
+              <td>{{ chip('Set by the server', variant='neutral') }}</td>
+              <td class="caption muted">Set by the server</td>
+            </tr>
+            {% else %}
             <tr data-tool
                 data-search="{{ (label ~ ' ' ~ t.python_name ~ ' ' ~ (t.description or ''))|lower }}"
                 data-agent="{{ ([t.agent_kind] + (t.additional_agent_kinds or []))|join(' ') }}"
@@ -129,6 +145,7 @@
                 {% else %}<a class="caption" href="/admin/tools/{{ t.tool_id }}">Add</a>{% endif %}
               </td>
             </tr>
+            {% endif %}
           {% endfor %}
           </tbody>
         </table>
@@ -138,7 +155,7 @@
   </div>
   <div class="empty-state" id="tool-empty" hidden>No tools match these filters.</div>
   {% else %}
-  <div class="empty-state">No tools registered yet &mdash; the engine registers its tools on start-up.</div>
+  <div class="empty-state">No tools registered yet &mdash; the engine registers its tools on start-up, and an external server's tools show here once it has been reached (Test connection on the server).</div>
   {% endif %}
 </section>
 
@@ -180,11 +197,16 @@
     const term = (q.value || '').trim().toLowerCase();
     const filtering = !!(term || agent.value || scope.value || noguide.checked);
     let shown = 0;
+    function usedBy(el) {
+      return (' ' + (el.dataset.agent || '') + ' ').indexOf(' ' + agent.value + ' ') !== -1;
+    }
     groups.forEach(function (g) {
       let n = 0;
+      // A server attached to the picked agent brings all its tools.
+      const groupMatch = !!agent.value && usedBy(g);
       g.querySelectorAll('tr[data-tool]').forEach(function (tr) {
         const ok = (!term || tr.dataset.search.indexOf(term) !== -1)
-          && (!agent.value || (' ' + tr.dataset.agent + ' ').indexOf(' ' + agent.value + ' ') !== -1)
+          && (!agent.value || groupMatch || usedBy(tr))
           && (!scope.value || tr.dataset.scope === scope.value)
           && (!noguide.checked || tr.dataset.guided === '0')
           && (dep.checked || tr.dataset.deprecated === '0');

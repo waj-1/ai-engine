@@ -40,8 +40,8 @@ def _list_users(limit: int) -> List[Dict[str, Any]]:
 @tool_errors
 def list_users(limit: int = 100,
                superusers_only: bool = False) -> Dict[str, Any]:
-    """Admin users (main WAJ DB `user` table, newest first) with their
-    is_superuser flag. Read-only twin of users(action="list") — safe for a
+    """Portal users (the `user` table the portal's sign-in checks, newest
+    first) with their is_superuser flag. Read-only twin of users(action="list") — safe for a
     host to auto-approve. Grant/revoke with users(action="set_superuser")."""
     found = _list_users(limit)
     if superusers_only:
@@ -188,7 +188,7 @@ _DEFAULT_MEMORY_KIND = (_catalog_tuple("default_kind") or ("custom",))[0]
 @mcp.tool()
 @tool_errors
 def memory(action: Literal["get_config", "set_config", "list", "add", "edit",
-                           "pin", "delete"] = "list",
+                           "pin", "delete", "assign"] = "list",
           agent_kind: str = _DEFAULT_MEMORY_KIND, env: Env = "staging",
           memory_id: str = "", user_id: str = "", business_id: str = "",
           content: str = "", pinned: Optional[bool] = None,
@@ -203,11 +203,20 @@ def memory(action: Literal["get_config", "set_config", "list", "add", "edit",
     unlike the HTML form this skips the checkbox/flat-field parsing layer
     since a tool call already supplies structured JSON) | list (agent_kind,
     user_id: uuid or email -> that user's ai_user_memory rows) | add
-    (user_id, business_id, content, agent_kind) | edit (memory_id, content
-    — re-embeds via the same Gemini embedder the runtime uses; proceeds
+    (user_id: uuid or email, content, agent_kind; business_id where the build's plugin has
+    businesses) | assign (memory_id, agent_kind=custom:<slug> — move a
+    custom-kind memory that belongs to no agent yet to that agent) |
+    edit (memory_id, content
+    — re-embeds via the same embedder the runtime uses; proceeds
     without an embedding if the embed call fails, same as the handler) |
     pin (memory_id, pinned=true/false) | delete (memory_id, confirm=true —
     soft-archive, status='archived').
+
+    Each generic agent keeps its own memories: pass agent_kind
+    `custom:<slug>` (the value the Memory screen's picker uses) to list or
+    add one agent's. `list` for such an agent also returns
+    `unassigned_memories`: the user's custom-kind rows saved before memories
+    were kept per agent, which no agent recalls until assigned.
 
     get_config/set_config target "the active profile for agent_kind in env"
     by default. Pass `profile_id` to read/write one SPECIFIC profile's
@@ -269,11 +278,26 @@ def memory(action: Literal["get_config", "set_config", "list", "add", "edit",
         return {"updated": True, "profile_id": profile_id, "memory_config": config}
 
     if action == "add":
-        if not (user_id and business_id and content):
-            return err("add needs user_id, business_id, content")
+        from admin.agent_kinds import split_agent_choice
+        from admin.memory_handlers import memory_row
+
+        if not (user_id and content):
+            return err("add needs user_id, content")
+        agent_kind = _resolve_agent_kind(agent_kind)
+        kind, slug = split_agent_choice(agent_kind)
+        if kind == "custom" and not slug:
+            return err("a custom agent's memory names the agent",
+                       hint="agent_kind=custom:<agent slug>")
+        # user_id may be an email, as for `list`: resolve it the same way
+        # instead of handing the database a non-uuid.
+        resolved = memory_screen.resolve_user_id(user_id)
+        if not resolved:
+            return err("no user with that id or email",
+                       hint="pass the user's id (uuid) or the email they sign in with")
+        user_id = resolved
         embedding = embed_text(content)
-        row = {"user_id": user_id, "business_id": business_id,
-               "agent_kind": agent_kind, "content": content, "source": "manual"}
+        row = memory_row(user_id=user_id, agent_kind=agent_kind, content=content,
+                         business_id=business_id or None)
         if embedding is not None:
             from core.memory.embeddings import to_vector_literal
             row["embedding"] = to_vector_literal(embedding)
@@ -282,7 +306,22 @@ def memory(action: Literal["get_config", "set_config", "list", "add", "edit",
         # response carries no row back, fall back to user_id as the id.
         new_id = inserted[0]["id"] if inserted else user_id
         actor_audit("ai_user_memory", new_id, "manual_add", after={"content": content})
-        return {"added": True, "memory_id": new_id}
+        return {"added": True, "memory_id": new_id, "agent_kind": agent_kind,
+                "user_id": user_id}
+
+    if action == "assign":
+        from admin.agent_kinds import split_agent_choice
+
+        kind, slug = split_agent_choice(_resolve_agent_kind(agent_kind))
+        if not (memory_id and slug):
+            return err("assign needs memory_id and agent_kind=custom:<agent slug>")
+        moved = rows(client.table("ai_user_memory").update({"agent_slug": slug})
+                     .eq("id", memory_id).eq("agent_kind", kind)
+                     .is_("agent_slug", "null").execute())
+        if not moved:
+            return err("no unassigned custom-agent memory with that id")
+        actor_audit("ai_user_memory", memory_id, "assign", after={"agent_slug": slug})
+        return {"assigned": True, "memory_id": memory_id, "agent_slug": slug}
 
     if action == "edit":
         if not (memory_id and content):
@@ -319,7 +358,7 @@ def memory(action: Literal["get_config", "set_config", "list", "add", "edit",
         return {"deleted": True, "memory_id": memory_id}
 
     return err(f"unknown action {action!r}",
-               hint="get_config | set_config | list | add | edit | pin | delete")
+               hint="get_config | set_config | list | add | assign | edit | pin | delete")
 
 
 @mcp.tool()
@@ -386,8 +425,14 @@ def channels(action: Literal["list", "get", "create", "update", "delete"] = "lis
                            "trailing slash or path)")
             payload["allowed_origins"] = list(allowed_origins)
         if allowed_agent_kinds is not None:
+            from admin.channel_handlers import _channel_choice_known
+
             allowed = _channel_agent_kinds()
-            payload["allowed_agent_kinds"] = [k for k in allowed_agent_kinds if k in allowed]
+            # A generic agent is named `custom:<slug>` (one per agent; the
+            # bare `custom` kind would allow every one of them).
+            payload["allowed_agent_kinds"] = [
+                k for k in allowed_agent_kinds
+                if k in allowed or _channel_choice_known(k)]
         if default_profile_id:
             payload["default_profile_id"] = default_profile_id
         if is_active is not None:

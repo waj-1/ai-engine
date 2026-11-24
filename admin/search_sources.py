@@ -12,7 +12,7 @@ Scoping rules every source follows:
   ``environment`` column filter on it, and ClickHouse filters on ``waj.env``.
 * **Partner builds** — rows are narrowed to the client's agent kinds
   (``core.deployment.scope_kinds``) and the main-database sources
-  (businesses, and any people source a plugin adds) are switched off: a
+  (the people sources a plugin adds) are switched off: a
   partner build never sees another client's data.
 * **PII** — people are shown masked (``admin.search_pii``), only people who
   have at least one conversation in the selected environment are returned,
@@ -27,6 +27,7 @@ AI ``ai_chat_sessions``     id (= session id), title, user_id, business_id,
                             and the record ids a plugin's sessions carry in
                             metadata (``session_record_keys``)
 main ``business``           business_name → ``ai_chat_sessions.business_id``
+                            (a plugin's people source; names on rows here)
 ClickHouse traces           trace id / session id prefixes
 ==========================  ================================================
 """
@@ -662,23 +663,3 @@ def _person_row(ctx: SearchCtx, *, kind: str, name: Optional[str], phone: Option
 
 def _name_rank(ctx: SearchCtx, name: Optional[str]) -> int:
     return rank_label(name or "", ctx) + 1
-
-
-def businesses(ctx: SearchCtx) -> List[Dict[str, Any]]:
-    """A business name → its most recent conversations (full engine only)."""
-    words = [_needle(t) for t in ctx.tokens if len(_needle(t)) >= 2]
-    if ctx.partner or not words or len(ctx.q) < 3 or pii.is_phone(ctx.q):
-        return []
-    q = _main().table("business").select("id, business_name")
-    for w in words[:4]:
-        q = q.ilike("business_name", f"%{w}%")
-    rows = _rows(q.limit(5).execute())
-    names = {r["id"]: r.get("business_name") or "" for r in rows if r.get("id")}
-    if not names:
-        return []
-    sess = _sessions(ctx, "business_id", list(names), limit=CAP)
-    out = []
-    for s in sess:
-        name = names.get(s.get("business_id"), "")
-        out.append(_session_row(ctx, s, names, rank_label(name, ctx) + 2))
-    return out

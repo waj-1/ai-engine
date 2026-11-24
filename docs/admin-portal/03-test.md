@@ -38,12 +38,52 @@ agent's suite pins the profile under test (`X-WAJ-Profile-Id`, as the Test
 panel does), so a **draft** can be tested before it is published. With no
 deployment target registered, runs call the engine itself.
 
+**Judge model.** Any model the engine can call works as a judge: a Gemini,
+Claude, OpenAI, Azure OpenAI or OpenAI-compatible (base URL) row, a local
+Ollama model, or the Automatic row. `admin/e2e_runner._build_judge` builds the
+suite's chosen `agent_models` row through `runtime.llm_factory.build_chat_model`,
+the factory agents use (Claude and Gemini rows keep their name-based builders).
+Before 2026-11-23 only Gemini, Claude and Azure rows could be built, so a local
+judge fell through to the Gemini builder ("no Gemini key set") and graded
+nothing.
+
 **No judge model.** A suite whose Judge model is "None — check expected words
-only" passes a case when the reply contains the case's expected answer (case
-and spacing ignored); the case's note says so, or says to pick a judge when
-the text is not found. A model comparison needs a judge only when some case
-needs judging: a suite graded entirely by `checks`, tool assertions or
-required substrings runs without one.
+only", or whose judge cannot be built (no key, an unknown model), grades each
+case with what code can check:
+
+- the reply contains the expected answer, or every word of it (case and
+  spacing ignored) → passed;
+- otherwise, a case with expected/forbidden tools, `checks` or `reply_checks`
+  is graded by those, and its note says the expected answer was not judged;
+- otherwise the case is **Not judged** (`ungraded: true`, `score: null`). It is
+  left out of the run's score, shows a neutral **Not judged** chip with the
+  reason (no judge set, or why the chosen one could not be built), the run page
+  counts it in a warning callout and a **Not judged** filter, and a run where
+  no case could be judged ends `errored` with "No case could be judged: …". It
+  used to be failed at 0%, which read "Scored 0%, below the pass mark" on a
+  correct answer worded differently.
+
+A model comparison needs a judge only when some case needs judging: a suite
+graded entirely by `checks`, tool assertions or required substrings runs
+without one. The pre-flight (`admin/services/eval_scorers.suite_judge_problem`,
+used by `start_suite_run` and `create_bakeoff`) refuses a judged suite with no
+judge, or one whose provider the engine cannot call. A refused run started from
+the Run tests / Start run panel renders a portal page ("This run can't start")
+with a link back to the panel; API callers still get the JSON 400.
+
+**Business picker.** The run panels' and schedule form's **Business** field,
+and the suite's default business, appear only when a plugin names it
+(`agent_catalog` hook `business_field_label()`, `admin/eval_context.py`). A
+build with no plugin has no tenants and shows no such field.
+
+**Case names.** A case's display name is its `name` (the suite page's **Name**
+field, a `name` key in the case JSON, a CSV `name` column, or an MCP
+`eval_suites` scenario's `name`), else its question
+(`admin/eval_handlers.case_display_name`). The `id` stays a slug, made from the
+name when one is given, else the question.
+
+**Durations** on the run page, run compare and model comparison read "850 ms",
+"8.4 s", "1 min 26 s" (`admin/testing_view.ms`).
 
 rendered by `_base.html` from the request path) are:
 
@@ -192,7 +232,8 @@ malformed suite id is a 404 page. All field names / POST contracts are unchanged
   derived from the bound profile on save").
 - **Default trigger context**: tenant (`business_id`) picker + context record ids
   (branch, customer, …), locale, extra JSON — merged into every scenario at run time.
-- **Scenarios table**: inline-editable id, category, question, expected answer
+- **Scenarios table**: inline-editable name (blank = shown by its question; the id
+  is listed under it), category, question, expected answer
   (question and expected are markdown textareas with an **Edit/Preview** toggle),
   with per-row delete and a details view of extra keys (e.g. `expected_substrings`,
   `rubric`, `expected_tools`).
@@ -820,9 +861,9 @@ M suites bound to that profile, with `repeats` attempts each for pass^k consiste
   - **`evaluator_model_id` (judge model).** Every **judged** suite — any
     `runner_kind` without a deterministic scorer of its own (a plugin's runner kind
     may bring one) — must name an evaluator model, or bake-off creation is refused by
-    pre-flight. Set it in the suite editor's **Evaluator model** field. The judge must
-    be a **Gemini or Claude** model row (`admin/e2e_runner._try_build_judge` can build
-    no other provider — an Azure GPT row picked as judge fails at judge-call time).
+    pre-flight. Set it in the suite editor's **Judge model** field. Any model row the
+    engine can call works (`admin/e2e_runner._build_judge`, local Ollama included);
+    the pre-flight refuses only a provider the engine cannot build.
     The boot seeder fills this on judged starter suites (preferring the main model
     of a profile whose kind the plugin names, when judge-capable, then any active Gemini, then any active
     Claude row — env-scoped to the seeder's environment) and backfills a NULL under
@@ -1018,9 +1059,10 @@ per-criterion rubric with an escape hatch**.
   as before; existing suites are unaffected.
 - **Substring check** — always-on, separate from the judge score; a scenario that
   satisfies the substring but has no judge returns score `1.0` (pass). A scenario
-  with an `expected_answer` but **no evaluator model** is **failed** (scored `0`)
-  rather than silently passed — the runner logs `"ungraded: expected_answer is set
-  but no evaluator model"`.
+  with an `expected_answer` but **no judge** passes when the reply contains its
+  words, and is otherwise **Not judged** (no score, out of the run's score) unless
+  other deterministic checks grade it — see "No judge model" at the top. The E2E
+  runner (`admin/e2e_runner.run_e2e`) does the same.
 
 #### Mandatory judge
 

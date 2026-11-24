@@ -73,8 +73,12 @@
       </select>
     </label>
 
+    {# Tenant context only where a plugin has tenants (business_field_label()):
+       a build with no plugin has no businesses, branches or customers. #}
+    {% set biz_label = business_field_label() %}
+    {% if biz_label %}
     <label style="grid-column:1/-1;">
-      <span class="eyebrow">Business</span>
+      <span class="eyebrow">{{ biz_label }}</span>
       {{ business_picker(
         name="ctx_business_id",
         businesses=businesses,
@@ -93,6 +97,7 @@
       <span class="eyebrow">Customer id (optional)</span>
       <input type="text" name="ctx_customer_id" style="width:100%;" placeholder="uuid"/>
     </label>
+    {% endif %}
     {% for key, label, placeholder in eval_context_fields() %}
     <label>
       <span class="eyebrow">{{ label }} (optional)</span>

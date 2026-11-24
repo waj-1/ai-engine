@@ -201,6 +201,26 @@ def test_totals_for_the_technical_pane_come_from_the_turn_rows(db):
     assert out["session"]["id"] == S1 and out["session"]["source"] == "api" and out["found"] is True
 
 
+def test_the_technical_pane_counts_the_saved_messages(db):
+    # ai_chat_sessions.message_count is never maintained (it stays 0): the
+    # Technical pane must show the messages the Conversation pane shows.
+    for row in db["ai_chat_sessions"]:
+        row["message_count"] = 0
+    assert sc.load_overview_json(S1, env="staging")["session"]["message_count"] == 4
+    assert sc.load_overview_json(S2, env="staging")["session"]["message_count"] == 1
+
+
+def test_the_tracing_backed_technical_pane_counts_the_saved_messages(db, monkeypatch):
+    for row in db["ai_chat_sessions"]:
+        row["message_count"] = 0
+    monkeypatch.setattr(obs, "ch_get_trace", lambda *a, **k: {
+        "id": "T1", "status": "success", "sessionId": S1,
+        "startTime": "2026-05-20T10:00:00.000Z", "endTime": "2026-05-20T10:00:01.000Z"})
+    monkeypatch.setattr(obs, "_clickhouse_spans", lambda *a, **k: [])
+    out = obs.load_trace_overview_json("T1", env="staging")
+    assert out["session"]["id"] == S1 and out["session"]["message_count"] == 4
+
+
 def test_steps_are_a_plain_note_not_an_error():
     out = sc.load_steps_json(S1)
     assert out["found"] is True and out["unavailable"] is False and out["tree"] == []

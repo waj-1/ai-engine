@@ -294,7 +294,8 @@ VOICE_FIELDS: Tuple[VoiceField, ...] = (
              "result ('here are your invoices', «الحين تشوف … قدامك», 'refresh "
              "the page'), or that answers a caller saying the screen is empty, "
              "is treated as a stall and the request is delegated. Farewells "
-             "never arm it. On for the merchant-app (business) voice.",
+             "never arm it. Useful for a voice agent that works inside an app the "
+             "caller is looking at.",
     ),
     VoiceField(
         "stream_sentences", "Stream sentences", "turn", "bool",

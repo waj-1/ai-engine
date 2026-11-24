@@ -4,6 +4,7 @@
    step 3: the first API key          (signed in; the key is in this response only)
    Never render the setup code or a password back into this page. #}
 {% from "_components/callout.html" import alert %}
+{% from "_components/brand_mark.html" import brand_mark %}
 <!doctype html>
 {% set _brand = brand() %}
 <html lang="en"{% if _brand.key %} data-brand="{{ _brand.key }}"{% endif %}>
@@ -43,7 +44,7 @@
   <div class="card" style="width:100%;max-width:{{ '720px' if step == 3 else '520px' }};padding:var(--space-l);">
 
     <div style="display:flex;align-items:center;gap:var(--space-s);margin-bottom:var(--space-m);">
-      <span style="width:28px;height:28px;background:var(--accent);border-radius:6px;flex:0 0 auto;"></span>
+      {{ brand_mark(_brand, size=28) }}
       <span style="font-weight:700;font-size:18px;letter-spacing:-0.3px;">Set up {{ _brand.title }}</span>
     </div>
 

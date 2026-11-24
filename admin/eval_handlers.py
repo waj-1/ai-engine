@@ -34,7 +34,7 @@ from fastapi.templating import Jinja2Templates
 
 from admin.audit import record_change
 from admin.auth import require_superuser
-from admin.eval_context import eval_context_fields, eval_context_keys
+from admin.eval_context import business_field_label, eval_context_fields, eval_context_keys
 from admin.router import current_env, router, _safe_list
 from core.auth import get_service_client, admin_service_client
 
@@ -62,6 +62,7 @@ from core.deployment import single_env_deployment as _single_env_deployment  # n
 
 templates.env.globals["single_env_deployment"] = _single_env_deployment
 templates.env.globals["eval_context_fields"] = eval_context_fields
+templates.env.globals["business_field_label"] = business_field_label
 
 # Same reason again: _base.html calls the nav/brand helpers on every render.
 from admin.nav import install_template_globals as _install_nav_globals  # noqa: E402
@@ -242,7 +243,8 @@ async def eval_suite_save(
       scenario_expected_{idx}           — text per row
       scenario_extra_{idx}              — JSON blob preserving free-form keys
       scenario_delete_{idx}             — "1" when row should be removed
-      new_scenario_category/_question/_expected/_id — single add-row form
+      scenario_name_{idx}               — the case's display name ('' = none)
+      new_scenario_category/_question/_expected/_name/_id — single add-row form
       new_scenario_json                 — optional advanced JSON merged into
                                            the new scenario dict (lets the
                                            add-row form author a `caller`/
@@ -278,6 +280,14 @@ async def eval_suite_save(
 
         scenario = dict(extra)  # start from preserved free-form keys
         scenario["id"] = sc_id or _slugify(form.get(f"scenario_question_{idx}", ""))
+        # The Name field: what the case is called on screen. Blank removes a
+        # name (the question is shown); absent (an older form) keeps it.
+        if f"scenario_name_{idx}" in form:
+            sc_name = (form.get(f"scenario_name_{idx}") or "").strip()
+            if sc_name:
+                scenario["name"] = sc_name
+            else:
+                scenario.pop("name", None)
         scenario["category"] = form.get(f"scenario_category_{idx}", "").strip()
         scenario["question"] = form.get(f"scenario_question_{idx}", "").strip()
         scenario["expected_answer"] = form.get(f"scenario_expected_{idx}", "").strip()
@@ -302,10 +312,18 @@ async def eval_suite_save(
             except json.JSONDecodeError:
                 pass
         new_scenario = dict(new_extra)
+        # Name: the form's Name field, else a `name` key in the case JSON. It
+        # is what the case is called on screen; the id stays a slug.
+        new_name = (
+            (form.get("new_scenario_name") or "").strip()
+            or str(new_extra.get("name") or "").strip()
+        )
+        if new_name:
+            new_scenario["name"] = new_name
         new_scenario["id"] = (
             (form.get("new_scenario_id") or "").strip()
             or str(new_extra.get("id") or "").strip()
-            or _slugify(new_q)
+            or _slugify(new_name or new_q)
         )
         new_scenario["category"] = (
             (form.get("new_scenario_category") or "").strip()
@@ -489,6 +507,7 @@ def _slugify(text: str) -> str:
 # that happen to include extra columns.
 _CSV_KNOWN_COLUMNS = {
     "id",
+    "name",
     "category",
     "question",
     "expected_answer",
@@ -502,6 +521,7 @@ _CSV_KNOWN_COLUMNS = {
 # Scalar columns that should be copied straight through after trimming.
 _CSV_SCALAR_COLUMNS = (
     "id",
+    "name",
     "category",
     "question",
     "expected_answer",
@@ -604,7 +624,7 @@ async def eval_suite_import_csv(
                     scenario["expected_substrings"] = substrings
 
             if "id" not in scenario:
-                scenario["id"] = _slugify_question_first_words(question)
+                scenario["id"] = _slugify_question_first_words(scenario.get("name") or question)
 
             rows.append(scenario)
     except csv.Error as exc:
@@ -1074,6 +1094,27 @@ def run_chart_data(results: Optional[List[Dict[str, Any]]]) -> List[Dict[str, An
     return out
 
 
+def case_display_name(case: Optional[Dict[str, Any]]) -> str:
+    """What a case is called on screen: its `name` (the suite page's Name
+    field, a `name` key in the case JSON or an MCP scenario), else its
+    question, else its id made readable.
+
+    A result row carries `name` = the scenario's name or, when it has none,
+    its id; a name equal to the id is not a name someone gave it."""
+    from admin.testing_view import humanize
+
+    if not isinstance(case, dict):
+        return ""
+    sid = str(case.get("scenario_id") or case.get("id") or "")
+    name = str(case.get("name") or "").strip()
+    if name and name != sid:
+        return name
+    question = " ".join(str(case.get("question") or case.get("input") or "").split())
+    if question:
+        return question if len(question) <= 90 else question[:89].rstrip() + "…"
+    return humanize(sid) if sid else ""
+
+
 def group_results_by_scenario(results: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
     """Collapse per-attempt result rows into one group per scenario.
 
@@ -1098,6 +1139,7 @@ def group_results_by_scenario(results: Optional[List[Dict[str, Any]]]) -> List[D
         if g is None:
             g = groups[key] = {
                 "scenario_id": r.get("scenario_id") or r.get("name") or str(key)[:48],
+                "display_name": case_display_name(r),
                 "question": r.get("question") or r.get("input"),
                 "category": r.get("category"),
                 "attempts": [],
@@ -1125,7 +1167,9 @@ def build_case_rows(
     previous run of the same suite exists — whether it broke or got fixed
     since then.
 
-    outcome: 'failed' (no attempt passed), 'flaky' (some did), 'passed'.
+    outcome: 'failed' (no attempt passed), 'flaky' (some did), 'passed', or
+    'ungraded' (no attempt could be judged: no judge and nothing
+    deterministic to check).
     """
     from admin.testing_view import case_reason
 
@@ -1138,6 +1182,9 @@ def build_case_rows(
         att = g["attempts"]
         if g["consistent"]:
             outcome = "passed"
+        elif g["passes"] == 0 and att and all(a.get("ungraded") for a in att):
+            # Could not be judged at all: not a pass, not a failure.
+            outcome = "ungraded"
         elif g["passes"] == 0:
             outcome = "failed"
         else:
@@ -1155,7 +1202,7 @@ def build_case_rows(
             "fixed": was is False and outcome == "passed",
             "was": was,
         })
-    order = {"failed": 0, "flaky": 1, "passed": 2}
+    order = {"failed": 0, "flaky": 1, "ungraded": 2, "passed": 3}
     rows.sort(key=lambda r: (order[r["outcome"]], not r["broke"]))
     return rows
 
@@ -1416,6 +1463,7 @@ async def evals_compare(
             if kind:
                 changes[kind].append({
                     "scenario_id": j["scenario_id"],
+                    "display_name": case_display_name(j["b"] or j["a"] or {}),
                     "reason": case_reason(j["b"] or {}) if kind != "fixed" else "",
                 })
         for v in changes.values():

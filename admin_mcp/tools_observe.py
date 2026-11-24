@@ -30,14 +30,15 @@ def live_analytics(hours: int = 24, agent_kind: str = "", channel: str = "",
                    status: _Status = "", trace_env: TraceEnv = "",
                    environment: _TraceEnv = "",
                    include_series: bool = False) -> Dict[str, Any]:
-    """Live KPI dashboard data (Laminar/ClickHouse-backed): volume, cost,
+    """Live KPI dashboard data (read from the tracing store): volume, cost,
     latency percentiles, error rate, per-agent/channel breakdowns, top tools.
     Same payload as /admin/live/analytics.json. hours is clamped to
     [1, 8760]; status must be success | error | '' (both = no filter).
     trace_env (dev|staging|prod|'') scopes to traces tagged with that
-    waj.env — unlike env elsewhere, this isn't restricted to staging|prod
-    since Laminar traces can carry a dev tag too (`environment` is the
-    deprecated alias). The per-bucket time series (`series`, `buckets`) is
+    environment — unlike env elsewhere, this isn't restricted to staging|prod
+    since traces can carry a dev tag too (`environment` is the
+    deprecated alias). With tracing off (no tracing store configured) the
+    numbers are empty and `notice` says so. The per-bucket time series (`series`, `buckets`) is
     dropped unless include_series=true — the totals and breakdowns answer
     most questions and the series is the bulk of the payload."""
     from admin.screens.live_analytics import load_analytics
@@ -61,7 +62,7 @@ def caching_analytics(hours: int = 24, agent_kind: str = "",
                       trace_env: TraceEnv = "",
                       environment: _TraceEnv = "",
                       env: Env = "staging") -> Dict[str, Any]:
-    """Prompt-cache insights (Laminar/ClickHouse-backed): overall cache hit
+    """Prompt-cache insights (read from the tracing store): overall cache hit
     rate, cache-read tokens, estimated USD saved, a cached-vs-uncached token
     time series, and a per-agent cache-hit-rate breakdown. A focused slice of
     the Live Monitor / /admin/live/analytics.json for "how much are we saving
@@ -69,10 +70,10 @@ def caching_analytics(hours: int = 24, agent_kind: str = "",
     auto-instrumented gen_ai.usage.cache_read_input_tokens span attribute
     (deduped to the LLM span); hit rate = cache_read / total input tokens.
     hours is clamped to [1, 8760]; trace_env (dev|staging|prod|'') scopes to
-    traces tagged with that waj.env (`environment` is the deprecated alias);
+    traces tagged with that environment (`environment` is the deprecated alias);
     env (staging|prod) selects the config branch used to price the savings
     estimate."""
-    validate_env(env)  # fail fast before the (expensive) ClickHouse query
+    validate_env(env)  # fail fast before the (expensive) tracing-store query
     environment = resolve_alias(trace_env, environment,
                                 new_name="trace_env", old_name="environment")
     from admin.screens.live_analytics import (estimate_cache_savings_usd,
@@ -149,8 +150,8 @@ def traces(action: Literal["search", "get", "span", "transcript",
     hours (search only) is clamped to [1, 8760]; status must be
     success | error | ''; tool (search only) narrows to traces that called
     that tool by name. search always returns tool_filter_applied: if a
-    `tool` filter was requested and this is false, the ClickHouse match
-    query failed and `traces` is the UNNARROWED list for the window — do
+    `tool` filter was requested and this is false, the tracing store's
+    match query failed and `traces` is the UNNARROWED list for the window — do
     not treat it as "every trace called `tool`"."""
     from admin.screens.observability import (load_span_detail_json,
                                              load_span_tree_json,
@@ -231,7 +232,8 @@ def voice_insights(hours: int = 24, trace_env: TraceEnv = "") -> Dict[str, Any]:
     assistant turns, tool calls, barge-ins, and p50/p95 of end-of-turn ->
     first audio, end-of-turn -> spoken answer, delegate wall time and brain
     LLM time, over the last `hours` (clamped to [1, 8760]). `ch_ok: false` +
-    `notice` means ClickHouse was unreachable (numbers are blanks, not
+    `notice` means the tracing store was unreachable or is not set up
+    (numbers are blanks, not
     zeros). For one call's audio use traces(action="audio")."""
     from admin.screens.observability import load_voice_live_insights
     return load_voice_live_insights(past_hours=max(1, min(8760, hours)),

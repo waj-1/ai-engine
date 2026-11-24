@@ -36,7 +36,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, quote_plus, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
@@ -150,6 +150,8 @@ templates.env.globals["agent_label"] = _agent_label
 from admin.eval_context import eval_context_fields as _eval_context_fields  # noqa: E402
 
 templates.env.globals["eval_context_fields"] = _eval_context_fields
+from admin.eval_context import business_field_label as _business_field_label  # noqa: E402
+templates.env.globals["business_field_label"] = _business_field_label
 
 KB_KIND_LABELS = {
     "pgvector": "Uploaded files",
@@ -290,6 +292,13 @@ def current_env_live(
     return "prod"
 
 
+def envs_have_separate_databases() -> bool:
+    """True when staging and production read different databases (the
+    cross-env ``STAGING_/PROD_AI_SUPABASE_URL`` are set). With one database a
+    table without an ``environment`` column is the same in both."""
+    return any(os.getenv(f"{p}_AI_SUPABASE_URL") for p in ("STAGING", "PROD"))
+
+
 def client_for(env: str):
     """Service-role Supabase client for the *selected* environment's branch.
 
@@ -356,8 +365,12 @@ def render_error_page(
     *,
     detail: Any = None,
     bad_params: Optional[List[str]] = None,
+    heading: Optional[str] = None,
+    retry: Optional[Tuple[str, str]] = None,
 ) -> HTMLResponse:
-    """Render admin/templates/error.html with a link back to the page's area."""
+    """Render admin/templates/error.html with a link back to the page's area.
+    `heading` replaces the status's stock heading; `retry` = (href, label) adds
+    a primary link back to where the operator came from (e.g. a form)."""
     section = portal_nav.nav_item(portal_nav.section_for(request.url.path)) or portal_nav.PRIMARY[0]
     back_href, back_label = section.href, f"Back to {section.label}"
     retry_href = retry_label = None
@@ -378,7 +391,9 @@ def render_error_page(
             " It may have been deleted, or the link is out of date."
     else:
         message = _plain_detail(detail) or "The request couldn't be completed."
-    heading = _ERROR_HEADINGS.get(status_code, "Something went wrong")
+    heading = heading or _ERROR_HEADINGS.get(status_code, "Something went wrong")
+    if retry:
+        retry_href, retry_label = retry
     resp = templates.TemplateResponse(
         request, "error.html",
         {"ctx": None, "status": status_code, "heading": heading, "message": message,
@@ -1440,32 +1455,44 @@ async def profile_serve_prompt_version(
 async def kb_screen(
     request: Request,
     env: str = Depends(current_env),
-    kind: Optional[str] = Query(None, pattern=r"^[a-z_]*$"),
+    kind: Optional[str] = Query(None, pattern=r"^[a-z_]*(:[a-z0-9][a-z0-9_-]{0,63})?$"),
     ctx: dict = Depends(require_superuser),
 ) -> HTMLResponse:
     kind = kind or None  # the filter <select> submits "" for "All agents"
     client = client_for(env)
     q = client.table("agent_data_sources").select("*").order("agent_kind").order("name")
-    if kind:
-        q = q.eq("agent_kind", kind)
     rows = _safe_list(q.execute())
+    # Who uses each source, as the runtime reads it: the profiles that attach
+    # it (data_source_ids) plus the product-kind label on the row. The
+    # "Agent" filter narrows on the same list, so one generic agent
+    # (`custom:<slug>`) can be picked on its own.
+    from admin.kb_handlers import kb_profile_rows, kb_used_by
+
+    kb_profiles = kb_profile_rows(client, env)
+    for r in rows:
+        r["used_by"] = kb_used_by(r, kb_profiles)
+    if kind:
+        rows = [r for r in rows if kind in r["used_by"]]
     # Scoped build: hide other agents' data-source rows (their agent_kind chips
     # would expose the full catalog). The scope's own sources are tagged with
     # its kind, so they stay. No-op on a full build.
-    from admin.agent_kinds import build_agent_kinds, build_kinds, scope_to_build
+    from admin.agent_kinds import build_kinds, scope_to_build
 
     # Generic (un-kinded) sources stay; another agent's do not.
     rows = scope_to_build(rows, keep_unkinded=True)
     # Filter chip bar + the create-form "Primary agent kind" dropdown: this
     # build's agents (admin/agent_kinds.py — never a partner's reserved
     # title/suggestions kinds; the full live list on the WAJ build).
-    filter_kinds = list(build_agent_kinds())
+    from admin.agent_kinds import build_agent_choices
+
+    # One entry per agent: each generic agent by name, not one "custom".
+    filter_kinds = list(build_agent_choices(env=env))
     if build_kinds() is None:
         # A filter link for a kind outside the list (legacy rows) still works.
         for r in rows:
-            k = r.get("agent_kind")
-            if k and k not in filter_kinds:
-                filter_kinds.append(k)
+            for k in r["used_by"]:
+                if k not in filter_kinds:
+                    filter_kinds.append(k)
     _attach_kb_document_stats(client, rows)
     from admin.kb_handlers import embedding_mismatch, embedding_status
 
@@ -1624,11 +1651,30 @@ def collect_voice_budgets(client) -> Dict[str, Any]:
         for bid, used in sorted(usage.items(), key=lambda kv: -kv[1])
         if bid not in {r["business_id"] for r in rows}
     ]
+    # A generic agent's calls are charged to one id per agent
+    # (endpoints/voice_live.agent_budget_id); name the agent beside it.
+    names = _agent_budget_names()
+    for row in list(rows) + unbudgeted:
+        row["agent_name"] = names.get(str(row.get("business_id") or ""))
     return {
         "voice_budget_rows": rows,
         "voice_budget_unbudgeted": unbudgeted,
         "voice_budget_default_seconds": DEFAULT_DAILY_SECONDS,
     }
+
+
+def _agent_budget_names() -> Dict[str, str]:
+    """{budget id: agent name} for the generic agents. Empty on any failure:
+    the page still lists the ids."""
+    try:
+        from admin.agent_kinds import SLUG_ADDRESSED_KIND, custom_agent_rows
+        from endpoints.voice_live import agent_budget_id
+
+        return {agent_budget_id(SLUG_ADDRESSED_KIND, r["slug"]): (r.get("display_name") or r["slug"])
+                for r in custom_agent_rows() if r.get("slug")}
+    except Exception as exc:  # noqa: BLE001 - names are a convenience
+        logger.debug("voice budgets: agent names skipped (%s)", exc)
+        return {}
 
 
 @router.get("/voice-budgets", response_class=HTMLResponse)
@@ -1645,6 +1691,9 @@ async def voice_budgets_screen(
     """
     context: Dict[str, Any] = {
         "ctx": ctx, "active": "settings", "current_env": env,
+        # Budgets have no environment column: with one database they are the
+        # same whichever environment is picked, so the page shows no switch.
+        "env_scoped": envs_have_separate_databases(),
         "error": request.query_params.get("error"),
     }
     try:
@@ -2238,7 +2287,7 @@ def _mcp_server_cards(env: Optional[str] = None) -> List[Dict[str, Any]]:
         # Template ("mold") profiles are blueprints, not agents anyone talks to.
         try:
             profiles = client.table("agent_profiles").select(
-                "profile_id, display_name, agent_kind, environment, status"
+                "profile_id, display_name, agent_kind, slug, environment, status"
             ).execute().data or []
         except Exception:  # noqa: BLE001 - "Used by" is decoration; never sink the list
             profiles = []
@@ -2249,22 +2298,37 @@ def _mcp_server_cards(env: Optional[str] = None) -> List[Dict[str, Any]]:
             if p.get("status") != "template" and in_build(p.get("agent_kind"))
         }
         used_by: Dict[str, List[str]] = {}
+        # The agent-picker values (`admin/agent_kinds.agent_choice`) of the
+        # agents using each server, for the Tool catalog's agent filter.
+        used_by_agents: Dict[str, List[str]] = {}
+        from admin.agent_kinds import _clean_label, agent_choice
         for a in att_rows:
             p = prof_by_id.get(a.get("profile_id"))
             if p:
-                from admin.agent_kinds import _clean_label
                 name = _clean_label(p.get("display_name") or "") or p.get("agent_kind") or ""
                 lst = used_by.setdefault(a.get("mcp_server_id"), [])
                 if name and name not in lst:
                     lst.append(name)
+                value = agent_choice(p.get("agent_kind") or "", p.get("slug"))
+                vals = used_by_agents.setdefault(a.get("mcp_server_id"), [])
+                if value and value not in vals:
+                    vals.append(value)
+        # An external server's tools are the ones it lists (the last list
+        # this process saw, else a brief live read) — not catalog rows.
+        from admin.external_mcp_tools import listed_tools
+
+        listed = listed_tools([r for r in rows if r.get("source") != "bundle" and r.get("is_active", True)])
         for row in rows:
             sid = row.get("mcp_server_id")
             if row.get("source") == "bundle":
                 row["tool_count"] = member_counts.get(sid, 0)
             else:
-                row["tool_count"] = len(row.get("tool_subset") or []) or None
+                row["listed_tools"] = listed.get(str(sid))
+                row["tool_count"] = (len(row["listed_tools"]) if row["listed_tools"] is not None
+                                     else (len(row.get("tool_subset") or []) or None))
             row["attached_count"] = att_counts.get(sid, 0)
             row["used_by"] = used_by.get(sid, [])
+            row["used_by_agents"] = used_by_agents.get(sid, [])
             row["display_name"] = mcp_display_name(row.get("name"))
             row["type_label"] = (
                 "Built-in" if row.get("is_builtin")
@@ -2338,6 +2402,7 @@ def build_integrations_context(env: Optional[str] = None) -> Dict[str, Any]:
         })
     servers = _mcp_server_cards(env)
     all_tools = _all_tool_rows(env)
+    external_groups = _external_tool_groups(servers)
     builtin = [s for s in servers if s.get("is_builtin")]
     bundles = [s for s in servers if not s.get("is_builtin") and s.get("source") == "bundle"]
     external = [s for s in servers if not s.get("is_builtin") and s.get("source") == "external"]
@@ -2349,10 +2414,46 @@ def build_integrations_context(env: Optional[str] = None) -> Dict[str, Any]:
         # Internal group = operator bundles first, then seeder-managed built-ins.
         "mcp_internal": bundles + builtin,
         "all_tools": all_tools,
-        # Tool catalog collapsed per server (a tool can sit in several).
-        "tool_groups": _tool_groups(env, bundles + builtin, all_tools),
-        "tool_agent_kinds": sorted({t.get("agent_kind") for t in all_tools if t.get("agent_kind")}),
+        # Tool catalog collapsed per server (a tool can sit in several),
+        # then one group per external server with the tools it lists.
+        "tool_groups": _tool_groups(env, bundles + builtin, all_tools) + external_groups,
+        "catalog_count": len(all_tools) + sum(len(g["tools"]) for g in external_groups),
+        "tool_agent_kinds": _tool_filter_agents(all_tools),
     }
+
+
+def _tool_filter_agents(all_tools: List[Dict[str, Any]]) -> List[str]:
+    """The Tool catalog's agent filter: every agent (the list every
+    Build-area picker uses, one entry per generic agent), then any other kind
+    a catalog row names. A generic agent gets its tools through the servers
+    attached to it, so it matches a whole server group (``agent_values``)."""
+    from admin.agent_kinds import build_agent_choices, in_build
+
+    out = list(build_agent_choices())
+    for t in all_tools:
+        for k in [t.get("agent_kind")] + list(t.get("additional_agent_kinds") or []):
+            if k and k not in out and in_build(k):
+                out.append(k)
+    return out
+
+
+def _external_tool_groups(servers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """One catalog group per external server, holding the tools it lists
+    (``_mcp_server_cards`` read them). They are the server's, not catalog
+    rows, so they carry no editor link: ``external`` marks them."""
+    groups: List[Dict[str, Any]] = []
+    for srv in servers:
+        if srv.get("is_builtin") or srv.get("source") == "bundle":
+            continue
+        listed = srv.get("listed_tools") or []
+        if not listed:
+            continue
+        groups.append({"server": srv, "external": True,
+                       "agent_values": srv.get("used_by_agents") or [], "tools": [
+            {"python_name": t["name"], "description": t.get("description"),
+             "external": True, "scope": None, "agent_kind": None}
+            for t in listed]})
+    return groups
 
 
 def _tool_groups(env: Optional[str], servers: List[Dict[str, Any]],
@@ -2387,7 +2488,8 @@ def _tool_groups(env: Optional[str], servers: List[Dict[str, Any]],
     for srv in servers:
         items = [t for _, t in sorted(per_server.get(srv.get("mcp_server_id"), []), key=lambda x: x[0])]
         if items:
-            groups.append({"server": srv, "tools": items})
+            groups.append({"server": srv, "tools": items,
+                           "agent_values": srv.get("used_by_agents") or []})
     rest = [t for t in tools if t.get("tool_id") not in grouped]
     if rest:
         groups.append({"server": None, "tools": rest})
@@ -3445,7 +3547,8 @@ async def users_screen(
         {"ctx": ctx, "active": "users", "current_env": env, "hide_env_switcher": True,
          "rows": rows, "superusers": [r for r in rows if r["is_superuser"]],
          "people": shown, "admin_count": sum(1 for p in shown if p["is_admin"]),
-         "service_count": service_count, "show_service": service},
+         "service_count": service_count, "show_service": service,
+         "team_copy": govern.team_copy()},
     )
 
 
@@ -3500,6 +3603,27 @@ async def env_screen(
             {"ctx": ctx, "active": "env", "current_env": env,
              "tab": "variables", "hide_env_switcher": True,
              "env_vars": fetch_env_vars_by_env()},
+        )
+
+    if tab == "history":
+        # Promotion history: every published agent version, newest first.
+        # (Code-deploy history is a different screen: /admin/deployments?tab=history.)
+        from admin.screens import govern
+
+        labels = govern.env_labels(single_env_deployment())
+        main = None
+        try:
+            main = get_main_client()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("promotion history: main client unavailable (%s)", exc)
+        history = govern.promotion_history(tgt_client=client_for("prod"), tgt_env="prod",
+                                           main_client=main, labels=labels)
+        return templates.TemplateResponse(
+            request, "env.html",
+            {"ctx": ctx, "active": "env", "current_env": env,
+             "tab": "history", "hide_env_switcher": True,
+             "history": history, "labels": labels,
+             "q": request.query_params.get("q", "")},
         )
 
     # Promote tab (default): one overview grid — per agent: live version,

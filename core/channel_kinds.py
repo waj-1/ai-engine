@@ -13,6 +13,8 @@ hook (see ``core.plugins.HOOKS``):
   (``core/deployment.py``) never offers or lists.
 * ``default_channels()`` returns the rows ``admin/seed_channels.py`` inserts
   at boot (insert-only, on slug).
+* ``name_example()`` returns ``(name, slug)``: the example the New channel
+  form shows in its empty Name and Short code name fields.
 
 The stored kind is also checked by the ``agent_channels`` CHECK constraint, so
 a kind a plugin adds must be allowed there too.
@@ -56,6 +58,18 @@ def full_build_channel_kinds() -> Tuple[str, ...]:
     for kinds in call_hook(_providers(), "full_build_channel_kinds"):
         out.extend(k for k in (kinds or ()) if k not in out)
     return tuple(out)
+
+
+# The New channel form's example name and code name in a build whose plugins
+# give none: a neutral surface, not any product's app.
+DEFAULT_NAME_EXAMPLE: Tuple[str, str] = ("Website chat", "website_chat")
+
+
+def channel_name_example() -> Tuple[str, str]:
+    """``(name, slug)`` the New channel form shows as placeholders: the last
+    plugin's ``name_example()``, else :data:`DEFAULT_NAME_EXAMPLE`."""
+    found = [tuple(x) for x in call_hook(_providers(), "name_example") if x]
+    return found[-1] if found else DEFAULT_NAME_EXAMPLE
 
 
 def default_channels() -> List[Dict[str, Any]]:

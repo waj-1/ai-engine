@@ -10,7 +10,7 @@ Instructions are what the agent is told before every conversation: who it is, ho
 2. In **What changed?**, write a few words such as "Shorter replies". This note shows in the history, so everyone can see why the text changed.
 3. Click **Save instructions** at the bottom of the page. The bar at the bottom shows **Unsaved changes** until you save. Click **Discard** to throw your edits away.
 
-**Changes reach people on their next message.** There's no separate publish step, so test straight after saving. See [Make your changes live](../07-publishing/01-publish-changes.md).
+**Test straight after saving.** On a portal without a STAGING / PRODUCTION switch, a saved change reaches people on their next message. With the switch, it applies to Staging straight away and reaches Production when you promote the agent. See [Make your changes live](../07-publishing/01-publish-changes.md).
 
 Tips:
 

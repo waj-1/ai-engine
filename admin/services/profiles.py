@@ -173,9 +173,13 @@ def invalidate_profile_loader(agent_kind: str, environment: str) -> None:
     module, and later MCP configure-tools) don't need to import
     `core.agent_profile` directly.
     """
+    from admin.agent_kinds import clear_cache
     from core.agent_profile import AgentProfileLoader
 
     AgentProfileLoader.invalidate(agent_kind, environment)
+    # The portal's agent pickers read a short-lived profile cache: a new or
+    # renamed agent must show in them at once, not a minute later.
+    clear_cache()
 
 
 def update_profile_row(*, profile_id: str, payload: Dict[str, Any],

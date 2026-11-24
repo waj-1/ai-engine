@@ -45,6 +45,71 @@ def _served_kinds() -> Optional[set]:
     return set(visible_agent_kinds())
 
 
+def _model_rows(client) -> Optional[Dict[str, Dict[str, Any]]]:
+    """model_id -> agent_models row; None when the rows cannot be read (then
+    nothing is decided about the template's model)."""
+    try:
+        rows = _rows(client.table("agent_models").select("*").execute())
+    except Exception as exc:  # noqa: BLE001 — the picker then shows no default
+        logger.warning("templates: model rows unavailable (%s)", exc)
+        return None
+    return {str(r.get("model_id")): r for r in rows if isinstance(r, dict) and r.get("model_id")}
+
+
+def default_model_choice(tmpl: Dict[str, Any], models: Dict[str, Dict[str, Any]],
+                         environment: str = "staging") -> Dict[str, Any]:
+    """The model an agent made from `tmpl` gets when no model is picked.
+
+    The template's own model when it can run on this install; otherwise the
+    Automatic row (the first usable model, core/model_resolver.py), so a new
+    agent never starts pinned to a provider with no key. Returns
+    ``{"auto": bool, "label": str, "template_model": str|None, "reason": str|None}``:
+    `label` is what the New agent window shows as the default."""
+    from core.model_resolver import (
+        AUTO_MODEL_NAME, first_usable_model, is_auto_model, model_unusable_reason,
+    )
+
+    row = models.get(str(tmpl.get("model_main_id") or ""))
+    name = (row or {}).get("name") or (row or {}).get("model_string")
+    reason = "the template's model no longer exists" if row is None else (
+        None if is_auto_model(row) else model_unusable_reason(row))
+    if row is not None and not is_auto_model(row) and reason is None:
+        return {"auto": False, "label": f"The template's model: {name}",
+                "template_model": name, "reason": None}
+    picked = first_usable_model([m for m in models.values() if m.get("is_active") is not False],
+                                environment)
+    now = (picked.get("name") or picked.get("model_string")) if picked else None
+    label = f"{AUTO_MODEL_NAME}: " + (f"now {now}" if now else "none usable yet")
+    if row is not None and not is_auto_model(row):
+        label += f" ({name} can't run here: {reason})"
+    return {"auto": True, "label": label, "template_model": name, "reason": reason}
+
+
+def _replace_unusable_models(client, created: List[str], environment: str = "staging") -> None:
+    """Point each new agent whose (template's) model cannot run on this
+    install at the Automatic row instead."""
+    from admin.seed_demo_agent import ensure_auto_model
+
+    from core.model_resolver import is_auto_model
+
+    models = _model_rows(client)
+    if models is None:
+        return
+    auto_id: Optional[str] = None
+    for created_id in created:
+        row = _rows(client.table("agent_profiles").select("profile_id, model_main_id")
+                    .eq("profile_id", created_id).limit(1).execute())
+        if not row or not row[0].get("model_main_id") \
+                or is_auto_model(models.get(str(row[0]["model_main_id"]))):
+            continue
+        if not default_model_choice(row[0], models, environment)["auto"]:
+            continue
+        if auto_id is None:
+            auto_id = ensure_auto_model(client, environment)
+        client.table("agent_profiles").update({"model_main_id": auto_id}) \
+            .eq("profile_id", created_id).execute()
+
+
 def list_templates(client) -> List[Dict[str, Any]]:
     rows = _rows(client.table("agent_profiles").select("*")
                  .eq("status", "template").eq("environment", "staging").execute())
@@ -56,9 +121,11 @@ def list_templates(client) -> List[Dict[str, Any]]:
     # stored under says nothing about what you get.
     from endpoints.agents_v1 import generic_agents_enabled
     makes_generic = generic_agents_enabled()
+    models = _model_rows(client)
     out = []
     for r in rows:
         out.append({
+            "default_model": default_model_choice(r, models) if models is not None else None,
             "template_id": r["profile_id"], "slug": r.get("slug"),
             "display_name": r.get("display_name"),
             "agent_kind": "" if makes_generic else r.get("agent_kind"),
@@ -182,6 +249,11 @@ def use_template(*, template_id: str, display_name: str, slug: Optional[str] = N
         for created_id in created:
             client.table("agent_profiles").update(
                 {"model_main_id": model_id}).eq("profile_id", created_id).execute()
+    else:
+        # No model picked: keep the template's model only where it can run on
+        # this install (a key for its provider, or a local one); otherwise
+        # start on the Automatic row, which the New agent window says.
+        _replace_unusable_models(client, created)
 
     if agent_type_id:
         # The new agent and the sub-agents made with it are one team: they

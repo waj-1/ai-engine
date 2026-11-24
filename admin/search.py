@@ -71,9 +71,9 @@ PEOPLE_SOURCES: Tuple[Source, ...] = (
     ("conversations", "Conversations", src.conversations),
     ("telemetry", "Conversation telemetry", src.traces),
     # A plugin's own people sources (hook "search", `people_sources()`), e.g. a product
-    # database's customers.
+    # database's customers and businesses. The engine has no business table of
+    # its own, so a build without a plugin neither searches nor mentions one.
     *(s for found in _call_hook(_load_hook("search"), "people_sources") for s in found),
-    ("businesses", "Businesses", src.businesses),
 )
 
 _pool = cf.ThreadPoolExecutor(max_workers=16, thread_name_prefix=pii.SEARCH_THREAD_PREFIX)

@@ -223,3 +223,16 @@ def test_use_template_missing_parent_rerenders_gallery_with_error(client, monkey
 
     assert resp.status_code == 400
     assert "parent not found" in resp.text.lower()
+
+
+def test_new_agent_window_names_the_model_the_agent_will_get(client, monkeypatch):
+    label = "Automatic (first usable model): now Local model (Gemini Flash can't run here: GOOGLE_API_KEY is not set)"
+    catalog = [{**_CATALOG[0], "default_model": {"auto": True, "label": label}}]
+    monkeypatch.setattr(templates_handlers, "list_templates", lambda c: catalog)
+    monkeypatch.setattr(templates_handlers, "_model_options",
+                        lambda: [{"model_id": "m", "name": "Local model", "model_string": "qwen"}])
+    resp = client.get("/admin/templates")
+    assert resp.status_code == 200
+    from html import unescape
+    assert f'data-template-model="{label}"' in unescape(resp.text)
+    assert "data-default-model-option" in resp.text

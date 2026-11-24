@@ -192,3 +192,55 @@ def test_wizard_model_choice_is_applied_and_checked_first(monkeypatch):
     out = tpl.use_template(template_id="t_root", display_name="Y", model_id="m-local", actor_user_id="u")
     rows = {r["profile_id"]: r for r in client.table("agent_profiles")._data}
     assert {rows[i]["model_main_id"] for i in out["created"]} == {"m-local"}
+
+
+def _client_with_models(model_main_id):
+    client = FakeClient({"agent_profiles": [
+        {**CATALOG["t_chart"], "profile_id": "t_one", "slug": "mold:one", "model_main_id": model_main_id}]})
+    client.table("agent_models")._data.extend([
+        {"model_id": "m-gemini", "name": "Gemini Flash", "provider": "google_genai",
+         "model_string": "gemini-3-flash-preview", "is_active": True, "environment": "staging",
+         "extra_config": {}, "created_at": "2026-01-01"},
+        {"model_id": "m-local", "name": "Local model", "provider": "ollama",
+         "model_string": "qwen2.5:3b", "is_active": True, "environment": "staging",
+         "extra_config": {}, "created_at": "2026-02-01"},
+        {"model_id": "m-auto", "name": "Automatic (first usable model)", "provider": "auto",
+         "model_string": "auto", "is_active": True, "environment": "staging",
+         "extra_config": {"auto": True}, "created_at": "2026-03-01"},
+    ])
+    return client
+
+
+def _no_gemini_key(monkeypatch):
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    from core import provider_keys
+    provider_keys.invalidate()
+
+
+def test_a_template_model_with_no_key_gives_the_new_agent_the_automatic_model(monkeypatch):
+    _no_gemini_key(monkeypatch)
+    client = _client_with_models("m-gemini")
+    monkeypatch.setattr("core.auth.admin_service_client", lambda: client)
+    monkeypatch.setattr(tpl, "record_change", lambda **k: None)
+    out = tpl.use_template(template_id="t_one", display_name="Helper", actor_user_id="u")
+    models = {m["model_id"]: m for m in client.table("agent_models")._data}
+    new = next(r for r in client.table("agent_profiles")._data if r["profile_id"] == out["root"])
+    assert new["model_main_id"] == "m-auto" and models["m-auto"]["provider"] == "auto"
+    # The New agent window says so, and names what Automatic runs on now.
+    choice = tpl.list_templates(client)[0]["default_model"]
+    assert choice["auto"] is True and "Automatic (first usable model): now Local model" in choice["label"]
+    assert "Gemini Flash can't run here" in choice["label"]
+
+
+def test_a_usable_template_model_is_kept(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-google")
+    from core import provider_keys
+    provider_keys.invalidate()
+    client = _client_with_models("m-gemini")
+    monkeypatch.setattr("core.auth.admin_service_client", lambda: client)
+    monkeypatch.setattr(tpl, "record_change", lambda **k: None)
+    out = tpl.use_template(template_id="t_one", display_name="Helper", actor_user_id="u")
+    new = next(r for r in client.table("agent_profiles")._data if r["profile_id"] == out["root"])
+    assert new["model_main_id"] == "m-gemini"
+    assert tpl.list_templates(client)[0]["default_model"]["label"] == "The template's model: Gemini Flash"

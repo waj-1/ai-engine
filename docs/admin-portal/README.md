@@ -132,7 +132,15 @@ agents and their tabs, tools, knowledge, tests, conversations and the people in
 them, Help and docs sections; see
 [Architecture → Global search](./00-architecture.md#global-search)), the persistent **environment switcher**
 (**STAGING / PRODUCTION**), and a **light/dark theme toggle**. The env selection
-persists across navigation via the `waj_admin_env` cookie (default **staging**).
+persists across navigation via the `waj_admin_env` cookie (default **staging**):
+**staging** for 30 days, **production** only for the browser session (a session
+cookie, `main.persist_admin_env`). While production is selected, every config
+screen shows a red **Production** banner above the page with a *Switch to staging*
+link (Operate screens, which only read, do not). Settings pages hide the switcher
+unless their data is per environment (`admin/nav.py:env_chrome`): Model keys keeps
+it and names the environment on the page (`env_scoped`); Voice budgets keeps it only
+when staging and production read separate databases
+(`router.envs_have_separate_databases()`).
 **Staging** is the live, editable env (reads live config); **production** is
 immutable, served from snapshots created at **Staging → Production** promotion time.
 See [Architecture](./00-architecture.md).

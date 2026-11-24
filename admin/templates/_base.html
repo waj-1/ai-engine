@@ -1,6 +1,7 @@
 {# ai_agent/admin/templates/_base.html — pure layout shell #}
 {% from "_components/icon.html" import icon %}
 {% from "_components/section_tabs.html" import section_tabs %}
+{% from "_components/brand_mark.html" import brand_mark %}
 <!doctype html>
 {% set _brand = brand() %}
 {% set _nav = portal_nav() %}
@@ -48,17 +49,7 @@
 <div class="app-shell">
   <aside class="app-nav" id="app-nav">
     <div class="nav-brand">
-      {% if _brand.mark %}
-      <span class="nav-brand-mark nav-brand-mark-logo" aria-hidden="true">
-        <svg viewBox="0 0 30 30" focusable="false">
-          <rect width="30" height="30" rx="9" fill="{{ _brand.accent or 'currentColor' }}"/>
-          <text x="15" y="22" text-anchor="middle" font-family="Sora, system-ui, sans-serif"
-                font-size="20" font-weight="800" fill="#FFFFFF">{{ _brand.mark }}</text>
-        </svg>
-      </span>
-      {% else %}
-      <span class="nav-brand-mark"></span>
-      {% endif %}
+      {{ brand_mark(_brand) }}
       <span class="nav-label">{{ _brand.name }}</span>
     </div>
     {# Sidebar IA lives in admin/nav.py (PRIMARY / SETTINGS). Which item is
@@ -135,7 +126,9 @@
          is a trap: its other tab is guaranteed-empty (no profiles, no traces).
          Folded into `hide_env_switcher` so the per-screen opt-outs below keep
          working unchanged. #}
-      {% set hide_env_switcher = hide_env_switcher or single_env_deployment() %}
+      {% set _chrome = env_chrome(request if request is defined else none, active if active is defined else none,
+                                  env_scoped if env_scoped is defined else false) %}
+      {% set hide_env_switcher = hide_env_switcher or single_env_deployment() or not _chrome.switch %}
       {% if not hide_env_switcher %}
       <nav class="env-switcher env-{{ _env }}" aria-label="Environment" title="Active environment: {{ _env|upper }}">
         <a class="{{ 'active staging' if _env == 'staging' else '' }}" href="?env=staging">STAGING</a>
@@ -157,6 +150,21 @@
       {% block topbar_action %}{% endblock %}
     </header>
     <div class="app-content">
+      {# Production is never picked silently: a config screen working on it
+         says so above everything else (admin/nav.py env_chrome). #}
+      {% if not hide_env_switcher and _env == 'prod' and _chrome.prod_banner %}
+      <div class="env-banner env-banner-prod" role="status" data-env-banner="prod">
+        <strong>Production</strong>
+        <span>Changes on this page apply to production, which serves live traffic.</span>
+        <a href="?env=staging">Switch to staging</a>
+      </div>
+      {% endif %}
+      {% if not hide_env_switcher and _chrome.page_marker %}
+      <p class="caption env-marker mb-s" data-env-marker="{{ _env }}">
+        <span class="chip chip-{{ 'err' if _env == 'prod' else 'warn' }}">{{ 'Production' if _env == 'prod' else 'Staging' }}</span>
+        This page shows {{ 'production' if _env == 'prod' else 'staging' }} only; {{ 'staging' if _env == 'prod' else 'production' }} has its own. Use the switch at the top to change.
+      </p>
+      {% endif %}
       {% block section_tabs %}
       {% if not hide_section_tabs %}{{ section_tabs(section_tabs_for(request if request is defined else none)) }}{% endif %}
       {% endblock %}

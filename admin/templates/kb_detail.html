@@ -3,7 +3,7 @@
 {% from "_components/callout.html" import alert, hint, hint_text, info %}
 {% block title %}{{ row.name }} · Knowledge bases · {{ brand().title }}{% endblock %}
 {% block page_title %}{{ row.name }}{% endblock %}
-{% block page_subtitle %}{{ kb_kind_label(row.kind) }}{% if row.agent_kind %} · used by {{ agent_label(row.agent_kind) }}{% endif %}{% endblock %}
+{% block page_subtitle %}{{ kb_kind_label(row.kind) }}{% if used_by %} · used by {{ agent_label(used_by[0]) }}{% if used_by|length > 1 %} and {{ used_by|length - 1 }} more{% endif %}{% endif %}{% endblock %}
 {% block content %}
 <a class="back-link" href="/admin/kb">&larr; Knowledge bases</a>
 {% set uploaded = request.query_params.get('uploaded') %}
@@ -143,7 +143,7 @@
                 <option value="user_guide">User guide</option>
                 <option value="feature_explanation">Feature explanation</option>
                 <option value="navigation_help">Navigation help</option>
-                <option value="business_concept">Business concept</option>
+                <option value="business_concept">{% if business_field_label() %}Business concept{% else %}Concept{% endif %}</option>
                 <option value="troubleshooting">Troubleshooting</option>
                 <option value="faq">FAQ</option>
               </select>
@@ -222,22 +222,25 @@
         </label>
         <label class="field">
           <span class="field-label">Agent</span>
+          {# One entry per agent: a product agent by its kind, each generic
+             agent by name (custom:<slug>, attached on its profile — the same
+             attachment as its Tools & knowledge tab). #}
           <select name="agent_kind">
             <option value="">Not attached</option>
             {% for k in agent_kinds %}
-            <option value="{{ k }}" {% if k == row.agent_kind %}selected{% endif %}>{{ agent_label(k) }}</option>
+            <option value="{{ k }}" {% if k == primary_agent %}selected{% endif %}>{{ agent_label(k) }}</option>
             {% endfor %}
-            {% if row.agent_kind and row.agent_kind not in agent_kinds %}
-            <option value="{{ row.agent_kind }}" selected>{{ agent_label(row.agent_kind) }}</option>
+            {% if primary_agent and primary_agent not in agent_kinds %}
+            <option value="{{ primary_agent }}" selected>{{ agent_label(primary_agent) }}</option>
             {% endif %}
           </select>
           <span class="field-help">The agent that searches this knowledge base.</span>
         </label>
         <fieldset class="field-set">
           <legend>Also used by</legend>
-          {% set extra = row.additional_agent_kinds or [] %}
+          {% set extra = also_used_by or [] %}
           <div class="check-grid">
-            {% for k in agent_kinds %}{% if k != row.agent_kind %}
+            {% for k in agent_kinds %}{% if k != primary_agent %}
             <label class="field-check"><input type="checkbox" name="additional_agent_kinds" value="{{ k }}" {% if k in extra %}checked{% endif %}> {{ agent_label(k) }}</label>
             {% endif %}{% endfor %}
             {% for k in extra %}{% if k not in agent_kinds %}
@@ -329,8 +332,8 @@
       <dd>{% if row.is_active %}{{ chip('Active', variant='ok', dot=True) }}{% else %}{{ chip('Off', variant='warn', dot=True) }}{% endif %}</dd>
       <dt>Source type</dt><dd>{{ kb_kind_label(row.kind) }}</dd>
       <dt>Agent</dt>
-      <dd>{% if row.agent_kind %}{{ agent_label(row.agent_kind) }}{% else %}{{ chip('Not attached', variant='warn') }}{% endif %}
-        {% if row.additional_agent_kinds %}<br><span class="caption">+ {{ row.additional_agent_kinds|length }} more</span>{% endif %}</dd>
+      <dd>{% if used_by %}{{ agent_label(used_by[0]) }}{% else %}{{ chip('Not attached', variant='warn') }}{% endif %}
+        {% if used_by|length > 1 %}<br><span class="caption" title="{% for v in used_by[1:] %}{{ agent_label(v) }}{% if not loop.last %}, {% endif %}{% endfor %}">+ {{ used_by|length - 1 }} more</span>{% endif %}</dd>
       {% if row.kind == 'pgvector' and pages is not none %}
       <dt>Documents</dt><dd class="num">{{ pages_total }}</dd>
       <dt>Passages</dt><dd class="num">{{ chunks_total }}</dd>

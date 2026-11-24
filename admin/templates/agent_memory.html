@@ -122,7 +122,11 @@
 
   <div class="form-actions">
     <button type="submit" class="primary">Save memory settings</button>
-    <span class="caption">Saved on <span class="technical">{{ profile.slug }}</span> ({{ current_env }}). Production uses the released version &mdash; release the agent after saving in staging.</span>
+    {% if current_env == 'prod' %}
+    <span class="caption">Saves to {{ agent_label(agent_kind) }} <span class="technical">{{ profile.slug }}</span> in production.</span>
+    {% else %}
+    <span class="caption">Saves to {{ agent_label(agent_kind) }} <span class="technical">{{ profile.slug }}</span> in staging. Production keeps the released version until you release {{ agent_label(agent_kind) }}.</span>
+    {% endif %}
   </div>
 </form>
 

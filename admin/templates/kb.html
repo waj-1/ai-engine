@@ -83,7 +83,7 @@ Documents are made searchable by an embedding model, and none is set up. {{ embe
       {% for r in rows %}
       <tr>
         <td><a href="/admin/kb/{{ r.source_id }}">{{ r.name }}</a></td>
-        <td>{% if r.agent_kind %}{{ agent_label(r.agent_kind) }}{% else %}{{ chip('Not attached to any agent', variant='warn') }}{% endif %}</td>
+        <td>{% if r.used_by %}{% for v in r.used_by %}{{ agent_label(v) }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}{{ chip('Not attached to any agent', variant='warn') }}{% endif %}</td>
         <td>{{ kb_kind_label(r.kind) }}</td>
         <td class="num">{% if r.kind == 'pgvector' and r.doc_count is not none %}{{ r.doc_count }}{% else %}<span class="muted">—</span>{% endif %}</td>
         <td class="caption num">

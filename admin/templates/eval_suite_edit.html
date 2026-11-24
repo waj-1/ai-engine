@@ -9,6 +9,7 @@
 {% set agent_name = agent_name if agent_name is defined else none %}
 {% set agent_missing = agent_missing if agent_missing is defined else false %}
 {% set target = target if target is defined else ((suite.pass_threshold or 0.7)|float) %}
+{% set biz_label = business_field_label() %}
 {% set title = suite.name|humanize or 'Test suite' %}
 {% block title %}{{ title }} · Test suites · {{ brand().title }}{% endblock %}
 {% block page_title %}{{ title }}{% endblock %}
@@ -88,7 +89,7 @@
     <div class="row between">
       <div>
         <h2 class="section-title">Cases</h2>
-        <span class="caption">Each case is a question and the answer you expect. Edit in place, then Save.</span>
+        <span class="caption">Each case is a question and the answer you expect. A case without a name is shown by its question. Edit in place, then Save.</span>
       </div>
       {% if scenarios %}<span class="caption">{{ scenarios|length }} cases</span>{% endif %}
     </div>
@@ -100,14 +101,14 @@
       </thead>
       <tbody>
         {% for sc in scenarios %}
-        {% set known = ['id', 'category', 'question', 'expected_answer'] %}
+        {% set known = ['id', 'name', 'category', 'question', 'expected_answer'] %}
         {% set extra = {} %}
         {% for k, v in sc.items() %}{% if k not in known %}{% set _ = extra.update({k: v}) %}{% endif %}{% endfor %}
         <tr>
           <td>
             <input type="hidden" name="scenario_ids" value="{{ sc.id or '' }}">
             <input type="hidden" name="scenario_extra_{{ loop.index0 }}" value='{{ extra|tojson }}'>
-            <div>{{ (sc.id or '—')|humanize }}</div>
+            <input name="scenario_name_{{ loop.index0 }}" value="{{ sc.name if (sc.name and sc.name != sc.id) else '' }}" dir="auto" aria-label="Case name" placeholder="{{ (sc.question or (sc.id|humanize) or '')|truncate(48) }}">
             <div class="technical">{{ sc.id or '' }}</div>
             {% if extra %}
             <details class="advanced mt-xs"><summary>Advanced</summary>
@@ -147,7 +148,7 @@
         <label class="field">Question<textarea name="new_scenario_question" rows="2" dir="auto"></textarea></label>
         <label class="field">Expected answer<textarea name="new_scenario_expected" rows="2" dir="auto"></textarea></label>
         <label class="field">Category<input name="new_scenario_category" placeholder="e.g. booking"></label>
-        <label class="field">Case name (optional)<input name="new_scenario_id" placeholder="made from the question"></label>
+        <label class="field">Name (optional)<input name="new_scenario_name" dir="auto" placeholder="the question is shown when empty"></label>
       </div>
       <label class="field mt-s">Technical: case JSON (optional)
         <textarea name="new_scenario_json" rows="3" class="code-block"
@@ -159,7 +160,7 @@
     <details class="advanced mt-m">
       <summary>Import cases from a CSV file</summary>
       <div class="stack-s mt-s">
-        <p class="caption">One case per row. Needs a <code>question</code> column; <code>id</code>, <code>category</code>, <code>expected_answer</code>, <code>expected_substrings</code> (separated by <code>;</code>), <code>locale</code> and the context ids are optional. Rows are added — nothing is overwritten.</p>
+        <p class="caption">One case per row. Needs a <code>question</code> column; <code>name</code>, <code>id</code>, <code>category</code>, <code>expected_answer</code>, <code>expected_substrings</code> (separated by <code>;</code>), <code>locale</code> and the context ids are optional. Rows are added — nothing is overwritten.</p>
         <div class="row">
           <input type="file" name="csv_file" accept=".csv,text/csv" form="eval-suite-csv-import" required>
           <button type="submit" form="eval-suite-csv-import">Upload CSV</button>
@@ -194,7 +195,7 @@
           <option value="{{ m.model_id }}" {% if suite.evaluator_model_id and suite.evaluator_model_id == m.model_id %}selected{% endif %}>{{ m.name }}{% if not m.is_active %} (inactive){% endif %}</option>
           {% endfor %}
         </select>
-        <span class="hint">Reads each answer and scores it against the expected answer. Needed for model comparisons.</span>
+        <span class="hint">Reads each answer and scores it against the expected answer. Any model this engine can call works, local ones included. Needed for model comparisons.</span>
       </label>
       <label class="checkbox"><input type="checkbox" name="is_active" {% if suite.is_active %}checked{% endif %}> Active (paused suites are skipped by schedules)</label>
     </div>
@@ -215,9 +216,11 @@
           <div class="eyebrow">Defaults for every run</div>
           <p class="hint">Every run of this suite starts with these; the Run form and individual cases can override them.</p>
           <div class="settings-grid mt-s">
-            <label class="field">Business
+            {% if biz_label %}
+            <label class="field">{{ biz_label }}
               {{ business_picker(name="default_business_id", businesses=businesses, selected_id=dc.business_id or "", placeholder="— no default —", style="width:100%;") }}
             </label>
+            {% else %}<input type="hidden" name="default_business_id" value="{{ dc.business_id or '' }}">{% endif %}
             <label class="field">Language
               <select name="default_locale">
                 {% for loc, lbl in [('', 'Not set'), ('en', 'English'), ('ar', 'Arabic'), ('tr', 'Turkish'), ('ru', 'Russian')] %}
@@ -257,12 +260,14 @@
     <input type="hidden" name="source" value="suite">
     <input type="hidden" name="profile_id" value="{{ suite.profile_id }}">
     <input type="hidden" name="suite_id" value="{{ suite.suite_id }}">
-    <label class="field">Business (optional)
+    {% if biz_label %}
+    <label class="field">{{ biz_label }} (optional)
       <select name="business_id">
         <option value="">The suite's default</option>
         {% for b in businesses %}<option value="{{ b.id }}">{{ b.name }}{% if b.subdomain %} ({{ b.subdomain }}){% endif %}</option>{% endfor %}
       </select>
     </label>
+    {% endif %}
     <details class="advanced">
       <summary>Advanced</summary>
       <div class="stack-m mt-s">
@@ -284,6 +289,7 @@
         <label class="field">Model
           <select name="model_id"><option value="">The agent's own model</option>
             {% for m in models %}<option value="{{ m.model_id }}">{{ m.name }}</option>{% endfor %}</select>
+          <span class="hint">Needs a judge model on this suite (any model this engine can call, local ones included), unless its cases only check tools or expected words.</span>
         </label>
       </div>
     </details>

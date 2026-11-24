@@ -488,8 +488,13 @@ def _clean_scenarios(scenarios: List[Any]) -> tuple:
             return [], "every scenario needs a question"
         sc = dict(sc)
         sc["question"] = question
+        name = str(sc.get("name") or "").strip()
+        if name:
+            sc["name"] = name  # what the portal calls the case
+        else:
+            sc.pop("name", None)
         if not sc.get("id"):
-            sc["id"] = _slugify_question_first_words(question)
+            sc["id"] = _slugify_question_first_words(name or question)
         cleaned.append(sc)
     return cleaned, None
 
@@ -536,8 +541,10 @@ def eval_suites(action: Literal["list", "get", "create", "update",
     that never mention profile_id at all); runner_kind, when supplied, must
     be one of this build's runner kinds; name, when supplied non-blank, renames
     the suite; scenarios, when supplied, REPLACES the whole array) |
-    import_scenarios (suite_id, scenarios — each needs a question; a missing
-    id is auto-slugified from the question — APPENDS to the existing array,
+    import_scenarios (suite_id, scenarios — each needs a question; an
+    optional `name` is what the portal shows for the case (the question is
+    shown without one); a missing id is auto-slugified from the name, else
+    the question — APPENDS to the existing array,
     doesn't replace it) | sync_from_repo (name = the suite's `name` field in
     admin.seed_eval_suites._SUITES (the plugin's specs) — NOT suite_id, since the repo constant
     has no suite_id; seeders are insert-if-missing, so a repo edit to an
@@ -863,7 +870,7 @@ def pytest_runs(action: Literal["trigger", "get", "list"] = "list",
     /admin/tests page, which blocks the HTTP request until pytest
     finishes — poll via jobs action=get or pytest_runs action=get) |
     get (run_id) | list (recent runs).
-    The trigger runs in the CONTROL-PLANE container against the local
+    The trigger runs in this engine's own container against the local
     checkout (not env-scoped, unlike the eval/e2e tools' env= param) and
     returns a job_id to poll via the jobs tool."""
     if action == "trigger":

@@ -21,7 +21,7 @@ Admins can change every agent and setting, so only give access to people who nee
 ## Remove someone's access
 
 1. Click **Remove admin** on their row and confirm.
-2. Their **Access** changes to **No portal access**. They can't sign in to the portal any more, but they keep their access to your other apps.
+2. Their **Access** changes to **No portal access**. They can't sign in to the portal any more. Any access they have to your other apps is not changed.
 
 You can't remove your own admin access. Ask another admin to do it.
 
@@ -31,7 +31,7 @@ The list shows people who already have an account. If a colleague isn't there, a
 
 ## Service accounts
 
-4. **Show service accounts** adds the accounts used by automated systems rather than people. You can usually leave them alone. Don't remove a service account's access unless your portal administrator asks you to.
+4. **Show service accounts** adds the accounts used by automated systems and tests rather than people. Admins, including the one created on the first-run page, always show in the main list. You can usually leave them alone. Don't remove a service account's access unless your portal administrator asks you to.
 
 ## Every change is recorded
 

@@ -438,3 +438,60 @@ def test_drift_screen_collapses_info_and_shows_badges(monkeypatch):
     assert '<details class="drift-group" open>' in html
     assert html.count('<details class="drift-group" >') + html.count('<details class="drift-group">') == 1
     assert '<details class="drift-quiet">' in html
+
+
+# --------------------------------------------------------------------------
+# Releases › Promotion history (agent promotes, not code deploys)
+# --------------------------------------------------------------------------
+
+def _history_db():
+    snap1 = {"_schema_version": 6, "display_name": "Front desk", "tool_ids": [T1],
+             "prompt_version_ids": {"system": "pv1"}, "prompt_contents": {"system": "Hi"}}
+    snap2 = {**snap1, "_schema_version": 7, "tool_ids": [T1, T2], "tool_python_names": ["a", "b"],
+             "prompt_version_ids": {"system": "pv2"}, "prompt_contents": {"system": "Hello"}}
+    return _DB({
+        "agent_profile_versions": [
+            {"version_id": "ver-1", "profile_id": PROD_PROFILE_ID, "environment": "prod", "version_number": 1,
+             "promoted_at": "2026-10-01T09:00:00+00:00", "promoted_by": ADMIN_ID,
+             "notes": "Promoted from staging by sara@partner.com", "snapshot": snap1},
+            {"version_id": "ver-2", "profile_id": PROD_PROFILE_ID, "environment": "prod", "version_number": 2,
+             "promoted_at": "2026-10-07T09:00:00+00:00", "promoted_by": None,
+             "notes": "Promoted from staging by ops@partner.com", "snapshot": snap2},
+            {"version_id": "ver-s", "profile_id": PROFILE_ID, "environment": "staging", "version_number": 1,
+             "promoted_at": "2026-10-08T09:00:00+00:00", "snapshot": snap1},
+        ],
+        "agent_profiles": [{"profile_id": PROD_PROFILE_ID, "display_name": "Front desk", "slug": "front_desk",
+                            "agent_kind": "custom", "served_version_id": None}],
+    })
+
+
+def test_promotion_history_lists_each_published_version_newest_first():
+    rows = govern.promotion_history(tgt_client=_history_db(), main_client=MAIN, now=NOW)
+    assert [r["version_id"] for r in rows] == ["ver-2", "ver-1"]  # prod only, newest first
+    new, first = rows
+    assert new["name"] == "Front desk" and new["number"] == 2 and new["replaced"] == 1
+    assert new["changes"] == ["Instructions", "Tools"]  # resolved copies fold into one area
+    assert new["by"] == "ops@partner.com"  # no user id: the notes still name the publisher
+    assert new["source"] == "Staging" and new["is_live"] is True and new["when"] == "7 Oct"
+    assert first["replaced"] is None and first["changes"] == ["First publish"]
+    assert first["by"] == "sara@partner.com" and first["is_live"] is False
+
+
+def test_promotion_history_tab_shows_agent_promotes_not_code_deploys(client):
+    with patch("admin.router.client_for", return_value=_history_db()), \
+         patch("admin.router.get_main_client", return_value=MAIN):
+        r = client.get("/admin/env?tab=history")
+    assert r.status_code == 200
+    body = r.text.split("<main")[-1]
+    assert "Promotion history" in body and "Front desk" in body
+    assert "replaced v1" in body and "Instructions, Tools" in body
+    # The strip names both histories for what they are.
+    assert 'href="/admin/env?tab=history"' in body
+    assert ">Deploy history<" in body or "Deploy history</a>" in body
+
+
+def test_releases_strip_names_the_deploy_history_for_what_it_is(client):
+    with patch("admin.router.client_for", return_value=_DB({})):
+        r = client.get("/admin/env")
+    assert r.status_code == 200
+    assert "Promotion history" in r.text and "Deploy history" in r.text

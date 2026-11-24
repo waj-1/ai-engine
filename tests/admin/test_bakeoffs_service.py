@@ -86,7 +86,7 @@ def test_create_bakeoff_raises_pre_insert_when_suite_missing_evaluator_model():
     )
     with patch("admin.services.bakeoffs.admin_service_client", return_value=client), \
          patch("admin.services.bakeoffs.start_suite_run") as mock_start:
-        with pytest.raises(ValueError, match="evaluator model"):
+        with pytest.raises(ValueError, match="no judge model is set"):
             bakeoffs.create_bakeoff(
                 name="bo", profile_id="p1",
                 variants=[{"label": "A", "profile_version_id": "v1"},

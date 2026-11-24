@@ -200,7 +200,9 @@
       </select>
     </label>
 
-    <label class="field">Business (optional)
+    {% set biz_label = business_field_label() %}
+    {% if biz_label %}
+    <label class="field">{{ biz_label }} (optional)
       <select name="business_id" style="width:100%;">
         <option value="">— all / inherit —</option>
         {% for b in businesses %}
@@ -208,6 +210,7 @@
         {% endfor %}
       </select>
     </label>
+    {% endif %}
 
     <label class="caption" style="display:flex;align-items:center;gap:var(--space-xxs);">
       <input type="checkbox" name="is_enabled" checked> Enabled

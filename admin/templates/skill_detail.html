@@ -2,8 +2,8 @@
 {% from "_components/callout.html" import alert %}
 {% block title %}{{ skill.display_name }} · Skills · {{ brand().title }}{% endblock %}
 {% block page_title %}{{ skill.display_name }}{% endblock %}
-{% block page_subtitle %}{{ agent_label(skill.agent_kind) }} &middot;
-  {% if skill.business_id %}one business{% else %}all businesses{% endif %}{% endblock %}
+{% block page_subtitle %}{% if skill_agents %}{% for v in skill_agents %}{{ agent_label(v) }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}No agent yet{% endif %}{% if business_field_label() or skill.business_id %} &middot;
+  {% if skill.business_id %}one business{% else %}all businesses{% endif %}{% endif %}{% endblock %}
 {% block content %}
 <a class="back-link" href="/admin/skills">&larr; Skills</a>
 

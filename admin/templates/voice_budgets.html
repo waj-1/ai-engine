@@ -3,10 +3,13 @@
 {% from "_components/callout.html" import alert %}
 {% block title %}Voice budgets · {{ brand().title }}{% endblock %}
 {% block page_title %}Voice budgets{% endblock %}
-{% block page_subtitle %}How much voice-call time each business can use per day.{% endblock %}
+{# A plugin with tenants keeps its "business" wording (business_field_label());
+   with none, budgets are kept per agent (endpoints/voice_live.agent_budget_id). #}
+{% block page_subtitle %}{% if business_field_label() %}How much voice-call time each business can use per day.{% else %}How much voice-call time each agent can use per day.{% endif %}{% endblock %}
 {% block content %}
 {% set _next = '/admin/voice-budgets' %}
 {% set _default = voice_budget_default_seconds or 0 %}
+{% set _biz = business_field_label() %}
 
 {% if error %}
 {% call alert('error') %}<strong>Could not save:</strong> {{ error }}{% endcall %}
@@ -17,8 +20,14 @@
 
 <section class="section">
   <p style="max-width:760px;margin:0;">
+    {% if _biz %}
     A budget belongs to a <strong>business</strong>, not to a voice model: it covers all of that business's voice calls,
     whichever realtime model a call runs on. Businesses without their own budget get the default of
+    {% else %}
+    A budget belongs to a <strong>budget ID</strong>, not to a voice model: it covers all the voice calls charged to that ID,
+    whichever realtime model a call runs on. Each agent's calls are charged to its own ID, shown on the agent's
+    <strong>Voice</strong> tab. An ID without its own budget gets the default of
+    {% endif %}
     <strong>{{ (_default / 60)|round(1) }} minutes</strong> ({{ _default }} seconds) a day.
   </p>
 </section>
@@ -28,18 +37,18 @@
   {% if voice_budget_rows %}
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Business</th><th class="num">Daily limit</th><th class="num">Used today</th><th>Note</th><th></th></tr></thead>
+      <thead><tr><th>{{ 'Business' if _biz else 'Budget ID' }}</th><th class="num">Daily limit</th><th class="num">Used today</th><th>Note</th><th></th></tr></thead>
       <tbody>
         {% for r in voice_budget_rows %}
         <tr>
-          <td><span class="technical">{{ r.business_id }}</span></td>
+          <td>{% if not _biz and r.agent_name %}{{ r.agent_name }} {% endif %}<span class="technical">{{ r.business_id }}</span></td>
           <td class="num">{{ (r.daily_seconds / 60)|round(1) }} min <span class="caption">({{ r.daily_seconds }}s)</span></td>
           <td class="num">{{ (r.used_today / 60)|round(1) }} min
             {% if r.daily_seconds and r.used_today >= r.daily_seconds %}{{ chip('Used up', variant='warn') }}{% endif %}</td>
           <td class="caption">{{ r.note or '' }}</td>
           <td>
             <form method="post" action="/admin/voice-budgets/{{ r.business_id }}/delete"
-                  onsubmit="return confirm('Remove this budget? The business goes back to the default.');" style="margin:0;">
+                  onsubmit="return confirm('{{ 'Remove this budget? The business goes back to the default.' if _biz else 'Remove this budget? This ID goes back to the default.' }}');" style="margin:0;">
               <input type="hidden" name="next" value="{{ _next }}">
               <button type="submit" class="ghost small">Remove</button>
             </form>
@@ -50,7 +59,7 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state">No business has its own budget yet &mdash; they all use the default.</div>
+  <div class="empty-state">{% if _biz %}No business has its own budget yet &mdash; they all use the default.{% else %}No budget set yet &mdash; every agent uses the default.{% endif %}</div>
   {% endif %}
 </section>
 
@@ -60,9 +69,15 @@
     <input type="hidden" name="next" value="{{ _next }}">
     <div class="form-grid">
       <label class="field">
+        {% if _biz %}
         <span class="field-label">Business ID</span>
         <input type="text" name="business_id" required placeholder="Business UUID or tenant ID">
         <span class="field-help">A tenant ID works too &mdash; it maps to the same business the voice service charges.</span>
+        {% else %}
+        <span class="field-label">Budget ID</span>
+        <input type="text" name="business_id" required placeholder="The ID on the agent's Voice tab">
+        <span class="field-help">Open the agent, then <strong>Voice</strong>: its daily call budget names the ID its calls are charged to.</span>
+        {% endif %}
       </label>
       <label class="field">
         <span class="field-label">Daily limit (seconds)</span>
@@ -81,13 +96,13 @@
 {% if voice_budget_unbudgeted %}
 <section class="section">
   <h2>Using the default today</h2>
-  <span class="caption mb-s" style="display:block;">Businesses that made voice calls today without a budget of their own.</span>
+  <span class="caption mb-s" style="display:block;">{% if _biz %}Businesses that made voice calls today without a budget of their own.{% else %}Agents that made voice calls today without a budget of their own.{% endif %}</span>
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Business</th><th class="num">Used today</th></tr></thead>
+      <thead><tr><th>{{ 'Business' if _biz else 'Budget ID' }}</th><th class="num">Used today</th></tr></thead>
       <tbody>
         {% for r in voice_budget_unbudgeted %}
-        <tr><td><span class="technical">{{ r.business_id }}</span></td>
+        <tr><td>{% if not _biz and r.agent_name %}{{ r.agent_name }} {% endif %}<span class="technical">{{ r.business_id }}</span></td>
             <td class="num">{{ (r.used_today / 60)|round(1) }} of {{ (_default / 60)|round(1) }} min</td></tr>
         {% endfor %}
       </tbody>
@@ -99,7 +114,8 @@
 <details class="advanced">
   <summary>How budgets are applied</summary>
   <ul class="caption stack-xs" style="max-width:760px;padding-left:var(--space-m);">
-    <li>Budgets are per tenant, not per model: moving a business to another realtime model does not change, reset or duplicate its budget.</li>
+    {% if _biz %}<li>Budgets are per tenant, not per model: moving a business to another realtime model does not change, reset or duplicate its budget.</li>
+    {% else %}<li>Budgets are per ID, not per model: moving an agent to another realtime model does not change, reset or duplicate its budget.</li>{% endif %}
     <li>The default comes from <code>VOICE_LIVE_DAILY_SECONDS</code>, read when the engine starts &mdash; changing it needs an engine restart. Budgets on this page apply as soon as you save.</li>
     <li>If the usage database can't be reached, calls are allowed (the budget controls spend, not availability).</li>
   </ul>

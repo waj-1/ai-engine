@@ -1065,6 +1065,8 @@ def _annotate_trace_channel_meta(traces: List[Dict[str, Any]]) -> None:
         meta = _trace_meta_attrs(t)
         t["channel_slug"] = meta.get("waj.channel.slug") or None
         t["agent_kind"] = meta.get("waj.agent_kind") or None
+        # Which agent of a shared kind (every generic agent is `custom`).
+        t["agent_slug"] = meta.get("waj.agent_slug") or None
         # Chat session id for the "Group by session" list view. Same
         # metadata ride-along as the keys above (waj.session_id is set by
         # root_span_attrs); the trace row's own session_id is the fallback.
@@ -1111,6 +1113,7 @@ def group_traces_by_session(traces: List[Dict[str, Any]]) -> List[Dict[str, Any]
         ts = g["traces"]
         g["turns"] = len(ts)
         g["agent_kind"] = next((t.get("agent_kind") for t in ts if t.get("agent_kind")), None)
+        g["agent_slug"] = next((t.get("agent_slug") for t in ts if t.get("agent_slug")), None)
         g["channel_slug"] = next((t.get("channel_slug") for t in ts if t.get("channel_slug")), None)
         g["has_error"] = any(t.get("status") == "error" for t in ts)
         # Action counts (tool spans) for the partner-facing outcome column.
@@ -1481,7 +1484,14 @@ def load_traces_list(
     if channel_slug:
         ch_rows = [t for t in ch_rows if t.get("channel_slug") == channel_slug]
     if agent_kind:
-        ch_rows = [t for t in ch_rows if t.get("agent_kind") == agent_kind]
+        from admin.agent_kinds import split_agent_choice
+
+        # `custom:<slug>` picks ONE generic agent: they all share the kind.
+        kind, slug = split_agent_choice(agent_kind)
+        ch_rows = [t for t in ch_rows if t.get("agent_kind") == kind]
+        if slug:
+            _fill_agent_slugs_from_sessions(ch_rows, env)
+            ch_rows = [t for t in ch_rows if t.get("agent_slug") == slug]
     return {
         "traces": ch_rows,
         "total": len(ch_rows),
@@ -1492,6 +1502,38 @@ def load_traces_list(
         "channel_slug": channel_slug or "",
         "agent_kind": agent_kind or "",
     }
+
+
+def _fill_agent_slugs_from_sessions(traces: List[Dict[str, Any]], env: Optional[str]) -> None:
+    """Traces recorded before ``waj.agent_slug`` was tagged name no agent;
+    their chat session does (``ai_chat_sessions.metadata.agent_slug``).
+    Fills ``agent_slug`` in place for those that have a session. Best-effort:
+    a failed read leaves them unnamed (so a one-agent filter skips them)."""
+    missing: Dict[str, List[Dict[str, Any]]] = {}
+    for t in traces:
+        sid = t.get("session_id")
+        if t.get("agent_slug") or not sid:
+            continue
+        coerced = str(_coerce_session_id_for_lookup(sid) or sid)
+        missing.setdefault(coerced, []).append(t)
+    if not missing:
+        return
+    try:
+        from admin.router import client_for
+
+        rows = (
+            client_for(env or "staging").schema("public").table("ai_chat_sessions")
+            .select("id, metadata").in_("id", sorted(missing)[:500]).execute().data or []
+        )
+    except Exception as exc:  # noqa: BLE001 - names are a narrowing aid only
+        logger.debug("traces list: session agent slugs unavailable (%s)", exc)
+        return
+    for r in rows:
+        meta = r.get("metadata") if isinstance(r.get("metadata"), dict) else {}
+        slug = meta.get("agent_slug")
+        if slug:
+            for t in missing.get(str(r.get("id")), []):
+                t["agent_slug"] = slug
 
 
 _EVAL_TRACES_SQL = (
@@ -2185,6 +2227,12 @@ def _attach_tools_by_time(turns: List[Dict[str, Any]], tools: List[Dict[str, Any
         dest.setdefault("tools", []).append(tool)
 
 
+def _count_messages(client, row: Dict[str, Any]) -> Optional[int]:
+    from admin.screens.saved_chats import count_session_messages
+
+    return count_session_messages(client, row.get("id"), row.get("message_count"))
+
+
 def _session_row(session_id: Optional[str], env: Optional[str]) -> Optional[Dict[str, Any]]:
     """The linked ``ai_chat_sessions`` row (coerced id), or ``None``."""
     if not session_id:
@@ -2370,7 +2418,8 @@ def load_trace_overview_json(trace_id: str, env: Optional[str] = None) -> Dict[s
                     "business_id": r.get("business_id"),
                     "branch_id": r.get("branch_id"),
                     "title": r.get("title"),
-                    "message_count": r.get("message_count"),
+                    # The stored column is never maintained: count the messages.
+                    "message_count": _count_messages(sess_client, r),
                     "locale": meta.get("locale"),
                     "source": meta.get("source"),
                     "created_at": r.get("created_at"),

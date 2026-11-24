@@ -139,9 +139,16 @@ def test_card_absent_on_a_chat_model(client, model_db):
 
 def test_page_labels_the_allowance_as_per_tenant(client, model_db):
     """The anti-misreading copy is the point of D4 — pin it on its new home."""
+    from admin.eval_context import business_field_label
+
     text = _flat(client.get(PAGE).text)
-    assert "belongs to a <strong>business</strong>, not to a voice model" in text
-    assert "per tenant, not per model" in text
+    if business_field_label():
+        assert "belongs to a <strong>business</strong>, not to a voice model" in text
+        assert "per tenant, not per model" in text
+    else:
+        # No plugin with tenants: budgets are kept per agent's budget id.
+        assert "belongs to a <strong>budget ID</strong>, not to a voice model" in text
+        assert "per ID, not per model" in text
     assert "does not change, reset or duplicate its budget" in text
 
 

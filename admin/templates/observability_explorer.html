@@ -374,6 +374,8 @@
 </div>
 
 <script>
+  // The tenant field's label ("Business"), or "" in a build with no tenants (business_field_label()).
+  const BIZ_LABEL = {{ business_field_label() | tojson }};
 (function () {
   "use strict";
 
@@ -683,8 +685,8 @@
       '</div>';
     if (sess) {
       h += '<h4 class="advanced-h">Chat session</h4><div class="ox-kv-grid">' +
-        _kv("Agent kind", sess.agent_kind) + _kv("Business id", sess.business_id) +
-        _kv("Branch id", sess.branch_id) + _kv("Locale", sess.locale) +
+        _kv("Agent kind", sess.agent_kind) + (BIZ_LABEL ? _kv(BIZ_LABEL + " id", sess.business_id) +
+          _kv("Branch id", sess.branch_id) : "") + _kv("Locale", sess.locale) +
         _kv("Messages", _fmtInt(sess.message_count)) + _kv("Title", sess.title) +
         _kv("Session id", sess.id) + '</div>';
     } else {

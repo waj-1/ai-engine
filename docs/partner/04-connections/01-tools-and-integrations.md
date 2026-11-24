@@ -7,7 +7,7 @@ Tools are the actions an agent can take, such as checking an outage or booking a
 In the sidebar, click **Connections**. The **Tools & integrations** tab shows:
 
 - **Servers**: each one with its type, how many tools it offers and which agents use it.
-- **Tool catalog**: every tool. Open one to edit its name, its description and its usage guidance, the notes that tell the agent when to use it.
+- **Tool catalog**: every tool. Open one to edit its name, its description and its usage guidance, the notes that tell the agent when to use it. An external server's tools are listed under its name as the server reports them, once the engine has reached it (click **Test connection** on the server if they are missing). Their names and descriptions come from the server, so they can't be edited here. Pick an agent in the agent filter to see only its tools: the tools made for it, and every tool of a server attached to it, an external server included.
 
 Numbers in the picture: (1) **Connect server**, (2) **Create bundle**, (3) search the tool catalog.
 
