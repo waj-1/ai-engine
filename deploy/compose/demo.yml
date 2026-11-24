@@ -1,0 +1,39 @@
+# Run the engine as a public, one-click demo (docs/deploy/demo.md).
+#
+#   AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com/ \
+#   AZURE_OPENAI_API_KEY=... \
+#   docker compose -f docker-compose.yml -f deploy/compose/demo.yml up
+#
+# then open http://localhost:8000 and click "Try the demo". Everything else in
+# docker-compose.yml is unchanged: the same database, REST layer, auth service,
+# gateway and engine. Settings left unset take the defaults listed in
+# docs/deploy/demo.md.
+services:
+  engine:
+    environment:
+      DEMO_MODE: "true"
+      # The address visitors use. The demo's built-in tool server is stored
+      # under it (the engine calls it in process, never over the network).
+      DEMO_PUBLIC_URL: ${DEMO_PUBLIC_URL:-http://localhost:8000}
+      DEMO_REPO_URL: ${DEMO_REPO_URL:-}
+      # The models: Azure OpenAI deployment names (or DEMO_MODEL_PROVIDER=openai
+      # with DEMO_MODEL_BASE_URL for any OpenAI-compatible server).
+      DEMO_MODEL_PROVIDER: ${DEMO_MODEL_PROVIDER:-}
+      DEMO_MODEL_BASE_URL: ${DEMO_MODEL_BASE_URL:-}
+      DEMO_AGENT_DEPLOYMENT: ${DEMO_AGENT_DEPLOYMENT:-}
+      DEMO_BUILDER_DEPLOYMENT: ${DEMO_BUILDER_DEPLOYMENT:-}
+      DEMO_JUDGE_DEPLOYMENT: ${DEMO_JUDGE_DEPLOYMENT:-}
+      DEMO_AZURE_API_VERSION: ${DEMO_AZURE_API_VERSION:-}
+      DEMO_REASONING_EFFORT: ${DEMO_REASONING_EFFORT:-}
+      # Knowledge bases embed with the same Azure OpenAI resource.
+      AZURE_EMBED_DEPLOYMENT: ${AZURE_EMBED_DEPLOYMENT:-text-embedding-3-small}
+      # Caps (blank = the default in docs/deploy/demo.md).
+      DEMO_DAILY_TURNS: ${DEMO_DAILY_TURNS:-}
+      DEMO_CHAT_PER_HOUR: ${DEMO_CHAT_PER_HOUR:-}
+      DEMO_ASSISTANT_PER_HOUR: ${DEMO_ASSISTANT_PER_HOUR:-}
+      DEMO_ASSISTANT_TOOLS_PER_HOUR: ${DEMO_ASSISTANT_TOOLS_PER_HOUR:-}
+      DEMO_TEST_RUNS_PER_HOUR: ${DEMO_TEST_RUNS_PER_HOUR:-}
+      DEMO_UPLOADS_PER_HOUR: ${DEMO_UPLOADS_PER_HOUR:-}
+      DEMO_MAX_OUTPUT_TOKENS: ${DEMO_MAX_OUTPUT_TOKENS:-}
+      DEMO_MAX_UPLOAD_BYTES: ${DEMO_MAX_UPLOAD_BYTES:-}
+      DEMO_RESET_HOUR_UTC: ${DEMO_RESET_HOUR_UTC:-}

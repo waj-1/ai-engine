@@ -599,6 +599,12 @@ def run_eval_suite_sync(
                 scenario_result["attempt"] = attempt
             return scenario_result
 
+        demo_refusal = _demo_run_refusal(len(scenarios) * max(1, repeats),
+                                         judged=judge is not None)
+        if demo_refusal:
+            _finalize(client, run_id, status="errored", error=demo_refusal)
+            return
+
         with _lmnr_span(
             name=f"eval_suite::{suite_name}",
             span_type="DEFAULT",
@@ -1291,6 +1297,26 @@ def _base_url_for(client, environment: str) -> str:
     except Exception as exc:
         logger.warning("eval: deployment_target lookup failed (%s)", exc)
     return os.getenv("AI_AGENT_BASE_URL") or f"http://127.0.0.1:{os.getenv('PORT') or 8000}"
+
+
+def _demo_run_refusal(cases: int, *, judged: bool) -> Optional[str]:
+    """In the public demo (demo_mode), why this run may not start: more cases
+    than ``DEMO_MAX_TEST_CASES``, or not enough of today's model turns left
+    for its judge calls (one per case; the agent's own turns are counted by
+    its chat route). The judge calls are taken from the cap up front. None
+    outside demo mode."""
+    from demo_mode import settings as demo_settings
+
+    if not demo_settings.enabled():
+        return None
+    if cases > demo_settings.max_test_cases():
+        return (f"A test run in the public demo grades at most "
+                f"{demo_settings.max_test_cases()} cases (cases x repeats).")
+    from demo_mode import limits as demo_limits
+
+    if judged and not demo_limits.take_turn(cases):
+        return demo_limits.CAP_MESSAGE
+    return None
 
 
 def _resolve_evaluator_model(client: Any, suite: Dict[str, Any]) -> Optional[str]:

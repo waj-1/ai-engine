@@ -17,6 +17,7 @@ const TABLES = [
   'provider_keys',
   'agent_types',
   'engine_setup',
+  'demo_usage_daily',
 ];
 
 async function execute(client: PrismaClient) {

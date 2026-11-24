@@ -375,6 +375,12 @@ def render_error_page(
     back_href, back_label = section.href, f"Back to {section.label}"
     retry_href = retry_label = None
     if status_code == 401:
+        from demo_mode import settings as demo_settings
+
+        if demo_settings.enabled():
+            # The public demo: a signed-out visitor goes straight to the
+            # "Try the demo" button.
+            return RedirectResponse(url="/admin/login", status_code=303)
         back_href, back_label = "/admin/login", "Sign in"
         message = "Your session has ended or you are not signed in."
     elif bad_params:
@@ -497,7 +503,11 @@ async def logout() -> Response:
 # public origin.
 @router.get("", include_in_schema=False)
 @router.get("/", include_in_schema=False)
-async def root_redirect() -> Response:
+async def root_redirect(request: Request) -> Response:
+    from demo_mode import settings as demo_settings
+
+    if demo_settings.enabled() and not request.cookies.get(ADMIN_TOKEN_COOKIE):
+        return RedirectResponse(url="/admin/login", status_code=302)
     if await first_run.in_first_run():
         return RedirectResponse(url="/admin/setup", status_code=303)
     return RedirectResponse(url="/admin/live", status_code=302)
@@ -4372,6 +4382,12 @@ async def env_promote(
 
     if from_ui and force and not reason.strip():
         return _back(error="Give a reason to publish past a failed check.", agent=profile_id)
+    from demo_mode import protect as demo_protect
+
+    if await asyncio.to_thread(demo_protect.is_protected, profile_id):
+        if from_ui:
+            return _back(error=demo_protect.READ_ONLY_MESSAGE, agent=profile_id)
+        raise HTTPException(status_code=403, detail=demo_protect.READ_ONLY_MESSAGE)
 
     try:
         result = promote(
@@ -4589,5 +4605,6 @@ from admin import search as _search_handlers  # noqa: F401, E402  -- attaches /a
 from admin import skill_handlers  # noqa: F401, E402  -- attaches /admin/skills* CRUD + versioning routes
 from admin import profile_skill_attach_handlers  # noqa: F401, E402  -- attaches /admin/profiles/{id}/skill-attachments
 from admin import agent_type_handlers  # noqa: F401, E402  -- attaches /admin/agent-types (Agents › Categories)
+from admin import demo_handlers  # noqa: F401, E402  -- attaches /admin/demo/enter (demo mode's one-click entry)
 
 

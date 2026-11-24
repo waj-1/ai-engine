@@ -152,7 +152,10 @@ def match_registry(ctx: src.SearchCtx, *, actions_only: bool = False) -> List[Di
 def _docs(ctx: src.SearchCtx, limit: int) -> List[Dict[str, Any]]:
     from admin import search_docs
 
-    include_dev = not ctx.partner
+    from demo_mode import settings as demo_settings
+
+    # Developer docs are refused in the public demo (demo_mode/policy.py).
+    include_dev = not ctx.partner and not demo_settings.enabled()
     if not ctx.q:
         rows = []
         for title, href, corpus in search_docs.page_titles(include_dev=False):

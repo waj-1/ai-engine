@@ -8,6 +8,7 @@ These guides show you how to look after your AI agents in the portal: change wha
 2. [Your first 15 minutes](01-getting-started/02-first-15-minutes.md): look at an agent, test it and read a real conversation.
 3. [Find anything](01-getting-started/03-find-anything.md): jump to any screen, agent or guide with **Ctrl K** (**⌘ K** on a Mac).
 4. [Set up a new install](01-getting-started/04-set-up-a-new-install.md): only if you installed the engine yourself and nobody has an account yet.
+5. [The public demo and Build with AI](01-getting-started/05-public-demo.md): only in a public demo, where a **Public demo** bar is at the top of the page.
 
 ## Watch it first
 

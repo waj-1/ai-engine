@@ -133,6 +133,12 @@ def get_pooled_client(endpoint: str, auth_token: Optional[str] = None, *,
     key = (endpoint, auth_token)
     client = _POOL.get(key)
     if client is None:
+        from demo_mode import northwind
+
+        if transport is None and northwind.handles(endpoint):
+            # The demo's own tool server: answered in this process, never
+            # over the network, and never with a secret (demo_mode/northwind.py).
+            transport, auth_token = northwind.transport(), None
         client = MCPClient(endpoint, auth_token=auth_token, transport=transport)
         _POOL[key] = client
     return client

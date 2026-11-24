@@ -6,7 +6,7 @@
 
 Start the engine with one command and a first-run page walks you through the rest. You claim the install with a one-time setup code, choose a cloud model or a local one, and leave with an API key, a ready `curl` command and MCP settings. Then the portal puts your agents, conversations, knowledge and tests in one place.
 
-**Where:** http://localhost:8000 after `docker compose up` · **Guides:** [Set up a new install](04-set-up-a-new-install.md), [Welcome to the portal](01-welcome.md), [Find anything](03-find-anything.md)
+**Where:** http://localhost:8000 after `docker compose up` · **Guides:** [Set up a new install](04-set-up-a-new-install.md), [Welcome to the portal](01-welcome.md), [Find anything](03-find-anything.md), [The public demo and Build with AI](05-public-demo.md)
 
 ## How it works
 

@@ -162,7 +162,10 @@ def load_agents_list(env: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         # User-defined categories (admin/services/agent_types.py).
         "types": _q("agent_types", "agent_type_id, slug, display_name, description, color, sort_order"),
     })
-    profiles = batch["profiles"]
+    from demo_mode import protect as demo_protect
+
+    # The public demo keeps its own Builder assistant out of the list.
+    profiles = demo_protect.visible(batch["profiles"])
     all_env_profiles = list(profiles)
     if scoped_build():
         visible = set(visible_agent_kinds())

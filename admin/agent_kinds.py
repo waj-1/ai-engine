@@ -204,8 +204,10 @@ def custom_agent_rows(env: Optional[str] = None) -> List[dict]:
     """The generic agents (one row per slug), name order. Templates and
     archived agents are left out. ``env`` narrows to one environment's rows;
     without it a slug present in any environment counts once."""
+    from demo_mode import protect as demo_protect
+
     by_slug: Dict[str, dict] = {}
-    for r in _fetch_profiles():
+    for r in demo_protect.visible(_fetch_profiles()):
         if r.get("agent_kind") != SLUG_ADDRESSED_KIND or not r.get("slug"):
             continue
         if r.get("status") in _HIDDEN_STATUSES:

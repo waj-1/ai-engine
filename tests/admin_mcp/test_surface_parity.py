@@ -209,6 +209,13 @@ PORTAL_ONLY: Dict[str, str] = {
     ),
     "/admin/setup/api-key": "first-run walkthrough step; over MCP it is api_keys action=create",
     "/admin/setup/model-key": "first-run walkthrough step; over MCP it is provider_keys action=set / test",
+    "/admin/demo/enter": (
+        "demo mode's one-click sign-in (session-cookie auth, like /admin/login)"
+    ),
+    "/admin/demo/assistant/chat": (
+        "demo mode's builder assistant: it CALLS the admin MCP tools in process, "
+        "so it is a client of the MCP surface, not a part of it"
+    ),
     "/admin/profiles/{profile_id}/input-validators": (
         "documented MCP gap (06-mcp.md) — no tool exposes profile.input_validators"
     ),

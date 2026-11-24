@@ -79,6 +79,9 @@ class CustomRuntimeAgent(RuntimeAgent, BaseStreamingAgent):
     # is ever folded to "en" for being outside a product's supported set.
     supported_locales = None  # type: ignore[assignment]
 
+    #: Model rounds per turn (a subclass that chains more tool calls raises it).
+    max_iterations = _MAX_ITERATIONS
+
     def __init__(
         self,
         slug: str,
@@ -235,7 +238,7 @@ class CustomRuntimeAgent(RuntimeAgent, BaseStreamingAgent):
             tool_count = 0
             announce_retry = False
             iteration = 0
-            while iteration < _MAX_ITERATIONS:
+            while iteration < self.max_iterations:
                 iteration += 1
                 content = ""
                 end_calls: List[Dict[str, Any]] = []

@@ -319,7 +319,33 @@ _TAB_PAGES: Dict[str, Tuple[str, Any]] = {
 
 def visible_tabs(section: str) -> List[SectionTab]:
     partner = partner_build()
-    return [t for t in SECTION_TABS.get(section, ()) if not (partner and t.staff_only)]
+    return [t for t in SECTION_TABS.get(section, ())
+            if not (partner and t.staff_only) and _demo_allows(t.href)]
+
+
+def _demo_on() -> bool:
+    from demo_mode import settings as demo_settings
+
+    return demo_settings.enabled()
+
+
+def _demo_allows(href: str) -> bool:
+    """False for a link the public demo refuses (demo_mode/policy.py), so a
+    locked screen is not offered in the navigation either."""
+    if not _demo_on():
+        return True
+    from demo_mode.policy import href_allowed
+
+    return href_allowed(href)
+
+
+def demo_chrome() -> Dict[str, Any]:
+    """What the templates need to show the demo banner and entry button."""
+    from demo_mode import settings as demo_settings
+
+    if not demo_settings.enabled():
+        return {"enabled": False}
+    return {"enabled": True, "repo_url": demo_settings.repo_url()}
 
 
 def section_tabs_for(path: Optional[str], query: Optional[Mapping[str, str]] = None) -> Optional[Dict[str, Any]]:
@@ -469,13 +495,24 @@ def settings_entries() -> List[SettingsEntry]:
 
     partner = partner_build()
     has_businesses = bool(business_field_label())
-    out = []
+    entries: List[SettingsEntry] = []
     for e in SETTINGS_ENTRIES:
         if partner and e.staff_only:
             continue
         if e.key == "voice_budgets" and has_businesses:
             e = replace(e, description=_VOICE_BUDGETS_BUSINESS_TEXT)
-        out.append(e)
+        entries.append(e)
+    if not _demo_on():
+        return entries
+    from demo_mode.policy import HIDDEN_SETTINGS
+
+    out: List[SettingsEntry] = []
+    for e in entries:
+        if e.key in HIDDEN_SETTINGS:
+            continue
+        links = tuple(link for link in e.links if _demo_allows(link[1]))
+        if links:
+            out.append(replace(e, links=links))
     return out
 
 
@@ -496,6 +533,7 @@ def install_template_globals(templates: Any) -> None:
     g["env_chrome"] = env_chrome
     g["partner_build"] = partner_build
     g["brand"] = brand
+    g["demo_chrome"] = demo_chrome
     g["search_quick_actions"] = search_quick_actions
     g["agent_palette"] = agent_palette
     g["agent_channel_filter_options"] = agent_channel_filter_options

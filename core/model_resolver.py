@@ -136,6 +136,14 @@ def first_usable_model(rows: Any, environment: Optional[str] = None) -> Optional
     if not usable:
         return None
     usable.sort(key=lambda r: str(r.get("created_at") or ""))
+    from demo_mode import settings as demo_settings
+
+    if demo_settings.enabled():
+        # The public demo: Automatic means the demo's agent model, never the
+        # stronger (dearer) builder or judge row.
+        demo = [r for r in usable if (r.get("extra_config") or {}).get("demo_role") == "agent"]
+        if demo:
+            return demo[0]
     preferred = [r for r in usable if r.get("model_string") == AGENT_CONFIG.main_model]
     return (preferred or usable)[0]
 

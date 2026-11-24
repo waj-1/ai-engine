@@ -92,6 +92,20 @@ async def agent_chat(
         raise HTTPException(status_code=404, detail="Not found")
     caller = await _require_caller(authorization)
 
+    from demo_mode import settings as demo_settings
+
+    if demo_settings.enabled():
+        # The public demo's hard daily cap (demo_mode/limits.py): once the
+        # day's turns are used, answer with a plain message and call no model.
+        from demo_mode import limits as demo_limits
+
+        if not await asyncio.to_thread(demo_limits.take_turn):
+            async def _capped() -> AsyncGenerator[Dict[str, Any], None]:
+                yield {"type": "answer", "content": demo_limits.CAP_MESSAGE}
+                yield {"type": "done"}
+
+            return sse_response(_capped, error_message="An error occurred. Please try again.")
+
     from runtime.agents.custom import CUSTOM_AGENT_KIND, create_custom_agent
 
     resolve_channel(request)

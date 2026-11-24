@@ -257,6 +257,7 @@ ROUTE_EXCLUSIONS: Dict[str, str] = {
     "/admin": "redirects to the default screen",
     "/admin/": "redirects to the default screen",
     "/admin/login": "sign-in page, not a destination",
+    "/admin/demo/assistant/history": "JSON for the demo's assistant panel, not a page",
     "/admin/setup": "first-run page; exists only until the admin account is created",
     "/admin/setup/model-key": "first-run walkthrough step, shown once to the admin who set up",
     "/admin/setup/api-key": "first-run walkthrough step, shown once to the admin who set up",
@@ -393,14 +394,19 @@ def all_entries() -> List[Entry]:
     )
 
 
+def _demo_allows(href: str) -> bool:
+    """The public demo does not offer a screen it refuses (demo_mode/policy.py)."""
+    return nav._demo_allows(href.replace("{env}", "staging"))
+
+
 def visible_entries() -> List[Entry]:
     partner = nav.partner_build()
-    return [e for e in all_entries() if not (partner and e.staff)]
+    return [e for e in all_entries() if not (partner and e.staff) and _demo_allows(e.href)]
 
 
 def quick_actions() -> List[Action]:
     partner = nav.partner_build()
-    return [a for a in ACTIONS if a.quick and not (partner and a.staff)]
+    return [a for a in ACTIONS if a.quick and not (partner and a.staff) and _demo_allows(a.href)]
 
 
 def registry_paths() -> set:

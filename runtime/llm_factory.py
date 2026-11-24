@@ -157,6 +157,12 @@ def _common_kwargs(model: Dict[str, Any]) -> Dict[str, Any]:
     }
     if model.get("max_output_tokens"):
         kwargs["max_output_tokens"] = int(model["max_output_tokens"])
+    from demo_mode import settings as demo_settings
+
+    if demo_settings.enabled():
+        # The public demo caps every answer's length, whatever the model row says.
+        cap = demo_settings.max_output_tokens()
+        kwargs["max_output_tokens"] = min(int(kwargs.get("max_output_tokens") or cap), cap)
     if "top_p" in extra:
         kwargs["top_p"] = float(extra["top_p"])
     return kwargs
