@@ -40,9 +40,9 @@ def _list_users(limit: int) -> List[Dict[str, Any]]:
 @tool_errors
 def list_users(limit: int = 100,
                superusers_only: bool = False) -> Dict[str, Any]:
-    """Portal users (the `user` table the portal's sign-in checks, newest
-    first) with their is_superuser flag. Read-only twin of users(action="list") — safe for a
-    host to auto-approve. Grant/revoke with users(action="set_superuser")."""
+    """List portal users, newest first, each with its is_superuser flag.
+    superusers_only=true returns only superusers. Read-only. Grant or revoke
+    superuser with users(action="set_superuser")."""
     found = _list_users(limit)
     if superusers_only:
         found = [u for u in found if u.get("is_superuser")]
@@ -54,11 +54,18 @@ def list_users(limit: int = 100,
 def users(action: Literal["list", "set_superuser"] = "list",
           user_id: str = "", grant: bool = False,
           confirm: bool = False, limit: int = 100) -> Dict[str, Any]:
-    """Admin users. action: list (users with superuser flag — or use the
-    read-only list_users tool) | set_superuser (user_id + grant=true/false,
-    confirm required — this grants/revokes FULL admin+MCP access).
-    Unannotated (mixed read/write): `list` no longer trips a host's
-    destructive-action prompt, `set_superuser` is still confirm-gated."""
+    """Portal users.
+
+    Actions:
+    - list (default): users with their superuser flag. The read-only
+      list_users tool returns the same.
+    - set_superuser (user_id, grant=true or false, confirm=true): grant or
+      revoke superuser. A superuser has FULL admin access, including this MCP
+      server."""
+    # Maintainer notes (kept out of the description clients read):
+    # Not annotated: `list` reads, `set_superuser` writes. A destructive hint
+    # made every plain listing trip the host's destructive-action prompt;
+    # set_superuser stays confirm-gated.
     if action == "set_superuser" and not confirm:
         return not_confirmed(
             f"{'grant' if grant else 'revoke'} superuser for user {user_id}")
@@ -98,21 +105,23 @@ def api_keys(
         description="list: also return revoked keys (default true).")] = True,
     confirm: Confirm = False,
 ) -> Dict[str, Any]:
-    """Portal-issued API keys (`api_keys` table; mirrors Settings > API keys,
-    via admin.services.api_keys). A key is sent as `Authorization: Bearer
-    wae_...` to POST /v1/agents/{slug}/chat (scope chat or admin) or to this
-    MCP server (scope admin only).
+    """API keys issued by this engine. A key is sent as "Authorization:
+    Bearer wae_..." to POST /v1/agents/{slug}/chat (scope chat or admin) or
+    to this MCP server (scope admin only).
 
-    action: list (name, key_prefix, scopes, created_at, last_used_at,
-    expires_at, status = active|expired|revoked; never the key) | create
-    (name, scopes, expires_in_days) | revoke (key_id; confirm required, takes
-    effect on the key's next request and cannot be undone).
+    Actions:
+    - list (default): name, key_prefix, scopes, created_at, last_used_at,
+      expires_at and status (active, expired or revoked). Never the key.
+    - create (name; optional scopes, expires_in_days): returns the key ONCE,
+      in key.
+    - revoke (key_id, confirm=true): takes effect on the key's next request
+      and cannot be undone.
 
-    create returns the key ONCE, in `key`. Only a SHA-256 digest is stored, so
-    it can never be read again: hand it to the user straight away, and do not
-    write it to a file, a log or a commit. Keys are per engine instance, not
-    per environment, so there is no `env`. Creating an `admin` key hands out
-    full control of this engine. Both writes are audited under the caller."""
+    Only a digest of a key is stored, so it can never be read again after
+    create. Hand it to the user straight away, and do not write it to a file,
+    a log or a commit. An admin key gives full control of this engine. Keys
+    belong to the engine instance, not to an environment, so there is no env.
+    Create and revoke are audited under the caller."""
     from admin.services import api_keys as service
 
     actor_id = current_actor()["user_id"]
@@ -145,17 +154,21 @@ def api_keys(
 def audit(action: Literal["list", "get", "probe_write", "verify"] = "list",
           env: Env = "staging", entity_type: str = "",
           audit_id: str = "", limit: int = 50, offset: int = 0) -> Dict[str, Any]:
-    """agent_audit_log operations (mirrors GET /admin/audit,
-    GET /admin/audit/{id}, POST /admin/audit/verify). action:
-    list (optional entity_type filter, newest first, paged via
-    limit/offset) | get (audit_id) | probe_write (`verify` is its old,
-    deprecated name).
+    """The audit log of config changes.
 
-    probe_write WRITES one row and verifies nothing: like the portal's
-    "verify" button it records a liveness marker
-    (record_change(entity_type="agent_audit_log", entity_id=<all-zero
-    uuid>, action="CALLEE_VERIFY")) proving a superuser can still write to
-    the log. There is no hash chain to walk."""
+    Actions:
+    - list (default): newest first, paged with limit and offset;
+      entity_type filters.
+    - get (audit_id).
+    - probe_write: WRITES one marker row to prove the log can still be
+      written. It verifies nothing else; there is no integrity check. verify
+      is its old, deprecated name."""
+    # Maintainer notes (kept out of the description clients read):
+    # Mirrors GET /admin/audit, GET /admin/audit/{id} and POST
+    # /admin/audit/verify. probe_write records
+    # record_change(entity_type="agent_audit_log", entity_id=<all-zero uuid>,
+    # action="CALLEE_VERIFY"), like the portal's "verify" button. There is no
+    # hash chain to walk.
     if action in ("probe_write", "verify"):
         actor_audit("agent_audit_log", "00000000-0000-0000-0000-000000000000",
                     "CALLEE_VERIFY")
@@ -196,34 +209,38 @@ def memory(action: Literal["get_config", "set_config", "list", "add", "edit",
           confirm: bool = False,
           limit: int = 50,
           profile_id: str = "") -> Dict[str, Any]:
-    """Per-user memory + per-agent memory_config (mirrors /admin/memory).
-    action: get_config (agent_kind -> the active profile's memory_config,
-    defaults-merged) | set_config (agent_kind, config: a nested
-    memory_config dict — same shape agent_profiles.memory_config stores;
-    unlike the HTML form this skips the checkbox/flat-field parsing layer
-    since a tool call already supplies structured JSON) | list (agent_kind,
-    user_id: uuid or email -> that user's ai_user_memory rows) | add
-    (user_id: uuid or email, content, agent_kind; business_id where the build's plugin has
-    businesses) | assign (memory_id, agent_kind=custom:<slug> — move a
-    custom-kind memory that belongs to no agent yet to that agent) |
-    edit (memory_id, content
-    — re-embeds via the same embedder the runtime uses; proceeds
-    without an embedding if the embed call fails, same as the handler) |
-    pin (memory_id, pinned=true/false) | delete (memory_id, confirm=true —
-    soft-archive, status='archived').
+    """Per-user memories and each agent's memory settings.
 
-    Each generic agent keeps its own memories: pass agent_kind
-    `custom:<slug>` (the value the Memory screen's picker uses) to list or
-    add one agent's. `list` for such an agent also returns
-    `unassigned_memories`: the user's custom-kind rows saved before memories
-    were kept per agent, which no agent recalls until assigned.
+    Actions:
+    - get_config (agent_kind, or profile_id): the memory settings, merged
+      with the defaults.
+    - set_config (config, with agent_kind or profile_id): replace the memory
+      settings with config, a nested object in the stored shape.
+    - list (default; agent_kind, user_id as a UUID or email): that user's
+      memories, at most limit (default 50).
+    - add (user_id as a UUID or email, content, agent_kind; business_id
+      where the build has tenants).
+    - assign (memory_id, agent_kind=custom:<slug>): give an unassigned
+      custom-agent memory to that agent.
+    - edit (memory_id, content): replace the text. It is re-embedded; if
+      embedding fails the text is still saved.
+    - pin (memory_id, pinned=true or false).
+    - delete (memory_id, confirm=true): archives the memory.
 
-    get_config/set_config target "the active profile for agent_kind in env"
-    by default. Pass `profile_id` to read/write one SPECIFIC profile's
-    memory_config instead — a draft, a fork, or a voice specialist (the
-    voice brain's memory_config lives on the specialist row, which the
-    agent_kind lookup never reaches). list returns at most `limit`
-    memories (default 50)."""
+    Each custom agent keeps its own memories: pass agent_kind=custom:<slug>
+    to list or add one agent's. list for such an agent also returns
+    unassigned_memories: older custom-agent memories that no agent recalls
+    until they are assigned.
+
+    get_config and set_config use the active profile for agent_kind in env.
+    Pass profile_id to read or write one SPECIFIC profile instead: a draft, a
+    copy or a voice specialist, which the agent_kind lookup never reaches."""
+    # Maintainer notes (kept out of the description clients read):
+    # Mirrors /admin/memory. Memories are ai_user_memory rows; settings are
+    # agent_profiles.memory_config. set_config takes structured JSON, so it
+    # skips the HTML form's checkbox/flat-field parsing. `edit` uses the same
+    # embedder as the runtime. custom:<slug> is the value the Memory screen's
+    # picker uses. A voice brain's memory_config lives on the specialist row.
     from admin.memory_handlers import _resolve_agent_kind
     from admin.screens import memory as memory_screen
     from core.memory.embeddings import embed_text
@@ -374,17 +391,23 @@ def channels(action: Literal["list", "get", "create", "update", "delete"] = "lis
             rate_limit_rpm: Optional[int] = None,
             config: Optional[Dict[str, Any]] = None,
             description: str = "", confirm: bool = False) -> Dict[str, Any]:
-    """agent_channels registry (mirrors /admin/channels*). action:
-    list (optional kind filter — an unrecognized kind is silently
-    ignored, same as the portal's chip filter) | get (channel_id) |
-    create (slug, name, kind, ...) | update (channel_id + fields — same
-    validation as create) | delete (channel_id, confirm=true — soft
-    is_active=false; channels are referenced from traces/log analytics so
-    this never hard-deletes).
+    """Channels: the entry points agents are reached through, each with its
+    allowed origins, allowed agents, auth and rate limit.
 
-    Reads AND writes go through the env-branch client (client_for_env),
-    matching the portal, whose channel writes follow the env switcher
-    (admin_service_client) since the env-client-symmetry sweep."""
+    Actions:
+    - list (default): kind filters; an unknown kind is ignored.
+    - get (channel_id).
+    - create (slug, name, kind; optional description, allowed_origins,
+      allowed_agent_kinds, default_profile_id, auth_required, rate_limit_rpm,
+      config, is_active; tenant channel kinds also need business_id).
+    - update (channel_id plus the fields to change): same checks as create.
+    - delete (channel_id, confirm=true): switches the channel off
+      (is_active=false). It is never removed, because traces and analytics
+      refer to it."""
+    # Maintainer notes (kept out of the description clients read):
+    # Table agent_channels (mirrors /admin/channels*). Reads AND writes go
+    # through the env-branch client (client_for_env), matching the portal,
+    # whose channel writes follow the env switcher (admin_service_client).
     from admin.channel_handlers import (_CHANNEL_KINDS, _ORIGIN_RE,
                                         _RATE_LIMIT_MAX, _RATE_LIMIT_MIN,
                                         _SLUG_RE, _TENANT_KINDS, CHANNEL_KIND_LABELS,
@@ -514,15 +537,22 @@ def test_fixtures(action: Literal["list", "create", "update", "delete",
                   fixture_id: str = "", env: Env = "staging",
                   name: str = "", kind: str = "", value: str = "",
                   description: str = "", confirm: bool = False) -> Dict[str, Any]:
-    """test_fixtures vault (mirrors the fixtures section of /admin/tests +
-    GET /admin/test-fixtures/export) — real JWTs/UUIDs/secrets an operator
-    records for pytest/eval runs against auth-gated endpoints. jwt/secret
-    kinds are masked "••••" in list output and audit payloads (reuses
-    test_fixtures_handlers._mask verbatim); export reveals real values,
-    same as the .env.test download it mirrors. action: list (env) |
-    create (name, kind, value, description) | update (fixture_id +
-    fields) | delete (fixture_id, confirm=true) | export (env ->
-    {"lines": ["WAJ_TEST_<UPPER_NAME>=<value>", ...]})."""
+    """Stored test values (tokens, ids, secrets) that test and eval runs
+    use against endpoints that need auth. Values of kind jwt and secret are
+    shown as "••••" in list output and in the audit log.
+
+    Actions:
+    - list (default): the fixtures in env.
+    - create (name, value; optional kind, description): kind is jwt, uuid,
+      string (default), json or secret.
+    - update (fixture_id plus the fields to change).
+    - delete (fixture_id, confirm=true).
+    - export: returns the REAL, unmasked values as {"lines":
+      ["WAJ_TEST_<UPPER_NAME>=<value>", ...]}. The export is audited."""
+    # Maintainer notes (kept out of the description clients read):
+    # Table test_fixtures. Mirrors the fixtures section of /admin/tests and
+    # GET /admin/test-fixtures/export (the .env.test download). Masking reuses
+    # test_fixtures_handlers._mask verbatim.
     from admin.test_fixtures_handlers import _KINDS, _NAME_PATTERN, _mask
 
     if action == "list":
@@ -613,19 +643,23 @@ def jobs(action: Literal["list", "get", "cancel"] = "list",
         job_id: str = "", status: str = "",
         kind: str = "", env: Env = "staging",
         limit: int = 50) -> Dict[str, Any]:
-    """admin_jobs tracker (mirrors the Jobs tab of /admin/live + the
-    polling/cancel routes). `env` selects the branch the tracker rows live
-    on: an env-pinned spawn (the e2e_runs trigger, voice_scenarios run —
-    both wrap use_env(env)) writes its admin_jobs row to that env's branch,
-    so get/list/cancel must resolve the SAME one — pass the env the job was
-    triggered for. Single-DB deployments (cross-env vars unset) fall back
-    to the local branch, where any env value works. action: list
-    (status/kind filters — an invalid filter value returns an empty list
-    rather than erroring, same as the portal) | get (job_id) | cancel
-    (job_id — cooperative: flips status='cancelled' if the job is still
-    queued/running; cancel_applied=false means it had already finished.
-    Always audits the operator's intent, unconditionally, same as the
-    portal)."""
+    """Background jobs started by other tools (KB uploads, test runs,
+    end-to-end runs). Pass the env the job was started for, or it will not be
+    found. On a single-database install any env works.
+
+    Actions:
+    - list (default): recent jobs; status and kind filter. An invalid
+      filter value returns an empty list, not an error.
+    - get (job_id).
+    - cancel (job_id): marks a queued or running job cancelled.
+      cancel_applied=false means it had already finished. The request is
+      audited either way."""
+    # Maintainer notes (kept out of the description clients read):
+    # Table admin_jobs (mirrors the Jobs tab of /admin/live and its
+    # polling/cancel routes). An env-pinned spawn (e2e_runs trigger,
+    # voice_scenarios run; both wrap use_env(env)) writes its row to that env's
+    # branch, so get/list/cancel must resolve the same one. Cancel is
+    # cooperative.
     from admin._jobs import cancel_job, get_job, list_recent_jobs
 
     with use_env(env):

@@ -145,19 +145,20 @@ def promote_profile(
                         "(audited). Needs confirm=true too.")] = False,
         confirm: Confirm = False,
         env: Env = "staging") -> Dict[str, Any]:
-    """Promote a profile to target_env (staging|prod): eval-gate check,
-    cross-env write, compile-on-promote snapshot.
+    """Promote a profile into target_env (staging or prod). Promoting to
+    prod changes what production serves. Required: profile_id and target_env.
 
-    DRY-RUN BY DEFAULT. Without confirm=true nothing is written: you get
+    DRY RUN BY DEFAULT. Without confirm=true nothing is written. You get
     {"confirmed": false, "would": ..., "preview": {changes, eval_gate,
-    prompt_tool_mismatch, blockers}} — a plain list of what the promote
-    would change in target_env (model, prompt versions, tools, KB, MCP
-    attachments, sub-agents; or "creates a NEW profile"), and what would
-    block it. Re-call with confirm=true to apply.
+    prompt_tool_mismatch, blockers}}: a plain list of what the promote would
+    change in target_env (model, prompt versions, tools, KB, MCP attachments,
+    sub-agents, or "creates a NEW profile") and what would block it.
 
-    With confirm=true: a failing eval gate comes back as {error:
-    eval_gate_failed, score, threshold, hint} — fix and re-run evals, or
-    re-call with force=true AND confirm=true (audited override)."""
+    With confirm=true the promote checks the eval gate, writes the config to
+    target_env and saves a version snapshot. A failing eval gate comes back
+    as {error: eval_gate_failed, score, threshold, hint}. Fix and re-run the
+    evals, or re-call with force=true and confirm=true to override; the
+    override is audited."""
     from admin.services.profiles import TemplateProtectedError
     from admin.services.promotion import (EvalGateFailed, ProfileNotFound,
                                           PromotionError, promote)
@@ -198,11 +199,11 @@ def promotion_status(
         agent_kind: Annotated[str, Field(
             description="Only this agent_kind ('' = every kind).")] = "",
 ) -> Dict[str, Any]:
-    """The staging-vs-prod promotion board (the portal's /admin/env Promote
-    tab) as data: per agent_kind, the staging and prod profile rows (slug,
-    status, served version pin), each one's latest eval vs its suite
-    threshold, and `promotable` — true when a staging row passes (or has
-    no) eval gate. Read-only; promote with promote_profile."""
+    """Show what can be promoted from staging to prod. For each agent kind:
+    its staging and prod profiles (slug, status, served version pin), each
+    one's latest eval result against its suite threshold, and promotable,
+    which is true when a staging profile passes its eval gate or has none.
+    Read-only. Promote with promote_profile."""
     from admin.services.promotion import _latest_eval_for_profile
     board: Dict[str, Dict[str, Any]] = {}
     for e in ("staging", "prod"):
@@ -235,13 +236,15 @@ def promotion_status(
 @tool_errors
 async def deploy(environment: Literal["prod"], git_ref: str = "main",
                  confirm: bool = False) -> Dict[str, Any]:
-    """Re-ship the prod chat service at `git_ref` (default "main") by
-    dispatching the deploy workflow (deploy-agent-from-portal.yaml) of the
-    GitHub repository GITHUB_DEPLOY_REPO names, with GITHUB_DEPLOY_TOKEN.
-    Offered only where deploying is set up that way. Only environment="prod"
-    is valid — "staging" is an env column, not a service. Use this to re-ship
-    prod at a specific ref (a branch on the allow-list or a release tag).
-    Requires confirm=true. Watch progress with list_deploy_runs."""
+    """Redeploy the production chat service at git_ref (default "main").
+    This changes what production runs. It starts the deploy workflow in the
+    GitHub repository that GITHUB_DEPLOY_REPO names, using
+    GITHUB_DEPLOY_TOKEN. The tool is offered only where deploying is set up
+    that way. environment must be "prod". git_ref is an allowed branch or a
+    release tag. Requires confirm=true. Watch progress with list_deploy_runs."""
+    # Maintainer notes (kept out of the description clients read):
+    # Dispatches deploy-agent-from-portal.yaml. "staging" is an environment
+    # column of the config rows, not a deployable service.
     from admin.services.deploys import DeployError, dispatch_deploy
     if not confirm:
         return not_confirmed(f"deploy git ref {git_ref!r} to {environment}")
@@ -256,11 +259,14 @@ async def deploy(environment: Literal["prod"], git_ref: str = "main",
 @tool_errors
 async def rollback(environment: Literal["prod"], target_revision: str,
                    confirm: bool = False) -> Dict[str, Any]:
-    """Roll the prod chat service back to a previous revision by dispatching
-    the rollback workflow (rollback-agent.yaml) of the GitHub repository
-    GITHUB_DEPLOY_REPO names. Offered only where deploying is set up that way.
-    Only environment="prod" is valid — "staging" is an env column, not a
-    deployable service. Requires confirm=true."""
+    """Roll the production chat service back to an earlier revision
+    (target_revision). This changes what production runs. It starts the
+    rollback workflow in the GitHub repository that GITHUB_DEPLOY_REPO names.
+    The tool is offered only where deploying is set up that way. environment
+    must be "prod". Requires confirm=true."""
+    # Maintainer notes (kept out of the description clients read):
+    # Dispatches rollback-agent.yaml. "staging" is an environment column of the
+    # config rows, not a deployable service.
     from admin.services.deploys import DeployError, dispatch_rollback
     if not confirm:
         return not_confirmed(f"roll back {environment} to {target_revision}")
@@ -275,9 +281,10 @@ async def rollback(environment: Literal["prod"], target_revision: str,
 @mcp.tool(annotations=READ_ONLY)
 @tool_errors
 async def list_deploy_runs(environment: EnvFilter = "", limit: int = 20) -> Dict[str, Any]:
-    """Recent deploy/rollback workflow runs of the GITHUB_DEPLOY_REPO
-    repository (status, conclusion, git ref, timestamps). Offered only where
-    deploying is set up."""
+    """List recent deploy and rollback workflow runs in the
+    GITHUB_DEPLOY_REPO repository: status, conclusion, git ref and
+    timestamps. environment keeps only runs for that service. Offered only
+    where deploying is set up."""
     from admin.deploy_handlers import _fetch_recent_deploy_runs
     runs = await _fetch_recent_deploy_runs(limit=limit)
     if environment:
@@ -321,17 +328,25 @@ def deployment_targets(action: Literal["list", "get", "create", "update", "delet
                        is_default: Optional[bool] = None,
                        is_active: Optional[bool] = None,
                        confirm: bool = False) -> Dict[str, Any]:
-    """CRUD for deployment targets (agent_deployment_targets) —
-    per-(environment, label) service URLs the E2E runner and cross-env
-    promote read instead of AI_AGENT_BASE_URL_* env vars. `env` selects
-    which branch DB to operate on (client_for_env); `environment` is the
-    row's own environment column (staging|prod, unique together with
-    label) and defaults to `env` when omitted. action: list (optional
-    environment filter) | get (target_id) | create (environment, label,
-    base_url, ...) | update (target_id + fields) | delete (target_id,
-    confirm=true). Setting is_default=true clears the default flag on
-    every sibling row sharing the same environment (only one default per
-    env), mirroring the portal's /admin/deployments Targets tab."""
+    """Deployment targets: the service URLs that end-to-end runs and
+    cross-environment promotes call. Each target has an environment (staging
+    or prod) and a label, unique together. env selects the config branch to
+    work in. row_environment is the target's own environment and defaults to
+    env; environment is its deprecated alias. Required: action.
+
+    Actions:
+    - list: the targets for row_environment (default env).
+    - get (target_id).
+    - create (label, base_url; optional row_environment, auth_env_var,
+      description, is_default).
+    - update (target_id plus the fields to change).
+    - delete (target_id, confirm=true).
+
+    is_default=true makes the target the only default for its environment."""
+    # Maintainer notes (kept out of the description clients read):
+    # Table agent_deployment_targets, read by the E2E runner and cross-env
+    # promote instead of the AI_AGENT_BASE_URL_* env vars. Mirrors the portal's
+    # /admin/deployments Targets tab.
     environment = resolve_alias(row_environment, environment,
                                 new_name="row_environment", old_name="environment")
     client = client_for_env(env)
@@ -441,18 +456,25 @@ def env_vars(action: Literal["list", "get", "create", "update", "delete"],
             source: str = "", description: Optional[str] = None,
             is_secret: Optional[bool] = None, reveal: bool = False,
             confirm: bool = False) -> Dict[str, Any]:
-    """CRUD for agent_env_vars — a third env-var lookup location (behind
-    os.environ) resolved by core.env_resolver. `env` selects which branch
-    DB to operate on (client_for_env); `row_environment` is the row's own
-    environment column and defaults to `env` when omitted (`environment` is
-    its deprecated alias, still accepted). Secret rows
-    (is_secret=true) are masked to "••••" in list/get output AND in audit
-    before/after payloads, exactly like the portal's /admin/env Variables
-    tab. action: list (optional environment filter) | get (var_id;
-    reveal=true bypasses the mask and returns the real value, additionally
-    audited as action="reveal") | create (environment, name, value,
-    source, description, is_secret) | update (var_id + fields — pass
-    value="" to clear a stored value) | delete (var_id, confirm=true)."""
+    """Configuration variables stored in the config database. They are a
+    fallback: a variable set in the engine's process environment wins. env
+    selects the config branch to work in. row_environment is the variable's
+    own environment and defaults to env; environment is its deprecated alias.
+    Secret variables (is_secret=true) are shown as "••••" in list and get
+    output and in the audit log. Required: action.
+
+    Actions:
+    - list: the variables for row_environment (default env).
+    - get (var_id): reveal=true returns the real value of a secret. The
+      reveal is audited.
+    - create (name; optional value, source, description, is_secret,
+      row_environment).
+    - update (var_id plus the fields to change): value="" clears the stored
+      value.
+    - delete (var_id, confirm=true)."""
+    # Maintainer notes (kept out of the description clients read):
+    # Table agent_env_vars, resolved by core.env_resolver behind os.environ.
+    # Masking matches the portal's /admin/env Variables tab.
     from admin.env_vars_handlers import _mask
     environment = resolve_alias(row_environment, environment,
                                 new_name="row_environment", old_name="environment")

@@ -16,6 +16,7 @@ described here (or with Field) before it ships.
 """
 from __future__ import annotations
 
+import inspect
 from typing import Dict, Tuple
 
 # One meaning everywhere it appears.
@@ -34,43 +35,43 @@ GENERIC: Dict[str, str] = {
     "auth_env_var": "Name of the env var holding the auth token/secret "
                     "(the name only, never the value).",
     "version_id": "Version UUID.",
-    "model_id": "agent_models UUID (models action=list).",
+    "model_id": "Model UUID (models action=list).",
     "temperature": "Sampling temperature override.",
     "max_output_tokens": "Max output tokens override.",
     "timeout_seconds": "Request timeout in seconds (1-300).",
     "usage_guidance": "Free-text guidance rendered to the model next to "
                       "the tool(s) when bound.",
-    "context_fields": "JSON object of server-side context/credential "
-                      "fields the resolver injects into tool calls.",
+    "context_fields": "JSON object of context or credential fields that "
+                      "the server adds to tool calls.",
     "repeats": "Run each scenario this many times (1-20) for consistency.",
     "lookback_days": "live_chats: how many days of real chats to sample from.",
     "sample_size": "live_chats: how many chats to sample.",
     "judge_model": "live_chats: model string of the LLM judge.",
     "expectations": "live_chats: rubric the judge grades against.",
-    "user_id": "User id (`user.id` of the portal's user table; memory also accepts an email).",
+    "user_id": "User id (UUID). memory also accepts an email.",
     "run_id": "Run UUID.",
     "tool_subset": "Only these tool names from the MCP (omit = all).",
     "trace_id": "Trace id (traces action=search).",
     "span_id": "Span id within the trace (traces action=get).",
-    "session_id": "Chat session id (as stored in ai_chat_sessions or sent "
-                  "by the client).",
-    "prompt_id": "agent_prompts UUID (a prompt slot; prompts action=list).",
+    "session_id": "Chat session id (as returned by chat or sent by the "
+                  "client).",
+    "prompt_id": "Prompt UUID (prompts action=list).",
     "prompt_key": "Prompt slot on the profile, e.g. system, voice_persona.",
-    "skill_id": "agent_skills UUID (skills action=list).",
-    "template_id": "Template (mold) profile UUID (templates action=list).",
-    "mcp_server_id": "agent_mcp_servers UUID (mcp_servers action=list).",
-    "tool_id": "agent_tools UUID (tools action=list).",
-    "source_id": "agent_data_sources (KB source) UUID (kb_sources action=list).",
-    "schedule_id": "agent_eval_schedules UUID.",
-    "bakeoff_id": "agent_bakeoffs UUID.",
-    "channel_id": "agent_channels UUID.",
-    "fixture_id": "test_fixtures UUID.",
-    "job_id": "admin_jobs UUID returned by a background trigger.",
-    "memory_id": "ai_user_memory row UUID.",
-    "var_id": "agent_env_vars UUID.",
-    "target_id": "agent_deployment_targets UUID.",
-    "audit_id": "agent_audit_log row UUID.",
-    "entity_type": "Only rows for this table/entity, e.g. agent_profiles.",
+    "skill_id": "Skill UUID (skills action=list).",
+    "template_id": "Template UUID (templates action=list).",
+    "mcp_server_id": "MCP server UUID (mcp_servers action=list).",
+    "tool_id": "Tool UUID (tools action=list).",
+    "source_id": "KB source UUID (kb_sources action=list).",
+    "schedule_id": "Eval schedule UUID (eval_schedules action=list).",
+    "bakeoff_id": "Bake-off UUID (bakeoffs action=list).",
+    "channel_id": "Channel UUID (channels action=list).",
+    "fixture_id": "Test fixture UUID (test_fixtures action=list).",
+    "job_id": "Job UUID returned by a tool that starts a background job.",
+    "memory_id": "Memory UUID (memory action=list).",
+    "var_id": "Variable UUID (env_vars action=list).",
+    "target_id": "Deployment target UUID (deployment_targets action=list).",
+    "audit_id": "Audit entry UUID (audit action=list).",
+    "entity_type": "Only entries about this entity type, e.g. agent_profiles.",
     "channel": "Only traffic from this channel slug.",
     "channel_slug": "Only traces from this channel slug.",
     "search_text": "Free-text match over trace input/output.",
@@ -78,8 +79,8 @@ GENERIC: Dict[str, str] = {
     "include_background": "Include background/diagnostic traces (default off).",
     "q": "Search text.",
     "locale": "Language code (en, ar, ...).",
-    "model_main_id": "Main chat model (agent_models UUID).",
-    "model_light_id": "Light model (vestigial — the runtime ignores it).",
+    "model_main_id": "Main chat model (model UUID).",
+    "model_light_id": "Light model. Stored, but not used at run time.",
     "endpoint_path": "Route the agent is served on, e.g. /chat/stream.",
     "delegatable": "Expose this profile to its parent as an ask_<slug> "
                    "delegation tool.",
@@ -94,8 +95,8 @@ GENERIC: Dict[str, str] = {
                 "to add/remove one).",
     "data_source_ids": "REPLACES the profile's KB source list (use "
                        "profile_attachments to add/remove one).",
-    "mcp_server_ids": "REPLACES the legacy MCP label list (display only — "
-                      "runtime binding is profile_attachments kind=mcp).",
+    "mcp_server_ids": "REPLACES the older MCP label list. Display only: "
+                      "tools are bound from profile_attachments kind=mcp.",
     "downstream_profile_ids": "REPLACES the sub-agent list (use "
                               "profile_attachments kind=downstream).",
     "profile_a": "First profile of the pair (or use ids=[a, b]).",
@@ -106,41 +107,41 @@ GENERIC: Dict[str, str] = {
                 "e.g. runtime.prompts.agents_demo.SUPPORT_SYSTEM_PROMPT.",
     "override_validation": "Write even though prompt validation failed "
                            "(needs confirm=true; audited).",
-    "provider": "LLM provider id (see runtime.llm_factory.SUPPORTED_PROVIDERS).",
+    "provider": "LLM provider id, e.g. google_genai, openai, anthropic, azure_openai.",
     "model_string": "Provider model name, e.g. gemini-3-pro.",
     "extra_config": "JSON object of provider-specific settings.",
     "daily_seconds": "Daily duplex-voice allowance in audio seconds.",
     "note": "Free-text note.",
     "python_name": "Tool name the model sees (lowercase + underscores).",
     "category": "Tool category label.",
-    "scope": "Tool scope: read | write (see tools docstring).",
+    "scope": "Tool scope: read | write (default read).",
     "additional_agent_kinds": "Extra agent kinds the tool may bind to.",
     "endpoint_url": "Absolute http(s) URL the HTTP tool calls.",
-    "http_method": "HTTP method (GET, POST, ...).",
+    "http_method": "HTTP method: GET | POST | PUT | PATCH | DELETE (default POST).",
     "argument_schema": "JSON schema (type object) of the tool's arguments.",
     "args": "dry_run: sample arguments to call the tool with.",
-    "transport": "MCP transport for an external server (e.g. http).",
+    "transport": "MCP transport for an external server: stdio | sse | http (default http).",
     "endpoint": "External MCP endpoint URL.",
-    "member_tool_ids": "Bundle membership: agent_tools ids in order "
+    "member_tool_ids": "Bundle membership: tool ids in order "
                        "(REPLACES the bundle's members).",
     "refresh_cadence": "How often the source is refreshed (free text).",
     "freshness_sla_hours": "Alert when the source is older than this.",
     "filename": "File name of the uploaded document.",
     "page_type": "KB page type label, e.g. user_guide.",
     "language": "Language code of the content.",
-    "attachments": "Full attachment list [{mcp_server_id, tool_subset?}] — "
+    "attachments": "Full attachment list [{mcp_server_id, tool_subset?}]. "
                    "REPLACES the current set.",
     "as_subagent_of": "Wire the new agent in as a sub-agent of this profile.",
     "always_on": "Inject the skill every turn instead of on demand.",
     "linked_data_source_ids": "KB sources the skill links to.",
-    "skill_ids": "Full skill list in order — REPLACES the current set.",
+    "skill_ids": "Full skill list in order. REPLACES the current set.",
     "prompt_overrides": "Variant: {prompt_key: version_number} to run with.",
     "top_p": "Nucleus-sampling override.",
     "thinking_level": "Reasoning-effort override (minimal|low|medium|high).",
     "thinking_budget": "Reasoning token budget override.",
     "variant_label": "Label shown for this variant in comparisons.",
-    "profile_version_id": "Pin the run to this saved agent_profile_versions "
-                          "snapshot (must belong to profile_id).",
+    "profile_version_id": "Pin the run to this saved profile version "
+                          "(must belong to profile_id).",
     "voice_mode": "voice_live suites: sim (simulated, free) | live (real, "
                   "billable provider call) | '' = suite default.",
     "run_b": "Second run of a pair (prefer run_ids=[a, b, ...]).",
@@ -151,11 +152,11 @@ GENERIC: Dict[str, str] = {
     "suite_ids": "Eval suites every variant runs.",
     "runner_kind": "Scoring path: chat | voice_live, or a runner a plugin adds.",
     "pass_threshold": "Score (0-1) a run must reach to pass the gate.",
-    "evaluator_model_id": "agent_models UUID of the judge model.",
+    "evaluator_model_id": "Model UUID of the judge model.",
     "scenarios": "Scenario objects (question, expected, ...).",
     "default_context": "JSON stored as the suite's default run context.",
     "clear_profile": "Unbind the suite from its profile.",
-    "cadence": "manual | daily | weekly.",
+    "cadence": "manual | daily | weekly | monthly.",
     "is_enabled": "Whether the schedule fires automatically.",
     "suite": "Which pytest selection to run.",
     "ws_path": "WebSocket path the scenario calls (default /voice/live).",
@@ -170,7 +171,7 @@ GENERIC: Dict[str, str] = {
     "base_url": "Service base URL, e.g. https://engine.example.com.",
     "is_default": "Make this the default target for its environment.",
     "is_secret": "Mask the value in output and audit.",
-    "reveal": "Return the real (unmasked) value — audited.",
+    "reveal": "Return the real (unmasked) value. Audited.",
     "include_series": "Include the per-bucket time series (large).",
     "superusers_only": "Only users with the superuser flag.",
     "grant": "true = grant superuser, false = revoke.",
@@ -180,8 +181,8 @@ GENERIC: Dict[str, str] = {
                            "custom:<slug> for one generic agent.",
     "default_profile_id": "Profile served when the request names none.",
     "auth_required": "Require a user JWT.",
-    "rate_limit_rpm": "Requests per minute allowed.",
-    "want_diff": "Include the prompt text delta (large, half-Arabic).",
+    "rate_limit_rpm": "Requests per minute allowed (1-3600).",
+    "want_diff": "Include the prompt text difference (can be large).",
     "profile": "Only findings for this profile slug.",
     "fields": "Only these columns of the row.",
 }
@@ -199,9 +200,9 @@ OVERRIDES: Dict[Tuple[str, str], str] = {
     ("env_vars", "environment"): "DEPRECATED alias of row_environment.",
     ("live_analytics", "environment"): "DEPRECATED alias of trace_env.",
     ("caching_analytics", "environment"): "DEPRECATED alias of trace_env.",
-    ("deploy", "environment"): "Service to deploy — only prod (the prod chat "
-                               "app) is deployable here.",
-    ("rollback", "environment"): "Service to roll back — only prod.",
+    ("deploy", "environment"): "Service to deploy. Only prod can be deployed "
+                               "here.",
+    ("rollback", "environment"): "Service to roll back. Only prod.",
     ("list_deploy_runs", "environment"): "Only runs that targeted this "
                                          "service ('' = all).",
     ("list_profiles", "status"): "Only profiles with this status ('' = all).",
@@ -212,16 +213,16 @@ OVERRIDES: Dict[Tuple[str, str], str] = {
     ("jobs", "status"): "Only jobs in this status (queued, running, ...).",
     ("get_profile", "slug"): "With agent_kind: this exact profile slug "
                              "(any status).",
-    ("prompts", "slug"): "publish_from_repo: agent_prompts slug to resolve "
-                         "the prompt_id from (with profile_id).",
+    ("prompts", "slug"): "publish_from_repo: prompt slug to find the prompt "
+                         "by (with profile_id).",
     ("templates", "slug"): "Slug for the new agent (default: derived).",
     ("skills", "slug"): "Skill slug (lowercase, hyphens).",
     ("voice_scenarios", "slug"): "Scenario slug.",
     ("channels", "slug"): "Channel slug (lowercase letters/digits/_-).",
-    ("templates", "display_name"): "Name of the new agent forked from the mold.",
+    ("templates", "display_name"): "Name of the new agent made from the template.",
     ("tools", "display_name"): "Human-readable tool name.",
     ("skills", "display_name"): "Skill name shown in the catalog.",
-    ("tools", "description"): "What the tool does — this is what the LLM reads.",
+    ("tools", "description"): "What the tool does. This is the text the model reads.",
     ("skills", "description"): "One-line catalog description of the skill.",
     ("deployment_targets", "description"): "Free-text description.",
     ("env_vars", "description"): "Free-text description.",
@@ -236,17 +237,17 @@ OVERRIDES: Dict[Tuple[str, str], str] = {
     ("mcp_servers", "name"): "MCP server name (unique).",
     ("kb_sources", "name"): "KB source name.",
     ("bakeoffs", "name"): "Bake-off name.",
-    ("eval_suites", "name"): "Suite name (sync_from_repo: the repo suite's "
-                             "name in admin.seed_eval_suites._SUITES).",
+    ("eval_suites", "name"): "Suite name (sync_from_repo: the name of the "
+                             "suite definition that ships with the build).",
     ("eval_schedules", "name"): "Schedule name.",
     ("env_vars", "name"): "Variable name, e.g. FEATURE_X.",
     ("channels", "name"): "Channel name.",
     ("test_fixtures", "name"): "Fixture name (lowercase, underscores).",
-    ("kb_sources", "kind"): "Source kind (pgvector, ...; see KB_KINDS).",
+    ("kb_sources", "kind"): "Source kind: pgvector | ms_drive | gitbook | supabase_table | http.",
     ("channels", "kind"): "Channel kind (public_api, embed, other, or one a plugin adds).",
     ("test_fixtures", "kind"): "jwt | uuid | string | json | secret.",
     ("jobs", "kind"): "Only jobs of this kind (kb_upload, e2e, ...).",
-    ("mcp_servers", "source"): "bundle (group of agent_tools) | external "
+    ("mcp_servers", "source"): "bundle (group of registered tools) | external "
                                "(remote MCP endpoint).",
     ("trigger_eval_run", "source"): "suite (grade suite scenarios) | "
                                     "live_chats (judge sampled real chats).",
@@ -254,23 +255,23 @@ OVERRIDES: Dict[Tuple[str, str], str] = {
     ("env_vars", "source"): "Where the value comes from (default db).",
     ("kb_sources", "config"): "Source config JSON (pgvector: table, "
                               "pages_table, chunking, embed_model).",
-    ("memory", "config"): "set_config: the nested memory_config dict.",
+    ("memory", "config"): "set_config: the nested memory settings object.",
     ("channels", "config"): "Channel config JSON.",
     ("env_vars", "value"): "Variable value ('' on update clears it).",
     ("test_fixtures", "value"): "Fixture value (stored; masked for jwt/secret).",
     ("eval_runs", "run_id"): "Run UUID (get), or the first run of a pair.",
-    ("pytest_runs", "run_id"): "agent_test_runs UUID.",
+    ("pytest_runs", "run_id"): "Test run UUID.",
     ("e2e_runs", "run_id"): "E2E run UUID.",
     ("kb_sources", "title"): "upload_document: page title (default filename).",
     ("voice_scenarios", "title"): "Scenario title.",
-    ("profile_versions", "version_id"): "agent_profile_versions UUID.",
-    ("prompts", "version_id"): "agent_prompt_versions UUID (get / serve).",
+    ("profile_versions", "version_id"): "Profile version UUID (profile_versions action=list).",
+    ("prompts", "version_id"): "Prompt version UUID (get / serve).",
     ("profile_versions", "notes"): "save: notes stored with the version.",
     ("prompts", "notes"): "Notes for the new version (publish_from_repo "
                           "default: carry the served version's notes).",
     ("skills", "notes"): "create_version: notes for the new version.",
     ("voice_scenarios", "notes"): "Free-text notes.",
-    ("models", "model_id"): "agent_models UUID.",
+    ("models", "model_id"): "Model UUID.",
     ("trigger_eval_run", "model_id"): "Variant: run with this model instead.",
     ("trigger_eval_run", "temperature"): "Variant: temperature override.",
     ("trigger_eval_run", "max_output_tokens"): "Variant: max output tokens.",
@@ -342,10 +343,13 @@ def describe(tool: str, param: str) -> str:
 
 
 def apply_param_descriptions(server) -> None:
-    """Fill in a description on every tool parameter schema that lacks one.
+    """Fill in a description on every tool parameter schema that lacks one,
+    and strip the docstring indentation from every tool description.
     Idempotent. `action` gets its enum spelled out and a pointer to the
     tool description, where each action's required arguments are listed."""
     for tool in server._tool_manager.list_tools():
+        # A docstring keeps its source indentation; clients should not see it.
+        tool.description = inspect.cleandoc(tool.description or "")
         props = (tool.parameters or {}).get("properties") or {}
         for name, spec in props.items():
             if spec.get("description"):

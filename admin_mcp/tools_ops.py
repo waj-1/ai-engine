@@ -48,39 +48,39 @@ RUNTIME_FLAG_NAMES: List[str] = [
 @tool_errors
 def drift_check(want_diff: bool = False, profile: str = "",
                 agent_kind: str = "") -> Dict[str, Any]:
-    """Check whether each agent profile's SERVED prompt (resolved through
-    prompt_version_ids — not the newest version) passes
-    core.prompt_validator.validate_prompt — the same gate
-    admin_mcp/tools_configure.py's publish path runs before a write — plus a
-    registry of config levers whose wrong value is silent
-    (voice_config.barge_in_enabled, voice_config.answer_watchdog_sec,
-    memory_config.enabled on a voice profile, ...  — voice_config is FLAT since
-    2026-08-17; the old voice_config.live.* paths are what an unmigrated row
-    still stores, not where a lever is read from). A served prompt DIFFERING
-    from the repo constant is expected under DB-authoring (prompts change
-    through MCP/API/DB, never a merge) and shows as `info` when the
-    validator has real rules to check it against, `warning` when it does
-    not (unconfirmed, not proven safe). What is still `critical` is the
-    served version FAILING validation outright — the modern shape of "is my
-    merged prompt fix actually live?": every scripts/seed_*.py /
-    admin/seed_*.py is insert-if-missing, so once a row exists a seeder can
-    NEVER push a repo edit into it, and a profile can stay pinned to a bad
-    version indefinitely unless something checks for it. Findings whose summary carries
-    "[INCIDENT LEVER LEFT ENGAGED]" are config levers pulled during a past
-    incident and never restored — a different failure mode from "never
-    configured" and worth flagging louder; summary.incident_levers_engaged
-    counts them. want_diff=False by default: a prompt diff can be large and
-    half Arabic, expensive to put in an LLM's context — pass true only when
-    you need the actual text delta. profile/agent_kind optionally narrow the
-    findings (profile matches the exact agent_profiles.slug a finding is
-    about; agent_kind matches that slug's agent_kind per the check
-    registry — best-effort, only as complete as PROMPT_CHECKS' coverage).
-    Every fetch is scoped to ONE agent_profiles.environment — this process's
-    own — and the AI project is a single DB holding every environment's rows,
-    so `drifted: 0` describes that environment and nothing else. The audited
-    value is returned as `audited_environment`; quote it whenever you report a
-    verdict. Read-only: this reports drift, it does not fix it — publish the
-    fix with `prompts action=serve` / `update_profile`."""
+    """Check that each agent profile's SERVED prompt and key settings are
+    healthy. For every profile it validates the prompt version that is
+    actually served (not the newest one), and it checks settings whose wrong
+    value fails silently, such as voice_config.barge_in_enabled,
+    voice_config.answer_watchdog_sec and memory_config.enabled on a voice
+    profile. Not part of every build.
+
+    Severities: critical means the served prompt fails validation. A served
+    prompt that differs from the copy in the engine's code is expected: it is
+    info when it could be validated and warning when it could not. A summary
+    containing "[INCIDENT LEVER LEFT ENGAGED]" marks a setting that was
+    changed during an incident and never restored;
+    summary.incident_levers_engaged counts them.
+
+    Only ONE environment is checked: the one this engine runs as. It is
+    returned as audited_environment. Quote it whenever you report a result,
+    because "drifted: 0" says nothing about other environments.
+
+    profile (an exact profile slug) and agent_kind narrow the findings; the
+    agent_kind filter is best effort. want_diff=true adds the prompt text
+    difference, which can be large. Read-only: fix a finding with
+    prompts(action="serve") or update_profile."""
+    # Maintainer notes (kept out of the description clients read):
+    # Wraps scripts.check_profile_drift.collect_drift (same gate as the prompts
+    # tool's publish path: core.prompt_validator.validate_prompt). Seeders are
+    # insert-if-missing, so once a row exists a repo edit never reaches it and a
+    # profile can stay pinned to a bad version unless something checks. Under
+    # DB-authoring a served prompt differing from the repo constant is normal.
+    # voice_config levers are read from the flat shape; old voice_config.live.*
+    # paths are only what an unmigrated row still stores. The agent_kind filter
+    # is only as complete as PROMPT_CHECKS' coverage. Every fetch is scoped to
+    # one agent_profiles.environment (this process's own) although one database
+    # holds every environment's rows.
     from core.plugins import optional_import
 
     # The drift checker carries a registry of this deployment's own profiles
@@ -131,19 +131,21 @@ def drift_check(want_diff: bool = False, profile: str = "",
 @mcp.tool(annotations=READ_ONLY)
 @tool_errors
 def mcp_flag_parity(env: Env = "staging") -> Dict[str, Any]:
-    """For every active agent profile in `env`, resolve its tool set the way
-    the runtime does (pool_for_kind + AgentProfileLoader.load_active +
-    resolve_mcp_tools_for_profile) and report what actually binds — the
-    health check to run right after `profile_mcp_attachments action=set`, to
-    confirm the wiring resolves rather than trusting the write succeeded.
-    Same payload/logic as GET /admin/api/mcp-flag-parity. Degrades
-    per-profile: one bad profile is reported with an error, never crashes
-    the whole report. CAVEAT: an unreachable external MCP endpoint (e.g. a
-    down partner sandbox) shows up as FEWER bound tools, not an error — the
-    resolver swallows that failure so one flaky external MCP can't take
-    down tool resolution for every profile. A low tool count on an
-    external-source profile means "check the endpoint is reachable", not
+    """For every active agent profile in env, resolve its tools the way the
+    runtime does and report what actually binds. Run it right after
+    profile_mcp_attachments(action="set") to confirm the change works. A
+    profile that fails is reported with its error; the rest of the report
+    still comes back.
+
+    Caution: an external MCP endpoint that cannot be reached shows up as
+    FEWER bound tools, not as an error. A low tool count on a profile with an
+    external MCP server means "check that the endpoint is reachable", not
     necessarily "the attachment is wrong"."""
+    # Maintainer notes (kept out of the description clients read):
+    # Same payload and logic as GET /admin/api/mcp-flag-parity (pool_for_kind +
+    # AgentProfileLoader.load_active + resolve_mcp_tools_for_profile). The
+    # resolver swallows an unreachable external endpoint so one flaky MCP cannot
+    # take down tool resolution for every profile.
     from admin.mcp_parity_handlers import compute_mcp_flag_parity
     with use_env(validate_env(env)):
         return compute_mcp_flag_parity(env)
@@ -152,18 +154,20 @@ def mcp_flag_parity(env: Env = "staging") -> Dict[str, Any]:
 @mcp.tool(annotations=READ_ONLY)
 @tool_errors
 def runtime_flags() -> Dict[str, Any]:
-    """Process-visible values of a small curated list of container-level
-    flags THIS process was booted with — plain os.getenv reads, not routed
-    through core/env_resolver.py, so they are invisible to the env_vars tool
-    and /admin/env-vars (which CRUD the agent_env_vars table, a different
-    read path entirely). Flags, not secrets — nothing on this list is
-    sensitive, and it must stay that way; never add a secret-valued var
-    here. Chiefly for VOICE_LIVE_SIM_ENABLED: endpoints/voice_live.py reads
-    it with a bare os.getenv, so a voice-eval sim run against a stack
-    without it set silently degrades to a real billable provider session
-    instead of erroring — check this before trusting a sim run's cost
-    profile. `value` is null when the var is unset on this process (not the
-    same as being set to an empty string)."""
+    """Show a short, fixed list of settings this engine process was started
+    with, such as VOICE_LIVE_SIM_ENABLED, ENABLE_ADMIN_MCP, ENVIRONMENT,
+    EMBED_PROVIDER and EMBED_MODEL. They are plain process environment
+    values, which the env_vars tool cannot see. None of them is a secret.
+    value is null when the variable is not set, which is not the same as an
+    empty string. Check VOICE_LIVE_SIM_ENABLED before trusting the cost of a
+    simulated voice eval: without it the run silently makes a real, billable
+    provider call. Returns {flags: [{name, value, source}]}."""
+    # Maintainer notes (kept out of the description clients read):
+    # Plain os.getenv reads of RUNTIME_FLAG_NAMES, not routed through
+    # core/env_resolver.py (so invisible to env_vars and /admin/env-vars, which
+    # manage the agent_env_vars table). Flags only: never add a secret-valued
+    # variable to the list. endpoints/voice_live.py reads
+    # VOICE_LIVE_SIM_ENABLED with a bare os.getenv.
     return {"flags": [
         {"name": n, "value": os.environ.get(n), "source": "process env"}
         for n in RUNTIME_FLAG_NAMES

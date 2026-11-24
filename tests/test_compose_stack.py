@@ -248,6 +248,21 @@ def test_with_env_loads_settings_and_drops_empty_model_keys(setup_mod, tmp_path)
     assert out == "g=unset o=sk-kept url=http://gateway:8000"
 
 
+@pytest.mark.parametrize("given, expected", [(None, "1"), ("", "1"), ("0", "0"), ("1", "1")])
+def test_with_env_lets_the_container_override_local_endpoints(setup_mod, tmp_path, given, expected):
+    """The setup step stores MCP_ALLOW_LOCAL_ENDPOINTS=1; a value passed to the
+    container (compose passes an empty string when the host has none) wins."""
+    setup_mod.main()
+    script = ROOT / "deploy" / "compose" / "with_env.sh"
+    env = {"PATH": os.environ["PATH"], "ENGINE_STATE_DIR": str(tmp_path)}
+    if given is not None:
+        env["MCP_ALLOW_LOCAL_ENDPOINTS"] = given
+    out = subprocess.run(
+        ["sh", str(script), "sh", "-c", 'echo "$MCP_ALLOW_LOCAL_ENDPOINTS"'],
+        capture_output=True, text=True, check=True, env=env).stdout.strip()
+    assert out == expected
+
+
 def test_with_env_refuses_to_start_before_setup(tmp_path):
     script = ROOT / "deploy" / "compose" / "with_env.sh"
     run = subprocess.run(["sh", str(script), "true"], capture_output=True, text=True,

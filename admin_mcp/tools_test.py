@@ -38,26 +38,32 @@ def trigger_eval_run(profile_id: str,
                      agent_kind: str = "", lookback_days: int = 30,
                      sample_size: int = 10, judge_model: str = "",
                      expectations: str = "", env: Env = "staging") -> Dict[str, Any]:
-    """Fire an eval run and return its run_id immediately (background job).
-    source=suite grades suite scenarios (optional variant overrides for
-    model/prompt/gen-config comparisons; prompt_overrides maps a prompt to
-    the version NUMBER to test instead of the pinned one, e.g. {"system": 3}
-    for this agent's own instructions or {"<agent_kind>/<prompt slug>": 3} —
-    an entry naming no such prompt or version is refused, never ignored; repeats 1-20 for consistency;
-    concurrency 1-8 = how many scenario attempts run at once (0 = the
-    suite's default_context.concurrency, else EVAL_CONCURRENCY, else 4;
-    voice_live suites always run one at a time);
-    profile_version_id pins the run to one promoted profile snapshot, e.g.
-    a bake-off variant — must belong to profile_id and the suite needs an
-    evaluator model; voice_mode picks sim/live transport for a
-    runner_kind=voice_live suite, overriding the suite's
-    default_context.voice.mode — leave blank to use the suite default,
-    which itself defaults to sim. live is a REAL, billable provider call
-    and is manual-trigger-only: this tool (a human/agent calling it
-    directly) is allowed, but a schedule or bake-off requesting live
-    is rejected by _voice_live_guard). source=live_chats grades real
-    recent chats — judge_model and expectations are REQUIRED there. Poll
-    with eval_runs action=get."""
+    """Start an eval run in the background and return its run_id at once.
+    Required: profile_id. Poll with eval_runs(action="get").
+
+    source="suite" (default) grades the scenarios of suite_id (required).
+    Options:
+    - model_id, temperature, max_output_tokens, top_p, thinking_level,
+      thinking_budget, variant_label: run a variant, to compare models or
+      settings.
+    - prompt_overrides: map a prompt to the version NUMBER to test instead
+      of the pinned one, e.g. {"system": 3} for the agent's own instructions
+      or {"<agent_kind>/<prompt slug>": 3}. An entry that names no such
+      prompt or version is refused, never ignored.
+    - repeats: run each scenario 1-20 times.
+    - concurrency: 1-8 scenario attempts at once. 0 uses the suite's
+      default_context.concurrency, then EVAL_CONCURRENCY, then 4. voice_live
+      suites always run one at a time.
+    - profile_version_id: pin the run to one saved profile version. It must
+      belong to profile_id, and the suite needs an evaluator model.
+    - voice_mode: sim or live, for a suite with runner_kind=voice_live.
+      Blank uses the suite default, which is sim unless the suite says
+      otherwise. live places a REAL, billable provider call. Only a direct
+      call of this tool may request live; schedules and bake-offs may not.
+
+    source="live_chats" grades a sample of recent real chats. agent_kind,
+    judge_model and expectations are required. lookback_days and sample_size
+    (1-100) set the sample."""
     from admin.services.evals import start_live_chat_run, start_suite_run
     actor = current_actor()
     validate_env(env)
@@ -267,35 +273,37 @@ def eval_runs(action: Literal["list", "get", "report", "compare",
                               "scenario ids only).")] = False,
               kind: Annotated[Literal["all", "text", "voice"], Field(
                   description="list: text eval runs, voice-check runs "
-                              "(ai_voice_scenario_runs, suite_id "
-                              "'voice:<slug>'), or both (default).")] = "all",
+                              "(suite_id 'voice:<slug>'), or both "
+                              "(default).")] = "all",
               env: Env = "staging") -> Dict[str, Any]:
-    """Eval-run results. action: list (recent, filter suite_id/profile_id;
-    rows include profile_id, schedule_id, bakeoff_id, profile_version_id so
-    a run can be traced back to what spawned/pinned it) |
-    get (run_id → status, score, the schedule_id/bakeoff_id/
-    profile_version_id linkage, and `results_summary` {scenarios, passed,
-    failed, pass_rate, failing[]} — each failing case carries `trace_ids`, the
-    agent's own traces for it (read them with the traces tool); include_results=true adds every
-    scenario's full result) |
-    report (suite_id → pass-rate trend over `days`) |
-    compare (run_ids=[baseline, ..., latest] — 2 or more runs; run_id +
-    run_b still works for a pair) → every scenario labelled
-    held | gained | regressed | still_failing (plus new | dropped when a
-    scenario is missing from one side), baseline → latest run, with a
-    per-run `vs_baseline` trail and `labels` counts; regressions sort
-    first. Also `runs` (summaries), `matrix` (the portal's N-column
-    pass-rate / latency / cost comparison) and, for a pair, `a`/`b`. |
-    matrix (run_ids[] or suite_id → per-(suite,variant) and per-variant roll-up
-    of mean score, pass-rate, p50/p95 latency & TTFT, tokens, cost) |
-    overview (the portal's Testing Overview: one card per agent with its
-    verdict and a row per text suite plus one `kind="voice"` row rolling up
-    its voice checks — score = share of checks whose latest call passed,
-    target 1.0).
+    """Read eval run results.
 
-    Voice checks are runs too: list/get/compare accept voice-check run ids
-    (every row carries `kind`: text | voice; a voice run's `results` are its
-    checked call steps). compare refuses a mix of text and voice runs."""
+    Actions:
+    - list (default): recent runs. Filter with suite_id, profile_id and
+      kind (all, text or voice). Rows include profile_id, schedule_id,
+      bakeoff_id and profile_version_id, which show what started the run.
+    - get (run_id): status, score, the same links, and results_summary
+      {scenarios, passed, failed, pass_rate, failing[]}. Each failing case
+      has trace_ids; read them with the traces tool. include_results=true
+      adds every scenario's full result.
+    - report (suite_id): pass-rate trend over the last `days`.
+    - compare (run_ids=[baseline, ..., latest], 2 or more; run_id with
+      run_b also works for a pair): labels every scenario held, gained,
+      regressed or still_failing (new or dropped when it is missing on one
+      side), from the baseline to the latest run. Includes a per-run
+      vs_baseline trail and label counts; regressions sort first. Also
+      returns runs (summaries), matrix (pass rate, latency and cost per run)
+      and, for a pair, a and b.
+    - matrix (run_ids or suite_id): per suite and variant, and per variant:
+      mean score, pass rate, p50/p95 latency and time to first token, tokens
+      and cost.
+    - overview: one card per agent with its verdict, a row per text suite
+      and one kind="voice" row for its voice checks (score = share of checks
+      whose latest call passed; target 1.0).
+
+    Voice checks are runs too. list, get and compare accept voice-check run
+    ids, and every row has kind (text or voice). A voice run's results are
+    its checked call steps. compare refuses a mix of text and voice runs."""
     from admin.voice_checks import (is_voice_suite_id, load_voice_runs,
                                     load_voice_runs_by_ids, slug_of)
     client = client_for_env(env)
@@ -413,38 +421,33 @@ def bakeoffs(action: Literal["create", "list", "get"] = "list",
             suite_ids: Optional[List[str]] = None, repeats: int = 1,
             bakeoff_id: str = "", suite_id: str = "", limit: int = 25,
             env: Env = "staging") -> Dict[str, Any]:
-    """Generic bake-off: N profile-version variants x M suites of ONE
-    profile (agent_bakeoffs) — spawns one agent_eval_runs row per
-    (variant, suite) via the same start_suite_run trigger_eval_run uses,
-    then rolls the linked runs into a per-suite + aggregated matrix (same
-    shape as eval_runs action=matrix). Mixed read/write tool like
-    eval_suites/eval_schedules — create mutates, list/get are read-only —
-    so left unannotated rather than READ_ONLY (that would misdescribe
-    create).
+    """Bake-offs: compare several variants of one profile across one or more
+    eval suites. Creating one starts an eval run for every variant and suite.
+    Results come back as a matrix in the same shape as
+    eval_runs(action="matrix").
 
-    action=create: name, profile_id, variants (>=2 required, each
-    {label?, profile_version_id?, model_id?, gen_config?} — gen_config
-    keys are temperature?/thinking_level?/max_output_tokens?/top_p?; a
-    blank or duplicate label is auto-defaulted to "variant N" / suffixed
-    " (2)", " (3)", ... so every matrix row stays distinct), suite_ids
-    (>=1 — every suite needs an evaluator_model_id set), repeats (per
-    variant/suite run, clamped 1-20 by create_bakeoff itself — a raw
-    repeats=500 fans out at most 20x variants x suites runs, not 500x).
-    Two pre-flight checks run BEFORE anything is written — every suite has
-    a judge, and every variant's profile_version_id (when given) actually
-    belongs to profile_id — so a bad input fails with one clear ValueError
-    instead of a half-spawned bake-off; on success returns
-    {bakeoff_id, run_ids}.
-    action=list: recent bake-offs (agent_bakeoffs), decorated with
-    n_variants/n_suites/_profile_name — does not load linked runs (that's
-    action=get).
-    action=get: bakeoff_id -> {bakeoff, matrix, status}. status is
-    recomputed from the linked agent_eval_runs rows ('complete' iff every
-    linked run has reached a terminal status, else 'running') unless the
-    row is already stuck 'errored' (sticky — set when create's pre-flight
-    or spawn loop failed). Optional suite_id narrows matrix to just that
-    suite's rows ({"rows": [...]}); omitted, matrix is the full
-    {"rows": [...], "by_variant": [...]}."""
+    Actions:
+    - create (name, profile_id, variants, suite_ids; optional repeats, 1-20
+      per variant and suite): variants is a list of 2 or more {label?,
+      profile_version_id?, model_id?, gen_config?}. gen_config keys:
+      temperature, thinking_level, max_output_tokens, top_p. A blank or
+      duplicate label is renamed ("variant N", or a " (2)" suffix). Every
+      suite needs an evaluator model, and each profile_version_id must
+      belong to profile_id. Both are checked before anything is written.
+      Returns {bakeoff_id, run_ids}.
+    - list (default): recent bake-offs with n_variants and n_suites. Does
+      not load their runs.
+    - get (bakeoff_id): {bakeoff, matrix, status}. status is complete when
+      every run has finished, running otherwise, or errored when creation
+      failed. suite_id limits the matrix to that suite ({rows}); without it
+      the matrix is {rows, by_variant}."""
+    # Maintainer notes (kept out of the description clients read):
+    # Not annotated READ_ONLY: create writes, list/get read (same as
+    # eval_suites and eval_schedules). Rows live in agent_bakeoffs; each
+    # (variant, suite) run is an agent_eval_runs row started through the same
+    # start_suite_run that trigger_eval_run uses. create_bakeoff clamps repeats
+    # itself. 'errored' is sticky: set when create's pre-flight or spawn loop
+    # failed.
     from admin.services.bakeoffs import create_bakeoff, get_bakeoff, list_bakeoffs
     if action == "create":
         if not name:
@@ -514,50 +517,49 @@ def eval_suites(action: Literal["list", "get", "create", "update",
                 default_context: Optional[Dict[str, Any]] = None,
                 clear_profile: bool = False,
                 confirm: bool = False) -> Dict[str, Any]:
-    """agent_eval_suites CRUD + scenario import + repo re-sync. action:
-    list | get |
-    create (name; EITHER profile_id — agent_kind is then DERIVED from that
-    profile via _sync_agent_kind, overriding any agent_kind also passed, and
-    an unresolvable profile_id errors — OR agent_kind directly, one of this
-    build's suite kinds (legacy/no-profile path, unchanged); runner_kind
-    defaults 'chat' ('voice_live' grades a whole duplex-voice conversation —
-    see docs/admin-portal/03-test.md#voice-eval-suites-runner_kind-voice_live;
-    any other kind is a plugin's own runner, see 03-test.md);
-    default_context, when supplied, is stored as-is (e.g. a voice_live
-    suite's {"voice": {"mode": "sim", ...}}; runner knobs read from it:
-    concurrency (1-8 scenario attempts at once, default 4 — set 1 for
-    scenarios that must not overlap) and fail_on_tool_error (true = any
-    error-shaped tool result fails the scenario)); pass_threshold defaults 0.7,
-    is_active defaults false unless set true — mirrors the portal's "create
-    suite" dialog; scenarios, when supplied, are stored with the new suite,
-    each needing a question as in import_scenarios) | update (suite_id + only the fields supplied change;
-    profile_id, when supplied, re-derives and overwrites agent_kind the same
-    way as create; clear_profile=true UNBINDS an existing profile instead —
-    sets profile_id to NULL and leaves agent_kind untouched (the suite goes
-    back to being manually-managed, same as one that was never bound),
-    mirroring the portal edit form's "— none —" Profile option; a non-empty
-    profile_id takes priority over clear_profile if both are somehow passed;
-    with neither supplied, profile_id is left alone (back-compat for callers
-    that never mention profile_id at all); runner_kind, when supplied, must
-    be one of this build's runner kinds; name, when supplied non-blank, renames
-    the suite; scenarios, when supplied, REPLACES the whole array) |
-    import_scenarios (suite_id, scenarios — each needs a question; an
-    optional `name` is what the portal shows for the case (the question is
-    shown without one); a missing id is auto-slugified from the name, else
-    the question — APPENDS to the existing array,
-    doesn't replace it) | sync_from_repo (name = the suite's `name` field in
-    admin.seed_eval_suites._SUITES (the plugin's specs) — NOT suite_id, since the repo constant
-    has no suite_id; seeders are insert-if-missing, so a repo edit to an
-    already-seeded suite's scenarios/runner_kind/default_context/
-    pass_threshold never reaches a live DB on its own. Without confirm:
-    dry-run — resolves the repo entry and the existing DB row by name and
-    returns a diff summary (scenario id adds/removes, changed-scenario
-    count, and whether runner_kind/default_context/pass_threshold differ)
-    without writing anything. With confirm=true: applies the repo's
-    scenarios + runner_kind + default_context + pass_threshold onto the
-    existing row. Errors if no suite with that name exists yet in the DB
-    (this re-syncs an existing seeded row, it does not create one) or if
-    `name` isn't a known _SUITES entry)."""
+    """Eval suites: sets of test scenarios for an agent. Required: action.
+
+    Actions:
+    - list.
+    - get (suite_id).
+    - create (name, and profile_id or agent_kind): with profile_id the agent
+      kind is taken from that profile, overriding any agent_kind passed, and
+      an unknown profile is an error. Without it, agent_kind must be one of
+      this build's suite kinds. Defaults: runner_kind chat (voice_live grades
+      a whole voice conversation; any other kind is a plugin's own runner),
+      pass_threshold 0.7 (0 to 1), is_active false. Optional:
+      evaluator_model_id, default_context and scenarios (each needs a
+      question).
+    - update (suite_id plus fields): only the fields you pass change. name
+      renames the suite. profile_id rebinds the suite and resets agent_kind
+      from that profile. clear_profile=true unbinds the profile and leaves
+      agent_kind as it is; a profile_id in the same call wins. runner_kind
+      must be one of this build's runner kinds. scenarios REPLACES the whole
+      list.
+    - import_scenarios (suite_id, scenarios): APPEND scenarios. Each needs a
+      question. An optional name is what the portal shows for the case. A
+      missing id is made from the name, or else the question.
+    - sync_from_repo (name): reset an existing suite from the suite
+      definition of the same name that ships with this build. name is the
+      suite's name, not a suite_id. Without confirm it returns a diff:
+      scenario ids added, removed and changed, and whether runner_kind,
+      default_context or pass_threshold differ. With confirm=true it
+      overwrites the suite's scenarios, runner_kind, default_context and
+      pass_threshold. Errors if no suite of that name exists yet, or the
+      build has no definition with that name.
+
+    default_context is stored as given. The runner reads from it: voice
+    settings (e.g. {"voice": {"mode": "sim"}}), concurrency (1-8 scenario
+    attempts at once, default 4; use 1 for scenarios that must not overlap)
+    and fail_on_tool_error (true fails a scenario on any tool error)."""
+    # Maintainer notes (kept out of the description clients read):
+    # Table agent_eval_suites. A bound profile is the single source of truth
+    # for agent_kind (_sync_agent_kind). create/update mirror the portal's suite
+    # dialog, including the "none" Profile option that clear_profile maps to.
+    # Voice suites: docs/admin-portal/03-test.md (runner_kind voice_live).
+    # sync_from_repo reads admin.seed_eval_suites._SUITES (a plugin's specs):
+    # seeders are insert-if-missing, so a repo edit to an already-seeded suite
+    # never reaches a live database on its own.
     from admin.eval_handlers import (RUNNER_KINDS, _AGENT_KINDS_FOR_SUITES, _sync_agent_kind,
                                      _slugify_question_first_words)
     client = client_for_env(env)
@@ -753,22 +755,28 @@ def eval_schedules(action: Literal["list", "create", "update", "delete", "fire"]
                    judge_model: str = "", expectations: str = "",
                    is_enabled: bool = True,
                    confirm: bool = False) -> Dict[str, Any]:
-    """agent_eval_schedules CRUD + run-now. action: list | create / update
-    (FULL replace of the schedule's config — mirrors the portal's edit
-    form, which always resubmits every field; pass every field you want
-    kept, not just the ones changing). profile_id, when supplied, DERIVES
-    agent_kind via _sync_agent_kind (overriding any agent_kind also passed)
-    the same way eval_suites binds a profile — a stale/unresolvable
-    profile_id is ignored (falls back to whatever agent_kind was passed,
-    if any) rather than erroring, mirroring the portal's schedule form.
-    source=suite requires suite_id; source=live_chats requires agent_kind
-    (directly or via profile_id) and judge_model — expectations, left
-    blank, default to that agent_kind's standard judge rubric instead of
-    erroring. delete (schedule_id, confirm=true) | fire (schedule_id —
-    runs it now via the same launcher trigger_eval_run uses, then rolls
-    last_run_at/next_run_at forward from cadence). cadence: manual | daily
-    | weekly | monthly (next_run_at is computed from cadence; manual
-    schedules never auto-fire)."""
+    """Scheduled eval runs. Required: action.
+
+    Actions:
+    - list.
+    - create / update (name; update also needs schedule_id): both write the
+      FULL schedule, so on update pass every field you want kept, not only
+      the ones that change. source="suite" needs suite_id.
+      source="live_chats" needs judge_model and agent_kind (directly or
+      through profile_id); blank expectations use that agent kind's default
+      rubric. A profile_id sets agent_kind from that profile, overriding any
+      agent_kind passed; a profile_id that does not resolve is ignored.
+      cadence: manual, daily, weekly or monthly. The next run time is
+      computed from it, and manual schedules never run on their own.
+    - delete (schedule_id, confirm=true).
+    - fire (schedule_id): run the schedule now, then move its last and next
+      run times forward. Returns {fired, run_id}."""
+    # Maintainer notes (kept out of the description clients read):
+    # Table agent_eval_schedules. Full replace mirrors the portal's edit form,
+    # which always resubmits every field. agent_kind derives through
+    # _sync_agent_kind like eval_suites, but a stale profile_id is ignored here
+    # (as the portal's schedule form does) instead of erroring. `fire` uses the
+    # same launcher as trigger_eval_run.
     from admin.eval_handlers import _sync_agent_kind
     from admin.eval_runs_handlers import (_CADENCES, _eval_agent_kinds,
                                           _SOURCES, _fire_schedule,
@@ -864,15 +872,19 @@ def pytest_runs(action: Literal["trigger", "get", "list"] = "list",
                 suite: Literal["smoke", "unit_runtime", "unit_admin",
                                "all"] = "smoke",
                 env: Env = "staging", limit: int = 25) -> Dict[str, Any]:
-    """Pytest suite runs (agent_test_runs). action: trigger (suite ∈
-    smoke|unit_runtime|unit_admin|all — launches a background job and
-    returns job_id IMMEDIATELY; this differs from the portal's
-    /admin/tests page, which blocks the HTTP request until pytest
-    finishes — poll via jobs action=get or pytest_runs action=get) |
-    get (run_id) | list (recent runs).
-    The trigger runs in this engine's own container against the local
-    checkout (not env-scoped, unlike the eval/e2e tools' env= param) and
-    returns a job_id to poll via the jobs tool."""
+    """Run the engine's own pytest suites and read the results.
+
+    Actions:
+    - trigger (suite: smoke, unit_runtime, unit_admin or all; default
+      smoke): start a background job and return job_id at once. Poll with
+      jobs(action="get") or pytest_runs(action="get"). The tests run inside
+      this engine against its own code, so env does not change what is
+      tested.
+    - get (run_id).
+    - list (default): recent runs."""
+    # Maintainer notes (kept out of the description clients read):
+    # Table agent_test_runs. Unlike the portal's /admin/tests page, which
+    # blocks the HTTP request until pytest finishes, trigger returns at once.
     if action == "trigger":
         if suite not in ("smoke", "unit_runtime", "unit_admin", "all"):
             return err("suite must be one of smoke | unit_runtime | unit_admin | all")
@@ -905,18 +917,29 @@ def voice_scenarios(action: Literal["list", "get", "set", "delete",
                     notes: str = "", enabled: Optional[bool] = None,
                     target: str = "", headers: Optional[Dict[str, str]] = None,
                     env: Env = "staging", limit: int = 25) -> Dict[str, Any]:
-    """Live duplex-voice acceptance scenarios (ai_voice_scenarios) — the
-    portal/MCP surface over admin/voice_scenario_runner.py. action:
-    list | get (slug) | set (slug + agent_kind + steps; upsert — step types:
-    say / expect_transcript / expect_frame / http_check / wait, shapes in the
-    runner's module docstring) | delete (slug) | run (slug; launches a
-    background job that places a REAL call against the engine's own
-    /voice/live — or `target` ws(s)://; `headers` are per-invocation HTTP
-    headers forwarded to the WS connection AND merged into each `http_check`
-    step's own headers — the way to carry a portal login cookie or other
-    secret for a deep protected-flow scenario without ever storing it on the
-    scenario row) | runs (recent results, optional slug filter). Runs need
-    AZURE_SPEECH_KEY on the service (else they land as status=skipped)."""
+    """Scripted voice-call checks. A run places a REAL call and verifies
+    what happens.
+
+    Actions:
+    - list (default).
+    - get (slug).
+    - set (slug; creating one also needs agent_kind and steps): create or
+      update a scenario. Step types: say, expect_transcript, expect_frame,
+      http_check, wait. Optional: title, ws_path, locale, notes, enabled.
+    - delete (slug): deletes at once; there is no confirm step.
+    - run (slug): start a background job that calls this engine's own
+      /voice/live, or target (a ws:// or wss:// URL). headers are sent with
+      the call and added to every http_check step. They apply to this run
+      only and are never stored, so they can carry a login cookie or other
+      secret. Returns job_id.
+    - runs: recent results; slug filters.
+
+    Runs need AZURE_SPEECH_KEY on the service. Without it they end with
+    status=skipped."""
+    # Maintainer notes (kept out of the description clients read):
+    # Table ai_voice_scenarios (runs in ai_voice_scenario_runs); the runner is
+    # admin/voice_scenario_runner.py, whose module docstring has the step
+    # shapes.
     client = client_for_env(env)
     if action == "list":
         return {"scenarios": list_rows(client, "ai_voice_scenarios",
@@ -988,12 +1011,15 @@ def voice_scenarios(action: Literal["list", "get", "set", "delete",
 def e2e_runs(action: Literal["trigger", "get", "list"] = "list",
             run_id: str = "", profile_id: str = "",
             env: Env = "staging", limit: int = 25) -> Dict[str, Any]:
-    """E2E test runs against a deployed environment (agent_e2e_runs).
-    action: trigger (profile_id, env — runs the profile's active eval
-    suite(s) scenario-by-scenario against its live endpoint_path in
-    `env`, judge-scored when the suite has an evaluator_model; launches
-    a background job and returns job_id immediately) | get (run_id) |
-    list (recent, optional profile_id filter)."""
+    """End-to-end test runs against a deployed environment.
+
+    Actions:
+    - trigger (profile_id, env): run the profile's active eval suites,
+      scenario by scenario, against its live endpoint in env. A judge scores
+      the answers when the suite has an evaluator model. Starts a background
+      job and returns job_id at once.
+    - get (run_id).
+    - list (default): recent runs in env; profile_id filters."""
     if action == "trigger":
         if not profile_id:
             return err("profile_id is required")

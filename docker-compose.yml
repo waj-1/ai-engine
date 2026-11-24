@@ -193,6 +193,9 @@ services:
       # Try the voice call path with no realtime key (README, "By voice").
       # Leave unset on a shared server.
       VOICE_LIVE_SIM_ENABLED: ${VOICE_LIVE_SIM_ENABLED:-}
+      # Agents may use MCP servers and HTTP tools on private addresses (this
+      # machine, your network). On by default here; set 0 on a shared server.
+      MCP_ALLOW_LOCAL_ENDPOINTS: ${MCP_ALLOW_LOCAL_ENDPOINTS:-}
     # Loopback only. To serve other machines, put a TLS-terminating proxy in
     # front and change this binding; do not publish the port as it is.
     ports:
