@@ -1,0 +1,33 @@
+_format_version: "2.1"
+_transform: true
+
+# The gateway for a platform with no shared volume (Render, Railway): one
+# address in front of the REST layer and the auth service.
+#
+#   /rest/v1/*  ->  the REST layer
+#   /auth/v1/*  ->  the auth service
+#
+# Unlike deploy/local/kong.yml this file has no API key check, so it holds no
+# secret and can be built into an image. That is safe only while the gateway
+# is reachable on the platform's private network and nowhere else. The REST
+# layer and the auth service still check every token's signature themselves.
+#
+# __REST_UPSTREAM__ and __AUTH_UPSTREAM__ are replaced at start
+# (deploy/paas/gateway.Dockerfile).
+
+services:
+  - name: auth-v1
+    url: http://__AUTH_UPSTREAM__/
+    routes:
+      - name: auth-v1-all
+        strip_path: true
+        paths:
+          - /auth/v1/
+
+  - name: rest-v1
+    url: http://__REST_UPSTREAM__/
+    routes:
+      - name: rest-v1-all
+        strip_path: true
+        paths:
+          - /rest/v1/

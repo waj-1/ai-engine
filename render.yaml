@@ -1,0 +1,198 @@
+# WAJ AI Engine on Render: https://render.com/deploy?repo=https://github.com/waj-1/ai-engine
+# Guide: docs/deploy/render.md
+#
+# Five services in one region, on Render's private network:
+#
+#   ai-engine          web       the engine and its admin portal (the only public one)
+#   ai-engine-gateway  private   one address in front of rest and auth
+#   ai-engine-rest     private   the REST layer the engine's data client speaks
+#   ai-engine-auth     private   the auth service behind the admin login
+#   ai-engine-db       private   Postgres with pgvector, on a persistent disk
+#
+# No secret is in this file. Render generates three when the Blueprint is
+# first applied and keeps them afterwards:
+#
+#   POSTGRES_PASSWORD   on ai-engine-db
+#   GOTRUE_JWT_SECRET   on ai-engine-auth   (signs every token)
+#   SECRET_KEY          on ai-engine        (encrypts model keys saved in the portal)
+#
+# The other services read them through `fromService`. The engine signs its
+# two API tokens from the JWT secret each time it starts
+# (deploy/paas/start_engine.py), so no token is stored anywhere.
+#
+# There is no default login. Open the engine's URL after the first deploy: the
+# first-run page creates the admin account and asks for the one-time setup
+# code printed in the ai-engine service's logs.
+
+services:
+  - type: web
+    name: ai-engine
+    runtime: image
+    image:
+      url: ghcr.io/waj-1/ai-engine:latest
+    plan: standard
+    # Applies the schema, then starts the engine on $PORT.
+    dockerCommand: python deploy/paas/start_engine.py
+    healthCheckPath: /health
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET
+        fromService:
+          type: pserv
+          name: ai-engine-auth
+          envVarKey: GOTRUE_JWT_SECRET
+      - key: POSTGRES_PASSWORD
+        fromService:
+          type: pserv
+          name: ai-engine-db
+          envVarKey: POSTGRES_PASSWORD
+      - key: GATEWAY_HOST
+        fromService:
+          type: pserv
+          name: ai-engine-gateway
+          property: host
+      - key: GATEWAY_PORT
+        value: "8000"
+      - key: DB_HOST
+        fromService:
+          type: pserv
+          name: ai-engine-db
+          property: host
+      - key: DB_PORT
+        value: "5432"
+      # On the first deploy the database and the gateway are still building
+      # when the engine starts. It waits this long for them before giving up.
+      - key: INIT_WAIT_SEC
+        value: "900"
+
+  - type: pserv
+    name: ai-engine-gateway
+    runtime: docker
+    dockerfilePath: ./deploy/paas/gateway.Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: REST_HOST
+        fromService:
+          type: pserv
+          name: ai-engine-rest
+          property: host
+      - key: AUTH_HOST
+        fromService:
+          type: pserv
+          name: ai-engine-auth
+          property: host
+
+  - type: pserv
+    name: ai-engine-rest
+    runtime: image
+    image:
+      url: docker.io/postgrest/postgrest:v12.2.3
+    plan: starter
+    envVars:
+      # The database connection, as the standard PG* variables.
+      - key: PGHOST
+        fromService:
+          type: pserv
+          name: ai-engine-db
+          property: host
+      - key: PGPORT
+        value: "5432"
+      - key: PGDATABASE
+        value: postgres
+      - key: PGUSER
+        value: authenticator
+      - key: PGPASSWORD
+        fromService:
+          type: pserv
+          name: ai-engine-db
+          envVarKey: POSTGRES_PASSWORD
+      - key: PGRST_DB_URI
+        value: postgresql://
+      - key: PGRST_DB_SCHEMAS
+        value: public
+      - key: PGRST_DB_ANON_ROLE
+        value: anon
+      - key: PGRST_DB_USE_LEGACY_GUCS
+        value: "false"
+      - key: PGRST_SERVER_HOST
+        value: 0.0.0.0
+      - key: PGRST_SERVER_PORT
+        value: "3000"
+      - key: PGRST_JWT_SECRET
+        fromService:
+          type: pserv
+          name: ai-engine-auth
+          envVarKey: GOTRUE_JWT_SECRET
+
+  - type: pserv
+    name: ai-engine-auth
+    runtime: image
+    image:
+      url: ghcr.io/supabase/gotrue:v2.158.1
+    plan: starter
+    envVars:
+      - key: GOTRUE_JWT_SECRET
+        generateValue: true
+      # The database connection, as the standard PG* variables.
+      - key: PGHOST
+        fromService:
+          type: pserv
+          name: ai-engine-db
+          property: host
+      - key: PGPORT
+        value: "5432"
+      - key: PGDATABASE
+        value: postgres
+      - key: PGUSER
+        value: postgres
+      - key: PGPASSWORD
+        fromService:
+          type: pserv
+          name: ai-engine-db
+          envVarKey: POSTGRES_PASSWORD
+      - key: GOTRUE_DB_DRIVER
+        value: postgres
+      - key: GOTRUE_DB_DATABASE_URL
+        value: postgres:///postgres?search_path=auth
+      - key: GOTRUE_API_HOST
+        value: 0.0.0.0
+      - key: GOTRUE_API_PORT
+        value: "9999"
+      # Nothing outside the private network calls the auth service, and the
+      # engine sends no email links, so these two addresses are placeholders.
+      - key: API_EXTERNAL_URL
+        value: http://ai-engine-gateway:8000
+      - key: GOTRUE_SITE_URL
+        value: http://ai-engine
+      - key: GOTRUE_URI_ALLOW_LIST
+        value: "*"
+      - key: GOTRUE_DISABLE_SIGNUP
+        value: "true"
+      - key: GOTRUE_JWT_ADMIN_ROLES
+        value: service_role
+      - key: GOTRUE_JWT_AUD
+        value: authenticated
+      - key: GOTRUE_JWT_DEFAULT_GROUP_NAME
+        value: authenticated
+      - key: GOTRUE_JWT_EXP
+        value: "3600"
+      - key: GOTRUE_EXTERNAL_EMAIL_ENABLED
+        value: "true"
+      - key: GOTRUE_MAILER_AUTOCONFIRM
+        value: "true"
+
+  - type: pserv
+    name: ai-engine-db
+    runtime: docker
+    dockerfilePath: ./deploy/paas/db.Dockerfile
+    dockerContext: .
+    plan: standard
+    disk:
+      name: ai-engine-pg-data
+      mountPath: /var/lib/postgresql/data
+      sizeGB: 10
+    envVars:
+      - key: POSTGRES_PASSWORD
+        generateValue: true

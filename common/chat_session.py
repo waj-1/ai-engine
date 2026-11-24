@@ -370,8 +370,15 @@ async def run_turn(
     identity: "TurnIdentity",
     profile: Any,
     extra_context: Optional[dict[str, Any]] = None,
+    history: Optional[list[dict[str, Any]]] = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """Engine-owned turn lifecycle. The ONLY code that persists a chat turn.
+
+    `history`: prior turns supplied by the CALLER (`[{role, content}]`, oldest
+    first), for a client that keeps the conversation itself and resends it on
+    every request (endpoints/openai_compat.py). When given, even empty, it is
+    what the agent sees in place of the session's stored rows, capped to the
+    same window; the turn is still recorded in the session as usual.
 
     Resolve/create session -> load windowed history -> START the user-turn
     write -> run the agent forwarding its events (accumulating answer text,
@@ -432,10 +439,13 @@ async def run_turn(
         yield {"type": "error", "message": "Failed to load session"}
         return
 
+    previous_messages: list[dict[str, Any]] = []
     if is_new:
         yield {"type": "session", "id": str(session.session_id), "title": title}
-        previous_messages: list[dict[str, Any]] = []
-    else:
+    if history is not None:
+        cap = max(int(window.get("max_messages", HISTORY_ROW_LIMIT)), 0)
+        previous_messages = [dict(row) for row in history][-cap:] if cap else []
+    elif not is_new:
         try:
             previous_messages = await asyncio.to_thread(session.load_history)
         except Exception:

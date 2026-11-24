@@ -2,7 +2,16 @@
 #
 #   docker compose up
 #
-# then open http://localhost:8000. There is no default login: the first-run page
+# The engine image is pulled from ghcr.io/waj-1/ai-engine when a published
+# image exists for this machine. When it does not (no release yet, or another
+# CPU architecture), Compose builds it from this checkout instead.
+#
+#   docker compose up --build              build from this checkout (do this
+#                                          after you change the code)
+#   docker compose pull && docker compose up -d      move to the newest image
+#   AI_ENGINE_VERSION=0.1.0 docker compose up        pin a released version
+#
+# Then open http://localhost:8000. There is no default login: the first-run page
 # creates the admin account and asks for the one-time setup code printed by
 # `docker compose logs engine`. For an install with no browser step, set both
 # ADMIN_EMAIL and ADMIN_PASSWORD before the first `up`.
@@ -30,9 +39,13 @@
 # provider with no further setup.
 name: waj-ai-engine
 
+# setup, init and engine all run this one image. With both keys set, Compose
+# pulls `image` first and builds from `build` only when the pull fails.
+# AI_ENGINE_VERSION picks a release tag. ENGINE_IMAGE replaces the whole
+# reference (another registry, or a local tag of your own).
 x-engine-image: &engine-image
+  image: ${ENGINE_IMAGE:-ghcr.io/waj-1/ai-engine:${AI_ENGINE_VERSION:-latest}}
   build: .
-  image: ${ENGINE_IMAGE:-waj-ai-engine:local}
 
 services:
   setup:

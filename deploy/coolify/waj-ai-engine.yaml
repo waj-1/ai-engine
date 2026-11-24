@@ -1,0 +1,168 @@
+# documentation: https://github.com/waj-1/ai-engine/blob/main/docs/deploy/coolify.md
+# slogan: Build, test and run AI agents (chat and voice) from one self-hosted admin portal, with an OpenAI-compatible API.
+# category: ai
+# tags: ai,agents,llm,chatbot,voice,rag,mcp,openai,self-hosted
+# logo: svgs/waj-ai-engine.svg
+# port: 8000
+
+# WAJ AI Engine for Coolify. Guide: docs/deploy/coolify.md
+#
+# Use it in one of two ways:
+#   - from this Git repository: New resource > Public repository, build pack
+#     "Docker Compose", Docker Compose Location /deploy/coolify/waj-ai-engine.yaml
+#   - pasted into New resource > Docker Compose Empty
+#
+# It is docker-compose.yml from the repository root, changed in four ways for
+# Coolify:
+#   - no host ports: Coolify's proxy routes the engine's domain to port 8000
+#     (SERVICE_URL_ENGINE_8000) and nothing else is reachable from outside
+#   - no file mounted from the repository: the gateway config and the
+#     database's first-start script are read from the state volume, where the
+#     setup step writes them
+#   - no build: the engine image is pulled from ghcr.io
+#   - the schema step runs inside the engine container before it starts
+#
+# No secret is in this file. The setup step makes this install's secrets
+# (database password, signing secret, SECRET_KEY) inside the `engine-state`
+# volume on the first deploy and keeps them on later deploys. Back up both
+# volumes together.
+
+services:
+  setup:
+    image: ghcr.io/waj-1/ai-engine:${AI_ENGINE_VERSION:-0.1.0}
+    user: root
+    command: ["python", "deploy/compose/setup.py"]
+    environment:
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+    volumes:
+      - engine-state:/run/engine
+    restart: "no"
+    exclude_from_hc: true
+
+  db:
+    image: ghcr.io/supabase/postgres:15.8.1.060
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    entrypoint:
+      - bash
+      - -c
+      - >-
+        rm -rf /docker-entrypoint-initdb.d/*
+        && cp /run/engine/db-init.sql /docker-entrypoint-initdb.d/01-init.sql
+        && set -a && . /run/engine/stack.env && set +a
+        && exec docker-entrypoint.sh postgres -c listen_addresses=*
+    environment:
+      - POSTGRES_HOST=/var/run/postgresql
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PORT=5432
+    volumes:
+      - engine-db:/var/lib/postgresql/data
+      - engine-state:/run/engine:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -h 127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  rest:
+    image: postgrest/postgrest:v12.2.3
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["/bin/postgrest", "/run/engine/postgrest.conf"]
+    volumes:
+      - engine-state:/run/engine:ro
+
+  auth:
+    image: ghcr.io/supabase/gotrue:v2.158.1
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - set -a && . /run/engine/stack.env && set +a && exec auth
+    environment:
+      - GOTRUE_API_HOST=0.0.0.0
+      - GOTRUE_API_PORT=9999
+      - API_EXTERNAL_URL=http://gateway:8000
+      - GOTRUE_DB_DRIVER=postgres
+      - GOTRUE_SITE_URL=${SERVICE_URL_ENGINE}
+      - GOTRUE_URI_ALLOW_LIST=*
+      - GOTRUE_DISABLE_SIGNUP=true
+      - GOTRUE_JWT_ADMIN_ROLES=service_role
+      - GOTRUE_JWT_AUD=authenticated
+      - GOTRUE_JWT_DEFAULT_GROUP_NAME=authenticated
+      - GOTRUE_JWT_EXP=3600
+      - GOTRUE_EXTERNAL_EMAIL_ENABLED=true
+      - GOTRUE_MAILER_AUTOCONFIRM=true
+    volumes:
+      - engine-state:/run/engine:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:9999/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  gateway:
+    image: kong:2.8.1
+    depends_on:
+      - rest
+      - auth
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/run/engine/kong.yml
+      - KONG_ADMIN_LISTEN=off
+      - KONG_DNS_ORDER=LAST,A,CNAME
+      - KONG_NGINX_WORKER_PROCESSES=1
+      - KONG_PLUGINS=request-transformer,cors,key-auth,acl
+      - KONG_NGINX_PROXY_PROXY_BUFFER_SIZE=160k
+      - KONG_NGINX_PROXY_PROXY_BUFFERS=64 160k
+    volumes:
+      - engine-state:/run/engine:ro
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  engine:
+    image: ghcr.io/waj-1/ai-engine:${AI_ENGINE_VERSION:-0.1.0}
+    depends_on:
+      db:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+    # Waits for the auth service and the REST layer, applies the schema, then
+    # starts the engine.
+    command: ["sh", "deploy/compose/start_engine.sh"]
+    environment:
+      - SERVICE_URL_ENGINE_8000
+      - PORT=8000
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - PORTAL_NAME=${PORTAL_NAME:-}
+      - EMBED_MODEL=${EMBED_MODEL:-}
+      - EMBED_BASE_URL=${EMBED_BASE_URL:-}
+      - EMBED_API_KEY=${EMBED_API_KEY:-}
+      - EMBED_PROVIDER=${EMBED_PROVIDER:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - engine-state:/run/engine:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 180s
+
+volumes:
+  engine-db:
+  engine-state:

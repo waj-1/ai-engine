@@ -1,0 +1,14 @@
+{
+  "name": "waj-ai-engine",
+  "displayName": "WAJ AI Engine",
+  "version": "0.1.0",
+  "description": "Build, test and ship agents on your own WAJ AI Engine: connects the engine's MCP server and adds skills to build an agent, write and run its tests, improve its instructions and compare models.",
+  "author": {
+    "name": "WAJ",
+    "url": "https://github.com/waj-1"
+  },
+  "homepage": "https://github.com/waj-1/ai-engine",
+  "repository": "https://github.com/waj-1/ai-engine",
+  "license": "Apache-2.0",
+  "keywords": ["ai-agents", "mcp", "agent-platform", "self-hosted", "evals", "llm"]
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.waj-1/ai-engine",
+  "title": "WAJ AI Engine",
+  "description": "Admin MCP server of a self-hosted AI agent platform: build, test and publish agents on your install.",
+  "version": "0.1.0",
+  "websiteUrl": "https://github.com/waj-1/ai-engine#connect-your-ai-assistant",
+  "repository": {
+    "url": "https://github.com/waj-1/ai-engine",
+    "source": "github",
+    "id": "1467507809"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://{engine_host}/mcp",
+      "variables": {
+        "engine_host": {
+          "description": "Host name (and port, if any) of your own WAJ AI Engine install, served over HTTPS, without the scheme. There is no shared hosted endpoint: run the engine first (docker compose up). For an install on http://localhost:8000, add http://localhost:8000/mcp to your MCP client by hand, as the README shows.",
+          "isRequired": true,
+          "placeholder": "engine.example.com"
+        }
+      },
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "An engine API key with Full access, created in the portal under Settings > API keys. A Chat only key is refused.",
+          "isRequired": true,
+          "isSecret": true,
+          "value": "Bearer {api_key}",
+          "variables": {
+            "api_key": {
+              "description": "The API key (starts with wae_).",
+              "isRequired": true,
+              "isSecret": true,
+              "placeholder": "wae_..."
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,9 @@
 FROM python:3.11-slim
 
+# The MCP Registry checks this label to confirm the image belongs to the server
+# named in server.json (registry.modelcontextprotocol.io). Keep the two equal.
+LABEL io.modelcontextprotocol.server.name="io.github.waj-1/ai-engine"
+
 # Set working directory
 WORKDIR /app
 

@@ -31,7 +31,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, WebSocket
 from pydantic import BaseModel, Field
@@ -78,19 +78,38 @@ async def _require_caller(authorization: Optional[str]) -> Dict[str, Any]:
     return await asyncio.to_thread(resolve_superuser, token)
 
 
-@router.post("/agents/{slug}/chat")
-async def agent_chat(
+async def open_turn(
     slug: str,
-    body: AgentChatRequest,
     request: Request,
-    authorization: Optional[str] = Header(None),
-):
-    """Stream one turn of the agent named `slug` as server-sent events."""
+    authorization: Optional[str],
+    *,
+    message: str,
+    session_id: Optional[str] = None,
+    locale: Optional[str] = None,
+    history: Optional[List[Dict[str, Any]]] = None,
+    session_for: Optional[Callable[[Dict[str, Any]], str]] = None,
+) -> Callable[[], AsyncGenerator[Dict[str, Any], None]]:
+    """Everything one turn of the agent named `slug` needs before it streams.
+
+    The flag, the caller check, the public demo's daily cap, the channel check
+    and the agent build, in that order; raises `HTTPException` where one says
+    no. Returns the factory of the turn's event stream (`run_turn`'s events).
+    Shared by this module's chat route and the OpenAI-compatible one
+    (endpoints/openai_compat.py), so the two cannot drift apart on who may
+    call an agent or what guards a turn.
+
+    `history` is passed to `run_turn` only when given (a caller that keeps the
+    conversation itself); otherwise the session's stored turns are the history.
+    `session_for` picks the session once the caller is known (it is handed the
+    caller context), for a route whose session id depends on who is calling.
+    """
     import re
 
     if not generic_agents_enabled() or not re.match(_SLUG_PATTERN, slug):
         raise HTTPException(status_code=404, detail="Not found")
     caller = await _require_caller(authorization)
+    if session_for is not None:
+        session_id = session_for(caller)
 
     from demo_mode import settings as demo_settings
 
@@ -104,7 +123,7 @@ async def agent_chat(
                 yield {"type": "answer", "content": demo_limits.CAP_MESSAGE}
                 yield {"type": "done"}
 
-            return sse_response(_capped, error_message="An error occurred. Please try again.")
+            return _capped
 
     from runtime.agents.custom import CUSTOM_AGENT_KIND, create_custom_agent
 
@@ -114,7 +133,7 @@ async def agent_chat(
 
     try:
         # Off the loop: the constructor loads the profile (blocking supabase-py).
-        agent = await asyncio.to_thread(create_custom_agent, slug, locale=body.locale)
+        agent = await asyncio.to_thread(create_custom_agent, slug, locale=locale)
     except (MissingProfileError, MissingSnapshotError):
         # Unknown slug, an inactive agent, or one never published to this
         # environment: all "no such agent" to a caller.
@@ -128,26 +147,48 @@ async def agent_chat(
 
         identity = TurnIdentity(
             agent_kind=CUSTOM_AGENT_KIND,
-            session_id=body.session_id,
+            session_id=session_id,
             user_id=caller.get("user_id"),
             business_id=None,
             session_type="custom",
             source="api",
             session_metadata={"agent_slug": slug},
         )
+        supplied = {} if history is None else {"history": history}
         # The caller's id lets the agent read and save ITS memories about
         # this caller (off unless the agent's memory settings turn it on).
-        async for event in run_turn(agent=agent, message=body.message, identity=identity,
+        async for event in run_turn(agent=agent, message=message, identity=identity,
                                     profile=agent.profile,
-                                    extra_context={"user_id": caller.get("user_id")}):
+                                    extra_context={"user_id": caller.get("user_id")},
+                                    **supplied):
             yield event
 
+    return _source
+
+
+def turn_trace_attributes(request: Request, slug: str, session_id: Optional[str]) -> Dict[str, Any]:
+    """The root-span attributes of one custom-agent turn."""
+    from runtime.agents.custom import CUSTOM_AGENT_KIND
+
+    return root_span_attrs(request, agent_kind=CUSTOM_AGENT_KIND,
+                           session_id=session_id, agent_slug=slug)
+
+
+@router.post("/agents/{slug}/chat")
+async def agent_chat(
+    slug: str,
+    body: AgentChatRequest,
+    request: Request,
+    authorization: Optional[str] = Header(None),
+):
+    """Stream one turn of the agent named `slug` as server-sent events."""
+    source = await open_turn(slug, request, authorization, message=body.message,
+                             session_id=body.session_id, locale=body.locale)
     return sse_response(
-        _source,
+        source,
         error_message="An error occurred. Please try again.",
         trace_name="custom.agent",
-        trace_attributes=root_span_attrs(request, agent_kind=CUSTOM_AGENT_KIND,
-                                         session_id=body.session_id, agent_slug=slug),
+        trace_attributes=turn_trace_attributes(request, slug, body.session_id),
     )
 
 

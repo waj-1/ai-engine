@@ -1,0 +1,213 @@
+name: Release image
+
+# Runs when a version tag is pushed (v0.1.0). Three jobs:
+#
+#   image     builds the engine image for linux/amd64 and linux/arm64 and pushes
+#             it to GitHub Container Registry as ghcr.io/<owner>/ai-engine:0.1.0,
+#             :0.1 and :latest, so `docker compose up` can pull the engine
+#             instead of building it:
+#
+#               ENGINE_IMAGE=ghcr.io/waj-1/ai-engine:0.1.0 docker compose up
+#
+#   release   creates the GitHub Release for the tag, with generated notes.
+#   registry  publishes server.json to the MCP Registry
+#             (registry.modelcontextprotocol.io) with the tag's version. It
+#             signs in with this workflow's GitHub OIDC token, so there is no
+#             secret to add. A registry problem does not fail the release.
+#
+# A pre-release tag (v0.2.0-rc.1) pushes only its own image tag (no :0.2, no
+# :latest), marks the GitHub Release as a pre-release and skips the registry.
+#
+# Run by hand (workflow_dispatch) it only builds and pushes an image tagged
+# with the commit (sha-<short>): no release, nothing sent to the registry.
+#
+# arm64 is built under emulation (QEMU). Every pin in requirements.lock has a
+# linux/arm64 CPython 3.11 wheel, so nothing is compiled there; a dependency
+# added later without one would be built from source and make this job slow.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build and push
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Put the labels on the multi-arch index too: the package page on GitHub
+      # reads its description from there.
+      DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # `latest` follows the newest version tag that is not a pre-release.
+          flavor: |
+            latest=auto
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,enable=${{ github.event_name == 'workflow_dispatch' }}
+          # source, url, version, revision and created are filled in from the
+          # repository and the tag. These three are stated here so they do not
+          # depend on the repository's settings.
+          labels: |
+            org.opencontainers.image.title=WAJ AI Engine
+            org.opencontainers.image.description=Self-hosted AI agent platform. Agents are built in a portal or by an AI assistant over the engine's own MCP server.
+            org.opencontainers.image.licenses=Apache-2.0
+          annotations: |
+            org.opencontainers.image.title=WAJ AI Engine
+            org.opencontainers.image.description=Self-hosted AI agent platform. Agents are built in a portal or by an AI assistant over the engine's own MCP server.
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha,scope=engine-image
+          cache-to: type=gha,mode=max,scope=engine-image
+
+  release:
+    name: GitHub Release
+    needs: image
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it as it is."
+            exit 0
+          fi
+          version="${TAG#v}"
+          image="ghcr.io/${GH_REPO}:${version}"
+          {
+            echo "Engine image (linux/amd64, linux/arm64): \`${image}\`"
+            echo
+            echo '```sh'
+            echo "ENGINE_IMAGE=${image} docker compose up"
+            echo '```'
+          } > notes.md
+          flags=()
+          case "$version" in
+            *-*) flags+=(--prerelease) ;;
+          esac
+          gh release create "$TAG" --verify-tag --title "$TAG" \
+            --notes-file notes.md --generate-notes "${flags[@]}"
+
+  registry:
+    name: Publish to the MCP Registry
+    needs: image
+    # Version tags only, and not pre-releases.
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The image and the GitHub Release are the release. The registry listing is
+    # extra: if the registry is down or rejects the entry, this job is marked
+    # failed and the workflow run still succeeds. To publish again later, run
+    # the same steps from a machine (`mcp-publisher login github` with a token
+    # that can read the organization's membership, then `mcp-publisher publish`).
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write # the OIDC token the registry accepts for io.github.<owner>/*
+    env:
+      # Pinned on purpose. When changing it, read the registry's release notes;
+      # an "invalid audience" error at login means this version is too old.
+      MCP_PUBLISHER_VERSION: v1.8.16
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set the version from the tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          # The entry's version, and the tag of any container image it lists.
+          jq --arg v "$version" '
+            .version = $v
+            | if has("packages") then
+                .packages |= map(
+                  if .registryType == "oci"
+                  then .identifier |= sub(":[^:/@]+$"; ":" + $v)
+                  else . end)
+              else . end
+          ' server.json > server.tmp
+          mv server.tmp server.json
+          cat server.json
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Download and verify mcp-publisher
+        run: |
+          set -euo pipefail
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          arch="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+          archive="mcp-publisher_${os}_${arch}.tar.gz"
+          base_url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl --fail --location --silent --show-error --output "$archive" "$base_url/$archive"
+          curl --fail --location --silent --show-error --output "$archive.sigstore.json" "$base_url/$archive.sigstore.json"
+          cosign verify-blob \
+            --bundle "$archive.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$archive"
+          tar xzf "$archive" mcp-publisher
+          rm -f "$archive" "$archive.sigstore.json"
+
+      - name: Check server.json
+        run: ./mcp-publisher validate server.json
+
+      - name: Sign in to the MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish
+        run: ./mcp-publisher publish
