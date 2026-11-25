@@ -29,7 +29,7 @@
 
 services:
   setup:
-    image: ghcr.io/waj-1/ai-engine:${AI_ENGINE_VERSION:-0.1.1}
+    image: ghcr.io/waj-1/ai-engine:${AI_ENGINE_VERSION:-0.1.2}
     user: root
     command: ["python", "deploy/compose/setup.py"]
     environment:
@@ -130,7 +130,7 @@ services:
       retries: 20
 
   engine:
-    image: ghcr.io/waj-1/ai-engine:${AI_ENGINE_VERSION:-0.1.1}
+    image: ghcr.io/waj-1/ai-engine:${AI_ENGINE_VERSION:-0.1.2}
     depends_on:
       db:
         condition: service_healthy
