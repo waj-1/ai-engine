@@ -79,7 +79,12 @@ def test_every_class_has_a_label_and_covers_the_background_span_names():
         assert obs.activity_class(name) is not None, name
 
 
-def test_rollup_names_each_kind_of_activity_and_keeps_the_totals():
+def test_rollup_names_each_kind_of_activity_and_keeps_the_totals(monkeypatch):
+    # The by-agent chart lists the build's own agent kinds. Name one here, so
+    # the test reads the same on a build with a product plugin and without.
+    from admin.screens import live_analytics
+
+    monkeypatch.setattr(live_analytics, "AGENT_KINDS", ("business",))
     with patch.object(la, "ch_query", side_effect=[RAW, []]), \
             patch.object(la, "_agent_key_labels", lambda keys: {"custom:support-desk": "Support desk"}):
         payload = la.load_analytics(hours=24)
