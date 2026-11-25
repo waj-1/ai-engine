@@ -72,6 +72,9 @@ scripts/*
 # The drift checker answers "is this stack serving what the repo says", and a
 # stack with no source checkout can only run it from the image.
 !scripts/check_profile_drift.py
+# The public demo's reset (docs/deploy/demo.md tells operators to run
+# `python -m scripts.demo_reset` inside the container).
+!scripts/demo_reset.py
 !scripts/kb_content
 scripts/kb_content/*
 # The AI-agents demo portal's KB (hand-written bilingual markdown) and its

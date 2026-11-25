@@ -190,6 +190,8 @@ class Turn:
     actor: Dict[str, Any]
     ip: str = "unknown"
     session: Optional[str] = None
+    #: The conversation this turn continues (None on its first message).
+    conversation: Optional[str] = None
     calls: int = 0
     wrote: bool = False
     steps: List[Dict[str, Any]] = field(default_factory=list)
@@ -204,6 +206,46 @@ class Turn:
 
 
 TURN: contextvars.ContextVar[Optional[Turn]] = contextvars.ContextVar("demo_assistant_turn", default=None)
+
+
+# What earlier turns of a conversation did, by conversation id. The saved
+# conversation holds only the visitor's words and the assistant's final text,
+# so without this a follow-up ("name it Ali") reaches the model with no id for
+# the agent it just made, and it makes a second one. Kept in this process's
+# memory, like the panel's live turns; a restart forgets it, and the model
+# then looks the agent up by name.
+_ACTIONS: Dict[str, List[str]] = {}
+_ACTIONS_PER_SESSION = 30
+_ACTION_SESSIONS = 500
+
+
+def remember(session_id: Optional[str], steps: List[Dict[str, Any]]) -> None:
+    """Keep the turn's successful changes (their label and the ids in their
+    links) for the conversation's next turn."""
+    if not session_id:
+        return
+    lines = _ACTIONS.setdefault(session_id, [])
+    for step in steps:
+        if not step.get("ok") or step.get("tool") in _READ_TOOLS:
+            continue
+        if str(step.get("action") or "") in _READ_ACTIONS:
+            continue
+        targets = ", ".join(sorted({str(link.get("href")) for link in step.get("links") or []
+                                    if link.get("href")}))
+        lines.append(f"{step.get('label')}" + (f" ({targets})" if targets else ""))
+    del lines[:-_ACTIONS_PER_SESSION]
+    while len(_ACTIONS) > _ACTION_SESSIONS:
+        _ACTIONS.pop(next(iter(_ACTIONS)))
+
+
+def earlier_note(session_id: Optional[str]) -> str:
+    lines = _ACTIONS.get(session_id or "") or []
+    if not lines:
+        return ""
+    return ("## What you did earlier in this conversation\n"
+            + "\n".join(f"- {line}" for line in lines)
+            + "\nA follow-up is about these: change them, do not make new ones. "
+              "The profile_id is in each address.")
 
 _READ_ACTIONS = {"list", "get", "members", "discover", "list_versions", "view", "diff",
                  "report", "compare", "matrix", "overview"}
@@ -260,6 +302,23 @@ def links_for(name: str, args: Dict[str, Any], result: Any) -> List[Dict[str, st
     if not out and args.get("profile_id") and _is_write(name, args):
         add("Open the agent", agent_href(args["profile_id"]))
     return out
+
+
+DRAFT_MESSAGE = ("This agent is a draft, and a draft is not served. Set it live first "
+                 "(update_profile with status \"active\"), then chat with it.")
+
+
+def _is_live(profile_id: str) -> bool:
+    """Whether the agent answers on its address (a draft does not). True when
+    unsure, so a lookup problem never blocks a chat."""
+    try:
+        from core.auth import get_service_client
+
+        rows = (get_service_client().table("agent_profiles").select("is_active")
+                .eq("profile_id", profile_id).limit(1).execute().data or [])
+        return bool(rows[0].get("is_active")) if rows else True
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def _profile_name(profile_id: str) -> str:
@@ -446,12 +505,21 @@ async def run_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
 
         if await asyncio.to_thread(protect.mentions_protected, list(args.values())):
             reason = protect.READ_ONLY_MESSAGE
+    if reason is None and name == "chat" and args.get("profile_id"):
+        if not await asyncio.to_thread(_is_live, str(args["profile_id"])):
+            reason = DRAFT_MESSAGE
     if reason is None and turn.calls >= settings.assistant_tools_per_turn():
         reason = STEP_CAP_FOR_MODEL
     if reason is None and not limits.hit("assistant_tools", ip=turn.ip, session=turn.session):
         reason = limits.RATE_MESSAGE
     step: Dict[str, Any] = {"tool": name, "action": str(args.get("action") or ""),
                             "label": _summary(name, args)}
+    # What the call was done to, for the guided tour's "via AI" check: the
+    # attachment kind, or "downstream" for a new agent made as a sub-agent.
+    kind = str(args.get("kind") or "") if name == "profile_attachments" else (
+        "downstream" if name == "templates" and args.get("as_subagent_of") else "")
+    if kind:
+        step["kind"] = kind
     if reason is not None:
         logger.info("demo assistant: refused %s (%s)", name, reason)
         step.update(ok=False, note=STEP_CAP_FOR_VISITOR if reason == STEP_CAP_FOR_MODEL else reason,
@@ -662,8 +730,12 @@ def page_note(page: Optional[str]) -> str:
             "the address.")
 
 
-def create_agent(page: Optional[str] = None):
-    """The Builder assistant, ready to run. Blocking (profile load)."""
+def create_agent(page: Optional[str] = None, voice: bool = False):
+    """The Builder assistant, ready to run. Blocking (profile load).
+
+    `voice`: the visitor talks to it (demo_mode/assistant_voice.py). Its
+    spoken turns get the builder's own voice note instead of the engine's
+    generic voice rules, so the panel still gets a full answer."""
     from runtime.agents.custom import CustomRuntimeAgent
 
     class BuilderAssistant(CustomRuntimeAgent):
@@ -673,9 +745,16 @@ def create_agent(page: Optional[str] = None):
             return build_tools() + list(super()._knowledge_tools())
 
         def _turn_context(self, voice_turn: bool, prefetched: Optional[str]) -> str:
-            base = super()._turn_context(voice_turn, prefetched)
-            note = page_note(page)
-            return base + ("\n\n" + note if note else "")
+            if voice and voice_turn:
+                from demo_mode.assistant_voice import VOICE_NOTE
+
+                base = super()._turn_context(False, prefetched) + "\n\n" + VOICE_NOTE
+            else:
+                base = super()._turn_context(voice_turn, prefetched)
+            turn = TURN.get()
+            notes = [n for n in (page_note(page),
+                                 earlier_note(turn.conversation if turn else None)) if n]
+            return base + ("\n\n" + "\n\n".join(notes) if notes else "")
 
     return BuilderAssistant(BUILDER_SLUG)
 

@@ -5,6 +5,7 @@ docs/deploy/demo.md lists them for operators; keep the two in step.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 _TRUE = {"1", "true", "yes", "on"}
@@ -110,6 +111,14 @@ def max_upload_bytes() -> int:
     return _int("DEMO_MAX_UPLOAD_BYTES", 256 * 1024, 1)
 
 
+def sample_keep_days() -> int:
+    """``DEMO_SAMPLE_KEEP_DAYS``: how many days the nightly reset keeps the
+    demo's own sample conversations (demo_mode/retention.py), so the 7-day and
+    30-day reports and every "compared with the previous period" figure have
+    data. 0: the reset deletes them with everything else, as it used to."""
+    return min(365, _int("DEMO_SAMPLE_KEEP_DAYS", 30))
+
+
 def reset_hour_utc() -> Optional[int]:
     """``DEMO_RESET_HOUR_UTC``: the hour (0-23, UTC) of the nightly reset, or
     None when set to ``off`` (an outside scheduler runs `scripts.demo_reset`)."""
@@ -123,6 +132,37 @@ def reset_hour_utc() -> Optional[int]:
     except ValueError:
         return 3
     return hour if 0 <= hour <= 23 else 3
+
+
+_FALSE = {"0", "false", "no", "off"}
+
+
+def tour_enabled() -> bool:
+    """``DEMO_TOUR``: the guided tour (admin/static/demo-tour.js) in demo mode.
+    On by default; ``false`` switches it off without a code change. Never on
+    outside demo mode."""
+    if not enabled():
+        return False
+    return (os.getenv("DEMO_TOUR") or "").strip().lower() not in _FALSE
+
+
+def reset_id(now: Optional[datetime] = None) -> str:
+    """The UTC date (``YYYY-MM-DD``) of the last nightly reset: today once
+    ``DEMO_RESET_HOUR_UTC`` has passed, else yesterday. The same rule as
+    `demo_mode.reset.run_loop`, which resets once per UTC day at that hour.
+    With the reset off (an outside scheduler), midnight UTC stands in for it.
+    The tour keys its saved progress to this, so it clears with the data."""
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    now = now.astimezone(timezone.utc)
+    hour = reset_hour_utc()
+    if hour is None:
+        hour = 0
+    day = now.date()
+    if now.hour < hour:
+        day = day - timedelta(days=1)
+    return day.isoformat()
 
 
 def public_url() -> str:
@@ -207,6 +247,15 @@ def voice_daily_seconds() -> int:
     return _int("DEMO_VOICE_DAILY_SECONDS", 1800)
 
 
+def voice_recording() -> bool:
+    """``DEMO_VOICE_RECORDING``: keep the audio of calls with the demo's own
+    agents (off by default). Every visitor shares one login, so a recording
+    can be played by anyone visiting the demo until the nightly reset deletes
+    it; the Voice tab says so. The Build with AI microphone and the product
+    page's showcase calls are never recorded."""
+    return (os.getenv("DEMO_VOICE_RECORDING") or "").strip().lower() in _TRUE
+
+
 def voice_max_call_seconds() -> int:
     """``DEMO_VOICE_MAX_CALL_SECONDS``: the longest one call may last."""
     return _int("DEMO_VOICE_MAX_CALL_SECONDS", 180, 30)
@@ -256,6 +305,100 @@ def voice_language() -> str:
     return _str("DEMO_VOICE_LANGUAGE", "en-US")
 
 
+# --------------------------------------------------------------------------
+# The showcase (demo_mode/showcase.py): the Falak Connect use-case agents,
+# talked to anonymously from a product page on another site. Off unless
+# DEMO_SHOWCASE is on. Its caps are its own, apart from the portal's.
+# --------------------------------------------------------------------------
+
+
+def showcase_enabled() -> bool:
+    """``DEMO_SHOWCASE``: seed the Falak Connect use-case agents and open the
+    public showcase routes (``/showcase/...``) to the origins in
+    ``DEMO_SHOWCASE_ORIGINS``. Off by default."""
+    return enabled() and (os.getenv("DEMO_SHOWCASE") or "").strip().lower() in _TRUE
+
+
+def showcase_origins() -> list:
+    """``DEMO_SHOWCASE_ORIGINS``: comma-separated origins (``https://host``)
+    of the product pages that may start a showcase chat or call. The demo's
+    own address (``DEMO_PUBLIC_URL``) is always allowed."""
+    raw = (os.getenv("DEMO_SHOWCASE_ORIGINS") or "").split(",")
+    out = [o.strip().rstrip("/").lower() for o in raw if o.strip()]
+    own = public_url().lower()
+    if own not in out:
+        out.append(own)
+    return out
+
+
+def showcase_page_url() -> str:
+    """``DEMO_SHOWCASE_PAGE_URL``: the product page built from these agents.
+    The portal links to it ("See these agents in a real product page");
+    blank hides the link."""
+    return _str("DEMO_SHOWCASE_PAGE_URL", "")
+
+
+def showcase_daily_turns() -> int:
+    """``DEMO_SHOWCASE_DAILY_TURNS``: showcase chat turns per UTC day, every
+    visitor together (apart from ``DEMO_DAILY_TURNS``)."""
+    return _int("DEMO_SHOWCASE_DAILY_TURNS", 500)
+
+
+def showcase_chat_per_hour() -> int:
+    """``DEMO_SHOWCASE_CHAT_PER_HOUR``: showcase chat turns one visitor may
+    send per hour."""
+    return _int("DEMO_SHOWCASE_CHAT_PER_HOUR", 30, 1)
+
+
+def showcase_voice_enabled() -> bool:
+    """``DEMO_SHOWCASE_VOICE``: voice calls from the product page. Needs
+    ``DEMO_VOICE`` (the realtime model) and is on with it unless set to off."""
+    raw = (os.getenv("DEMO_SHOWCASE_VOICE") or "").strip().lower()
+    return showcase_enabled() and voice_enabled() and raw not in ("0", "false", "no", "off")
+
+
+def showcase_voice_daily_seconds() -> int:
+    """``DEMO_SHOWCASE_VOICE_DAILY_SECONDS``: seconds of showcase calls per UTC
+    day, every visitor together (apart from ``DEMO_VOICE_DAILY_SECONDS``)."""
+    return _int("DEMO_SHOWCASE_VOICE_DAILY_SECONDS", 2700)
+
+
+def showcase_voice_max_call_seconds() -> int:
+    """``DEMO_SHOWCASE_VOICE_MAX_CALL_SECONDS``: the longest one showcase call may last."""
+    return _int("DEMO_SHOWCASE_VOICE_MAX_CALL_SECONDS", 150, 30)
+
+
+def showcase_voice_max_calls() -> int:
+    """``DEMO_SHOWCASE_VOICE_MAX_CALLS``: showcase calls open at the same time."""
+    return _int("DEMO_SHOWCASE_VOICE_MAX_CALLS", 3, 1)
+
+
+def showcase_voice_calls_per_hour() -> int:
+    """``DEMO_SHOWCASE_VOICE_CALLS_PER_HOUR``: showcase calls one visitor may
+    place per hour."""
+    return _int("DEMO_SHOWCASE_VOICE_CALLS_PER_HOUR", 4, 1)
+
+
+# --------------------------------------------------------------------------
+# Usage analytics (demo_mode/analytics.py). Off unless DEMO_POSTHOG_KEY is set.
+# --------------------------------------------------------------------------
+
+#: The PostHog cloud ingestion host used when DEMO_POSTHOG_HOST is unset.
+DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com"
+
+
+def posthog_key() -> str:
+    """``DEMO_POSTHOG_KEY``: a PostHog project API key (the public, write-only
+    key a browser sends events with, not a secret). Blank: no analytics."""
+    return _str("DEMO_POSTHOG_KEY", "")
+
+
+def posthog_host() -> str:
+    """``DEMO_POSTHOG_HOST``: where the browser sends events (PostHog cloud,
+    or your own proxy in front of it)."""
+    return _str("DEMO_POSTHOG_HOST", DEFAULT_POSTHOG_HOST).rstrip("/")
+
+
 #: Variables that would loosen the demo's lock-down, and what demo mode makes of them.
 _REMOVED_IN_DEMO = (
     "MCP_ALLOW_LOCAL_ENDPOINTS",   # tools on local/internal addresses (the SSRF guard's escape)
@@ -264,9 +407,10 @@ _REMOVED_IN_DEMO = (
     "VOICE_LIVE_SIM_ENABLED",      # the simulated voice provider
 )
 _FORCED_IN_DEMO = {
-    "CONVERSATION_INSIGHTS": "0",  # a background sweep that calls a model on every chat
+    "CONVERSATION_INSIGHTS": "0",  # a background sweep that calls a model on every chat (see below)
     "ENABLE_GENERIC_AGENTS": "1",  # the demo agents answer at /v1/agents/<slug>/chat
     "VOICE_RECORDING_ENABLED": "0",  # a visitor's voice is never kept (everyone shares one login)
+    "TOOL_ERROR_EVENTS": "1",  # a tool server's error counts as a failed action (Overview)
 }
 
 
@@ -290,6 +434,14 @@ def apply_process_lockdown(environ=None) -> list:
         if env.get(name) != value:
             env[name] = value
             changed.append(name)
+    # Call recording follows DEMO_VOICE_RECORDING and nothing else; which
+    # calls are kept is `demo_mode.voice.may_record`.
+    if (env.get("DEMO_VOICE_RECORDING") or "").strip().lower() in _TRUE:
+        env["VOICE_RECORDING_ENABLED"] = "1"
+    # The insights sweep runs under the demo's own rules and daily budget
+    # (demo_mode/insights.py); DEMO_INSIGHTS_DAILY_CALLS=0 keeps it off.
+    if (env.get("DEMO_INSIGHTS_DAILY_CALLS") or "").strip() != "0":
+        env["CONVERSATION_INSIGHTS"] = "1"
     # Knowledge bases embed with the demo's own Azure OpenAI resource unless
     # the operator chose another embedder.
     if not (env.get("EMBED_PROVIDER") or "").strip() and not (env.get("EMBED_MODEL") or "").strip():

@@ -341,13 +341,46 @@ def _demo_allows(href: str) -> bool:
 
 def demo_chrome() -> Dict[str, Any]:
     """What the templates need to show the demo banner and entry button."""
+    from demo_mode import analytics as demo_analytics
     from demo_mode import settings as demo_settings
 
     if not demo_settings.enabled():
         return {"enabled": False}
     return {"enabled": True, "repo_url": demo_settings.repo_url(),
             # Voice calls are on: the banner and the entry page offer one.
-            "voice": demo_settings.voice_enabled()}
+            "voice": demo_settings.voice_enabled(),
+            # The product page built from the showcase agents (demo_mode/showcase.py).
+            "showcase_url": (demo_settings.showcase_page_url()
+                             if demo_settings.showcase_enabled() else ""),
+            # Usage analytics (demo_mode/analytics.py): its page config, or None
+            # unless DEMO_POSTHOG_KEY is set. Templates add `page` and `section`.
+            "analytics": demo_analytics.config("portal"),
+            # The guided tour (DEMO_TOUR) and the date of the last nightly
+            # reset, which the tour keys its browser-side progress to.
+            "tour": demo_settings.tour_enabled(),
+            "reset_id": _reset_id(demo_settings),
+            # With no tracing store, Overview has no "Needs attention" list:
+            # the tour's D2 step then points at the Conversations list.
+            "tracing": _tracing_configured()}
+
+
+def _reset_id(demo_settings) -> str:
+    """What the tour keys saved progress to: the demo data's generation (it
+    changes whenever the data is wiped and seeded again), else the date of
+    the last scheduled reset."""
+    try:
+        from demo_mode import protect
+
+        gen = protect.data_generation()
+    except Exception:  # noqa: BLE001 — the clock still works
+        gen = None
+    return gen or demo_settings.reset_id()
+
+
+def _tracing_configured() -> bool:
+    from core.lmnr_clickhouse import tracing_configured  # lazy: keeps nav import-light
+
+    return tracing_configured()
 
 
 def section_tabs_for(path: Optional[str], query: Optional[Mapping[str, str]] = None) -> Optional[Dict[str, Any]]:
@@ -572,5 +605,13 @@ def search_quick_actions(env: str = "staging") -> List[Dict[str, str]]:
     """The global-search palette's empty-state quick actions (JSON-ready)."""
     from admin.search_registry import quick_actions  # lazy: search_registry imports nav
 
-    return [{"label": a.label, "href": a.href.replace("{env}", env), "context": a.context,
-             "icon": a.icon, "type": "Action"} for a in quick_actions()]
+    out = [{"label": a.label, "href": a.href.replace("{env}", env), "context": a.context,
+            "icon": a.icon, "type": "Action"} for a in quick_actions()]
+    # The demo's guided tour: two palette actions, handled in the browser
+    # (global-search.js fires tour:resume / tour:restart for a "#tour:" href).
+    if demo_chrome().get("tour"):
+        out = [{"label": "Resume tour", "href": "#tour:resume", "icon": "help", "type": "Tour",
+                "context": "Pick up the guided tour where you left it"},
+               {"label": "Restart tour", "href": "#tour:restart", "icon": "help", "type": "Tour",
+                "context": "Start the guided tour again from the first step"}] + out
+    return out

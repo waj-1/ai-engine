@@ -291,7 +291,7 @@
     lineChart("chart-iters", d.buckets, [{ label: "avg iters", values: s.avg_iters }]);
     stackedAgentChart("chart-by-agent", d.buckets, d.volume_by_agent);
     barChart("chart-cost-share",
-      (d.cost_share || []).map(function (r) { return r.agent_kind; }),
+      (d.cost_share || []).map(function (r) { return r.label || r.agent_kind; }),
       (d.cost_share || []).map(function (r) { return r.cost_usd; }),
       function (k) { return AGENT_COLORS[k] || t.stroke; });
     // Data-driven vertical histogram; the trailing outlier bucket (if any) is
@@ -316,7 +316,7 @@
       { label: "cached", values: s.tokens_cached, fill: t.stroke + "22" },
       { label: "uncached", values: s.tokens_uncached, stroke: t.warn }]);
     barChart("chart-cache-hit-by-agent",
-      (d.per_agent || []).map(function (r) { return r.agent_kind; }),
+      (d.per_agent || []).map(function (r) { return r.label || r.agent_kind; }),
       (d.per_agent || []).map(function (r) { return r.cache_hit_rate; }),
       function (k) { return AGENT_COLORS[k] || t.stroke; });
   }

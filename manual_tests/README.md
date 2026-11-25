@@ -43,6 +43,15 @@ GOOGLE_API_KEY=... AZURE_SPEECH_KEY=... AZURE_SPEECH_REGION=<your region> \
 GOOGLE_API_KEY=... venv/bin/python manual_tests/probe_gemini_silence.py \
     --modes silence,noise-quiet,noise-loud --tail 45
 
+# The public demo's guided tour, track A (Build) end to end
+# Walks Welcome, Start and the five Build steps through their coach cards on a
+# running demo (DEMO_MODE=true, tour on), with screenshots at 1440 and 390 and
+# optional videos. A Node script: the playwright package is not a dependency of
+# this repository, so install it for the run. Exits 1 when a step does not
+# tick "via walkthrough", a card is off screen or the page logs an error.
+npm install --no-save playwright && npx playwright install chromium
+DEMO_URL=http://localhost:8000 OUT_DIR=/tmp/demo-tour VIDEO=1 node manual_tests/demo_tour_track_a.js
+
 ## Note
 
 These are integration tests that test the full system end-to-end.

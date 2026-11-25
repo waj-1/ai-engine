@@ -495,3 +495,164 @@ def test_a_running_call_is_ended_when_the_days_seconds_run_out(stack, voice_on, 
         again = ws.receive()
     assert again["type"] == "websocket.close" and again["reason"] == voice.CAP_MESSAGE
     assert len(state["built"]) == 1
+
+
+# --------------------------------------------------------------------------
+# Call recording in the public demo (DEMO_VOICE_RECORDING)
+# --------------------------------------------------------------------------
+
+
+def test_recording_is_off_unless_asked_and_only_for_portal_agents(monkeypatch):
+    from demo_mode import assistant, settings, showcase, voice
+
+    monkeypatch.setenv("DEMO_MODE", "true")
+    monkeypatch.setenv("DEMO_VOICE", "true")
+    monkeypatch.delenv("DEMO_VOICE_RECORDING", raising=False)
+    assert settings.voice_recording() is False
+    assert voice.may_record("support-desk") is False
+    assert "not recorded" in voice.note()
+
+    monkeypatch.setenv("DEMO_VOICE_RECORDING", "true")
+    assert voice.may_record("support-desk") is True and voice.may_record("sales-assistant") is True
+    # The microphone in Build with AI and the product page's calls tell the
+    # caller they are not recorded, so they never are.
+    assert voice.may_record(assistant.BUILDER_SLUG) is False
+    assert all(voice.may_record(slug) is False for slug in showcase.SLUGS) and showcase.SLUGS
+    assert voice.may_record(None) is False and voice.may_record("") is False
+    note = voice.note()
+    assert "Calls are recorded" in note and "anyone visiting the demo" in note
+    assert "not recorded" not in note
+
+
+def test_lockdown_turns_recording_on_only_with_the_demo_setting():
+    from demo_mode import settings
+
+    env = {"DEMO_MODE": "1", "VOICE_RECORDING_ENABLED": "1"}
+    settings.apply_process_lockdown(env)
+    assert env["VOICE_RECORDING_ENABLED"] == "0"
+    env = {"DEMO_MODE": "1", "DEMO_VOICE_RECORDING": "true"}
+    settings.apply_process_lockdown(env)
+    assert env["VOICE_RECORDING_ENABLED"] == "1"
+
+
+def test_endpoint_gate_asks_the_demo_and_changes_nothing_outside_it(monkeypatch):
+    from types import SimpleNamespace
+
+    import endpoints.voice_live as live_ep
+
+    def conn(slug):
+        route = live_ep.VoiceRoute(agent_slug=slug, authenticate=lambda _a: {}) if slug else None
+        return SimpleNamespace(state=SimpleNamespace(voice_route=route))
+
+    monkeypatch.delenv("DEMO_MODE", raising=False)
+    assert live_ep._demo_may_record(conn(None)) is True          # not the demo: unchanged
+    monkeypatch.setenv("DEMO_MODE", "true")
+    monkeypatch.setenv("DEMO_VOICE", "true")
+    monkeypatch.delenv("DEMO_VOICE_RECORDING", raising=False)
+    assert live_ep._demo_may_record(conn("support-desk")) is False
+    monkeypatch.setenv("DEMO_VOICE_RECORDING", "true")
+    assert live_ep._demo_may_record(conn("support-desk")) is True
+    assert live_ep._demo_may_record(conn("builder-assistant")) is False
+    assert live_ep._demo_may_record(conn(None)) is False           # the plain socket
+
+
+def test_reset_deletes_recordings():
+    from demo_mode import reset
+
+    tables = [t for t, _pk in reset._WIPE_ALL]
+    assert "ai_voice_recordings" in tables and "ai_voice_recording_chunks" in tables
+    assert tables.index("ai_voice_recording_chunks") < tables.index("ai_voice_recordings")
+
+
+# --------------------------------------------------------------------------
+# 7. Every agent can take a call: the seeded ones and the ones a visitor makes
+# --------------------------------------------------------------------------
+
+
+def _four_agents() -> Dict[str, list]:
+    slugs = ["support-desk", "billing-helper", "sales-assistant", "it-helpdesk", "builder-assistant"]
+    return {"agent_models": [],
+            "agent_profiles": [{"profile_id": f"p-{s}", "slug": s, "voice_config": None} for s in slugs]}
+
+
+def test_seed_gives_every_agent_a_caller_can_reach_a_voice(voice_on):
+    db = _four_agents()
+    model_id = seed.ensure_voice(_Client(db), "staging", {r["slug"]: r["profile_id"] for r in db["agent_profiles"]})
+    by_slug = {r["slug"]: r["voice_config"] for r in db["agent_profiles"]}
+    for slug in ("support-desk", "sales-assistant", "it-helpdesk"):
+        assert by_slug[slug] == voice.voice_config(model_id), slug
+    # A specialist (only the Support desk reaches it; the website channel
+    # does not list it) and the Builder assistant (its own microphone): no Call.
+    assert by_slug["billing-helper"] is None and by_slug["builder-assistant"] is None
+
+
+def _template_db(voice_config=None) -> Dict[str, list]:
+    return {
+        "agent_models": [{"model_id": "m-voice", "name": voice.MODEL_NAME, "environment": "staging",
+                          "is_active": True}],
+        "agent_profiles": [{"profile_id": "tmpl-1", "agent_kind": "custom", "slug": "outage-mold",
+                            "environment": "staging", "status": "template", "display_name": "Outage mold",
+                            "voice_config": voice_config}],
+        "agent_profile_mcp_servers": [], "agent_profile_skills": [],
+        "agent_channels": [{"channel_id": "ch-web", "slug": "northwind-website",
+                            "allowed_agent_kinds": ["custom:support-desk"]}],
+    }
+
+
+def _fork(db, monkeypatch):
+    from unittest.mock import patch
+
+    from admin.services import profiles
+
+    monkeypatch.setattr(profiles, "record_change", lambda **kw: None, raising=False)
+    monkeypatch.setattr(profiles, "invalidate_profile_loader", lambda *a: None, raising=False)
+    with patch("core.auth.admin_service_client", return_value=_Client(db)):
+        return profiles.fork_profile_row(profile_id="tmpl-1", actor_user_id="u", display_name="Outage helper",
+                                         slug="outage-helper", exact_slug=True)
+
+
+def test_an_agent_a_visitor_makes_starts_with_the_demo_voice(voice_on, monkeypatch):
+    """A template used, a draft copy, the Builder assistant's work: all go
+    through fork_profile_row, and the copy can take a call at once with the
+    Support desk's voice settings."""
+    new = _fork(_template_db(), monkeypatch)
+    assert new["voice_config"] == voice.voice_config("m-voice")
+    assert new["voice_config"]["enabled"] is True
+    assert new["voice_config"]["max_session_sec"] == settings.voice_max_call_seconds()
+
+
+def test_a_copy_keeps_its_own_voice(voice_on, monkeypatch):
+    own = {"enabled": True, "model_id": "m-other", "voice_id": "Kore"}
+    assert _fork(_template_db(own), monkeypatch)["voice_config"] == own
+
+
+@pytest.mark.parametrize("missing", ["DEMO_VOICE", "DEMO_MODE"])
+def test_no_voice_is_added_with_the_demo_voice_off(voice_on, monkeypatch, missing):
+    monkeypatch.delenv(missing)
+    assert _fork(_template_db(), monkeypatch).get("voice_config") is None
+
+
+def test_the_test_panel_links_to_the_call_only_for_a_voice_agent_in_the_demo():
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[2] / "admin" / "templates" / "agent_detail.html").read_text()
+    assert "call_href:" in src and "#voice-call" in src
+    assert "_dc.enabled and _dc.voice and (active_profile.voice_config or {}).get('enabled')" in src
+    js = (Path(__file__).resolve().parents[2] / "admin" / "static" / "test-chat.js").read_text()
+    assert 'cfg.call_href.indexOf("/admin/") === 0' in js
+
+
+def test_the_portals_test_and_call_reach_an_agent_a_visitor_made(voice_on, monkeypatch):
+    """The portal is served from the website channel's own address, which
+    lists the agents it may reach: a visitor's own agent is added to it, or
+    its Test chat and Call answer 403 (found on the live demo, 2026-11-25)."""
+    db = _template_db()
+    _fork(db, monkeypatch)
+    assert db["agent_channels"][0]["allowed_agent_kinds"] == ["custom:support-desk", "custom:outage-helper"]
+    # Once only, and never outside demo mode.
+    seed.allow_on_website(_Client(db), "outage-helper")
+    assert db["agent_channels"][0]["allowed_agent_kinds"].count("custom:outage-helper") == 1
+    monkeypatch.delenv("DEMO_MODE")
+    db = _template_db()
+    _fork(db, monkeypatch)
+    assert db["agent_channels"][0]["allowed_agent_kinds"] == ["custom:support-desk"]

@@ -276,3 +276,44 @@ def test_a_test_run_pins_the_generic_agent_under_test(monkeypatch):
                            scenario={"question": "q"}, user_token="t", request_shape=shape,
                            profile_version_id="v1")
     assert "X-WAJ-Profile-Id" not in seen["headers"]
+
+
+def _filtering_client(rows):
+    """Like _client_with, but `.eq` filters the rows, as the database does."""
+    class _Q:
+
+        def __init__(self):
+            self.rows = list(rows)
+
+        def select(self, *_a):
+            return self
+
+        def eq(self, col, val):
+            self.rows = [r for r in self.rows if r.get(col) == val]
+            return self
+
+        def limit(self, _n):
+            return self
+
+        def execute(self):
+            return MagicMock(data=self.rows)
+
+    c = MagicMock()
+    c.table.side_effect = lambda _name: _Q()
+    return c
+
+
+def test_load_pinned_takes_an_inactive_draft_but_no_other_inactive_row():
+    """A fork starts inactive, and a draft is what a pin is for: a new agent's
+    Test chat and Call must reach it before it is published. An archived
+    (inactive, not draft) row still is not served."""
+    draft = {"profile_id": "d", "agent_kind": "custom", "status": "draft",
+             "environment": "staging", "is_active": False}
+    with patch("core.agent_profile.get_service_client", return_value=_filtering_client([draft])), \
+         patch.object(AgentProfileLoader, "_build_profile", return_value=_profile(kind="custom", pid="d")):
+        assert AgentProfileLoader.load_pinned("d", "custom").profile_id == "d"
+    archived = dict(draft, status="archived")
+    with patch("core.agent_profile.get_service_client", return_value=_filtering_client([archived])), \
+         patch.object(AgentProfileLoader, "_build_profile") as build:
+        assert AgentProfileLoader.load_pinned("d", "custom") is None
+    build.assert_not_called()

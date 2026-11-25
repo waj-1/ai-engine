@@ -289,7 +289,8 @@ class ChatSession:
         cap = int((self._window or {}).get("max_messages", HISTORY_ROW_LIMIT))
         resp = (
             self._supabase.table("ai_chat_messages")
-            .select("role, content, created_at, photo_transcript:metadata->photo_transcript")
+            .select("role, content, created_at, photo_transcript:metadata->photo_transcript, "
+                    "voice:metadata->voice")
             .eq("session_id", str(self.session_id))
             .order("created_at", desc=True)
             .limit(cap)
@@ -299,6 +300,10 @@ class ChatSession:
         rows.reverse()
         out: list[dict[str, Any]] = []
         for r in rows:
+            if isinstance(r.get("voice"), dict) and r["voice"].get("spoken") is True:
+                # A call's spoken transcript (voice/live/call_log.py): a record
+                # for people. The agent's history stays the turns it answered.
+                continue
             row = {"role": r.get("role"), "content": r.get("content") or ""}
             # Text a vision model read from photos on this user turn (the
             # bytes are never stored), for an agent that reads it.

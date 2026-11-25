@@ -125,7 +125,7 @@
 </section>
 {% endif %}
 
-<section class="section" id="cases">
+<section class="section" id="cases" data-tour="run-cases">
   <div class="row between">
     <h2 class="section-title mb-0">Cases</h2>
     {% if total %}
@@ -146,7 +146,7 @@
     {% set first = c.attempts[0] %}
     {% set failing = (c.attempts|rejectattr('passed')|first) or first %}
     {% set vd = failing.scorer_detail if failing.scorer_detail is mapping else {} %}
-    <details class="case-row is-{{ c.outcome }}" data-outcome="{{ c.outcome }}" data-broke="{{ '1' if c.broke else '0' }}">
+    <details class="case-row is-{{ c.outcome }}" data-tour="case-row" data-outcome="{{ c.outcome }}" data-broke="{{ '1' if c.broke else '0' }}">
       <summary>
         <span class="case-status">
           {% if c.outcome == 'passed' %}{{ run_status('passed') }}

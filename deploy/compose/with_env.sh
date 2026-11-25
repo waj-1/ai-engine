@@ -16,7 +16,7 @@ fi
 for name in GOOGLE_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY AZURE_OPENAI_API_KEY \
             AZURE_OPENAI_ENDPOINT PORTAL_NAME \
             EMBED_PROVIDER EMBED_BASE_URL EMBED_MODEL EMBED_API_KEY \
-            VOICE_LIVE_SIM_ENABLED; do
+            VOICE_LIVE_SIM_ENABLED DEMO_VOICE_API_KEY; do
   eval "value=\${$name:-}"
   if [ -z "$value" ]; then unset "$name"; fi
 done

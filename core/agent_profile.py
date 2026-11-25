@@ -300,7 +300,7 @@ class AgentProfileLoader:
             client = get_service_client()
             rows = (
                 client.table("agent_profiles").select("*")
-                .eq("profile_id", profile_id).eq("is_active", True)
+                .eq("profile_id", profile_id)
                 .limit(1).execute().data
             ) or []
         except Exception as exc:  # noqa: BLE001
@@ -308,6 +308,12 @@ class AgentProfileLoader:
                            "serving the default", profile_id, exc)
             return None
         row = rows[0] if rows else None
+        # An inactive row is refused, except a draft: a fork starts inactive
+        # (admin/services/profiles.py), and a draft is what a pin is for. Without
+        # this a new agent's Test chat and Call answered 404 until it was
+        # published (found on the public demo, 2026-11-25).
+        if row and not row.get("is_active") and row.get("status") != "draft":
+            row = None
         if not row or row.get("status") == "template" \
                 or str(row.get("agent_kind")) != str(agent_kind):
             logger.warning(

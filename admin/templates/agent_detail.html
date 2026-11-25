@@ -32,7 +32,7 @@
 {% endif %}
 
 {% set readonly = agent.is_template %}
-<div class="agent-tab" data-agent-tab="{{ detail_tab }}" data-profile-id="{{ agent.id }}">
+<div class="agent-tab" data-agent-tab="{{ detail_tab }}" data-profile-id="{{ agent.id }}" data-agent-slug="{{ agent.slug or '' }}">
 {% if detail_tab == 'instructions' %}{% include "agents/_tab_instructions.html" %}
 {% elif detail_tab == 'tools' %}{% include "agents/_tab_tools.html" %}
 {% elif detail_tab == 'subagents' %}{% include "agents/_tab_subagents.html" %}
@@ -71,6 +71,10 @@
     state_token: {{ _tc.state_token | tojson }},
     // Answer as THIS profile (a draft copy, a specialist) — X-WAJ-Profile-Id.
     pin_profile: true,
+    {# The public demo with its voice on: a voice-enabled agent's Call (Voice tab), linked from the panel. #}
+    {% set _dc = demo_chrome() %}
+    call_href: {{ ('/admin/agents/' ~ active_profile.profile_id ~ '/voice?env=' ~ current_env ~ '#voice-call') | tojson
+                  if (_dc.enabled and _dc.voice and (active_profile.voice_config or {}).get('enabled') and active_profile.agent_kind == 'custom') else 'null' }},
   };
 </script>
 <script src="/admin/static/test-chat.js?v={{ asset_version }}" defer></script>

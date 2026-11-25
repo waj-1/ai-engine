@@ -112,7 +112,25 @@ def note() -> Optional[str]:
     span = f"{limit // 60} minutes" if limit >= 120 and limit % 60 == 0 else f"{limit} seconds"
     return (f"In the public demo a call lasts up to {span}, and all visitors share "
             f"{settings.voice_daily_seconds() // 60} minutes of calls a day. "
-            "Calls are not recorded; the transcript is kept until the nightly reset.")
+            + (RECORDED_NOTE if settings.voice_recording() else
+               "Calls are not recorded; the transcript is kept until the nightly reset."))
+
+
+RECORDED_NOTE = ("Calls are recorded: anyone visiting the demo can read and play them "
+                 "until the nightly reset deletes them, so do not say anything private.")
+
+
+def may_record(agent_slug: Optional[str]) -> bool:
+    """Whether a call's audio may be kept in demo mode: only with
+    ``DEMO_VOICE_RECORDING`` on, and only a call with one of the portal's own
+    agents, placed from the Voice tab where the notice above is shown. The
+    Build with AI microphone and the product page's showcase calls say
+    "calls are not recorded", so they never are."""
+    if not (settings.voice_recording() and agent_slug):
+        return False
+    from demo_mode import assistant, showcase
+
+    return agent_slug != assistant.BUILDER_SLUG and agent_slug not in showcase.SLUGS
 
 
 async def _refuse(websocket: Any, reason: str) -> None:
@@ -245,3 +263,19 @@ def voice_config(model_id: str) -> Dict[str, Any]:
         "language": settings.voice_language(),
         "max_session_sec": settings.voice_max_call_seconds(),
     }
+
+
+def new_agent_config(client: Any, env: str = "staging") -> Optional[Dict[str, Any]]:
+    """The voice settings an agent a visitor makes starts with (a template
+    used, a draft copy, the Builder assistant's work): the Support desk's,
+    so the Call button works on it with nothing to set up. None unless the
+    demo is on and its voice is ready, or when the demo's voice model row
+    is missing (the seed adds it)."""
+    if not settings.enabled() or not ready():
+        return None
+    rows = (client.table("agent_models").select("model_id")
+            .eq("name", MODEL_NAME).eq("environment", env).eq("is_active", True)
+            .limit(1).execute().data or [])
+    if not rows:
+        return None
+    return voice_config(rows[0]["model_id"])

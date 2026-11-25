@@ -26,6 +26,30 @@ logger = logging.getLogger(__name__)
 _TRUTHY = {"1", "true", "yes", "on"}
 
 
+
+def _mark_tool_failed(message: str) -> None:
+    """Record on the tool's own trace span that the server refused or failed
+    the call, so the portal counts it as a failed action (Overview, the
+    conversation's outcome). The model still gets the error as the tool's
+    result and the turn goes on.
+
+    Opt-in (``TOOL_ERROR_EVENTS=1``; the public demo turns it on): until now
+    a tool server's error was an ordinary result in telemetry, and an install
+    that switches this on will see its failed-action numbers rise to include
+    them. Never raises."""
+    if (os.getenv("TOOL_ERROR_EVENTS") or "").strip().lower() not in ("1", "true", "yes", "on"):
+        return
+    try:
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        # Only the tool's span: an event on the request's root span would
+        # read as "the agent ran into a problem".
+        if span.is_recording() and str(getattr(span, "name", "")).endswith(".tool"):
+            span.add_event("error", {"message": (message or "")[:500]})
+    except Exception:  # noqa: BLE001 — telemetry never breaks a tool call
+        pass
+
 def _local_endpoints_allowed() -> bool:
     # Local dev + the demo compose run MCP servers on loopback/service hosts.
     return os.getenv("MCP_ALLOW_LOCAL_ENDPOINTS", "").strip().lower() in _TRUTHY
@@ -95,8 +119,10 @@ def build_mcp_tools(
                     client = get_pooled_client(endpoint, auth_token, transport=transport)
                     result = client.call_tool(tool_name, payload)
                 except MCPError as exc:
+                    _mark_tool_failed(str(exc))
                     return json.dumps({"error": str(exc)})
                 except Exception as exc:  # untrusted external server — never let it crash the turn
+                    _mark_tool_failed(f"MCP tool call failed: {exc}")
                     return json.dumps({"error": f"MCP tool call failed: {exc}"})
                 if isinstance(result, (dict, list)):
                     return json.dumps(result, ensure_ascii=False)

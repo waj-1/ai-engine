@@ -88,10 +88,15 @@ class CustomRuntimeAgent(RuntimeAgent, BaseStreamingAgent):
         *,
         locale: Optional[str] = None,
         environment: Optional[str] = None,
+        brief: Optional[str] = None,
     ):
         self.slug = slug
         super().__init__(CUSTOM_AGENT_KIND, environment=environment, profile_slug=slug)
         self.locale = self._normalize_locale(locale or "")
+        # Context the caller hands this one conversation (a product page's
+        # use case: who the customer is, their record). Never read from the
+        # profile; None for every ordinary call.
+        self.brief = (brief or "").strip() or None
 
     def _normalize_locale(self, locale: str) -> str:
         """Primary language subtag of ``locale`` ("ar-SA" -> "ar"), "" when unset."""
@@ -170,6 +175,9 @@ class CustomRuntimeAgent(RuntimeAgent, BaseStreamingAgent):
         ]
         if voice_turn:
             parts.append(VOICE_TURN_RULES)
+        brief = getattr(self, "brief", None)  # a subclass may skip __init__
+        if brief:
+            parts.append("## This conversation\n" + brief)
         if (prefetched or "").strip():
             parts.append(
                 "## Knowledge base articles already retrieved for THIS question\n"

@@ -22,7 +22,7 @@
 
 <div data-tab-root>
 {# ------------------------------------------------------------------ toolsets #}
-<section class="section" id="toolsets">
+<section class="section" id="toolsets" data-tour="agent-tools">
   <div class="row between section-head">
     <div>
       <h2>Toolsets</h2>
@@ -30,7 +30,7 @@
     </div>
     {% if not readonly %}
     <div class="combobox" data-combobox="toolset" data-catalog="catalog-toolsets">
-      <button type="button" class="btn" data-combobox-open aria-haspopup="listbox">+ Add toolset</button>
+      <button type="button" class="btn" data-combobox-open aria-haspopup="listbox" data-tour="tools-add-toolset">+ Add toolset</button>
       <div class="combobox-panel" hidden>
         <input type="search" placeholder="Search toolsets" aria-label="Search toolsets" data-combobox-input>
         <div class="combobox-list" role="listbox" data-combobox-list></div>
@@ -83,7 +83,7 @@
 </section>
 
 {# ------------------------------------------------------------------ knowledge #}
-<section class="section" id="knowledge">
+<section class="section" id="knowledge" data-tour="agent-knowledge">
   <div class="row between section-head">
     <div>
       <h2>Knowledge</h2>
@@ -91,7 +91,7 @@
     </div>
     {% if not readonly %}
     <div class="combobox" data-combobox="knowledge" data-catalog="catalog-knowledge">
-      <button type="button" class="btn" data-combobox-open aria-haspopup="listbox">+ Add knowledge</button>
+      <button type="button" class="btn" data-combobox-open aria-haspopup="listbox" data-tour="tools-add-knowledge">+ Add knowledge</button>
       <div class="combobox-panel" hidden>
         <input type="search" placeholder="Search knowledge sources" aria-label="Search knowledge sources" data-combobox-input>
         <div class="combobox-list" role="listbox" data-combobox-list></div>

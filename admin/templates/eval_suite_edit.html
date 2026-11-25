@@ -45,7 +45,7 @@
   </div>
   <div class="page-head-actions">
     {% if suite.profile_id and not agent_missing %}
-    <button type="button" class="primary" data-open-suite-run>Run this suite</button>
+    <button type="button" class="primary" data-open-suite-run data-tour="run-tests" data-tour-name="{{ suite.name }}">Run this suite</button>
     {% else %}
     <button type="button" class="primary" disabled title="Link the suite to an agent first (Settings below)">Run this suite</button>
     {% endif %}
@@ -294,7 +294,7 @@
       </div>
     </details>
     <div class="row">
-      <button type="submit" class="primary">Start run</button>
+      <button type="submit" class="primary" data-tour="run-start">Start run</button>
       <button type="button" class="ghost" data-close-suite-run>Cancel</button>
     </div>
   </form>

@@ -83,6 +83,7 @@ from voice.live.readiness import config_problem
 from core.agent_profile import MissingProfileError, MissingSnapshotError
 from voice.live.recorder import VoiceCallRecorder, recording_enabled
 from core.sensitive_content import enter_redacted_scope, is_sensitive_kind
+from voice.live.call_log import CallLog
 from voice.live.speech_hygiene import ToolSyntaxScrubber
 from voice.live.protocol import (
     CLOSE_FORBIDDEN,
@@ -674,17 +675,47 @@ class VoiceRoute:
     `profile_pin` is a profile id an operator asked to test (a draft copy of
     the addressed agent); `pin` is that id once the handler has checked the
     caller may pin and that it names a copy of this very agent.
+
+    Three settings let a route that owns its agent's voice serve a call
+    without a voice-enabled profile row (the public demo's builder
+    assistant, admin/demo_handlers.py). All default to the agent row's own:
+    `voice_config` is used in place of the row's `voice_config`;
+    `build_brain(params)` builds the agent that answers `ask_agent`, in place
+    of the kind's registered builder, with the same params; `own_page` says
+    the route has checked the call comes from this engine's own portal page,
+    so no channel applies to it.
     """
 
     agent_slug: str
     authenticate: Callable[[Optional[str]], Awaitable[Dict[str, Any]]]
     profile_pin: Optional[str] = None
     pin: Optional[str] = None
+    voice_config: Optional[Dict[str, Any]] = None
+    build_brain: Optional[Callable[[Dict[str, Any]], Any]] = None
+    own_page: bool = False
+    #: Set only by a route that owns the call's context (demo_mode/showcase.py):
+    #: `brief` is handed to the brain for this call, `greeting` replaces the
+    #: agent's `greeting_trigger` for this call. None leaves both as configured.
+    brief: Optional[str] = None
+    greeting: Optional[str] = None
 
 
 def _voice_route(conn: Any) -> Optional[VoiceRoute]:
     route = getattr(getattr(conn, "state", None), "voice_route", None)
     return route if isinstance(route, VoiceRoute) else None
+
+
+def _demo_may_record(conn: Any) -> bool:
+    """In the public demo only some calls may be recorded
+    (`demo_mode.voice.may_record`); everywhere else this changes nothing."""
+    from demo_mode import settings as demo_settings
+
+    if not demo_settings.enabled():
+        return True
+    from demo_mode import voice as demo_voice
+
+    route = _voice_route(conn)
+    return demo_voice.may_record(route.agent_slug if route else None)
 
 
 async def serve_voice_route(
@@ -777,7 +808,9 @@ def _live_config_for(conn: WebSocket, agent_kind: str):
     from core.auth import get_service_client
 
     profile = _owner_profile_for(conn, agent_kind)
-    profile_voice = getattr(profile, "voice_config", None)
+    route = _voice_route(conn)
+    own_voice = route is not None and route.voice_config is not None
+    profile_voice = route.voice_config if own_voice else getattr(profile, "voice_config", None)
 
     channel = getattr(conn.state, "channel", None)
     cfg = resolve_live_config(profile_voice=profile_voice, channel=channel)
@@ -789,7 +822,7 @@ def _live_config_for(conn: WebSocket, agent_kind: str):
             # to fetch_model), so a per-env realtime sibling row is honoured
             # for the ears/mouth too instead of silently ignored.
             environment=getattr(profile, "environment", None),
-            model_row=getattr(profile, "voice_model", None),
+            model_row=None if own_voice else getattr(profile, "voice_model", None),
         )
     return cfg
 
@@ -1387,6 +1420,9 @@ async def voice_live(
         # Which agent of the shared kind: a channel may allow just this one
         # (core.channel_resolver.enforce_channel_kind reads it from here).
         websocket.state.agent_slug = agent_slug
+    if route is not None and route.own_page:
+        # The portal's own page, checked by the route: not a channel's caller.
+        websocket.state.channel = None
     route_caller: Optional[Dict[str, Any]] = None
 
     authorization = websocket.headers.get("authorization")
@@ -1730,6 +1766,8 @@ async def voice_live(
 
     _apply_text_only_overrides(cfg)
     _apply_kind_voice_defaults(cfg, agentKind)
+    if route is not None and route.greeting and not cfg.text_only:
+        cfg.greeting_trigger = route.greeting
     # {tool name: handler} once the agent is built — non-empty only in
     # pre-fetched-context mode (see _direct_tools_for).
     direct_handlers: Dict[str, Any] = {}
@@ -1853,7 +1891,9 @@ async def voice_live(
                 # A tenant-access kind's frame params (VoiceTenantAccess).
                 **tenant_params,
                 # A slug-addressed call: which agent, and the operator's pin.
-                **({"agent_slug": agent_slug, "profile_pin": route.pin} if route else {}),
+                **({"agent_slug": agent_slug, "profile_pin": route.pin,
+                    "build_brain": route.build_brain, "brief": route.brief}
+                   if route else {}),
             },
         )
         # Pre-fetched-context mode (outbound simulations): the case file is in
@@ -2018,6 +2058,22 @@ async def voice_live(
     # as `waj.voice.call_id` (via turn_trace_attrs below) so the observability
     # explorer can match a trace back to its audio.
     call_id = str(uuid.uuid4())
+    # What is said on the call, saved as a conversation when it ends
+    # (voice/live/call_log.py). Only for an agent called at its own address:
+    # its call is its own conversation. A kind whose client shares the session
+    # with a typed chat keeps its history as it was, and a sensitive kind's
+    # speech is never copied anywhere.
+    call_log: Optional[CallLog] = (
+        CallLog(identity, call_id=call_id)
+        if agent_slug and not is_sensitive_kind(agentKind) else None
+    )
+
+    def _log_delegated(result: Any) -> None:
+        """`run_turn` saved this turn's question (and its answer unless it
+        failed), so the call log leaves the spoken copy out."""
+        if call_log is not None and result is not None:
+            call_log.delegated(ok=not getattr(result, "error", False))
+
     # A SIMULATED CONVERSATION is any bot-driven call: the text-only sim
     # provider, or a live-mode eval/scenario run that declares itself with
     # `?simRun=1` (admin/voice_eval_driver.py, admin/voice_scenario_runner.py).
@@ -2033,7 +2089,8 @@ async def voice_live(
     recorder: Optional[VoiceCallRecorder] = None
     # Calls of a sensitive kind (core.sensitive_content) are NEVER recorded:
     # no operator switch turns this on.
-    if recording_enabled() and not cfg.text_only and not is_sensitive_kind(agentKind):
+    if (recording_enabled() and not cfg.text_only and not is_sensitive_kind(agentKind)
+            and _demo_may_record(websocket)):
         try:
             # Store under the COERCED session id — the same one chat
             # persistence keys `ai_chat_sessions` on and turn telemetry writes
@@ -3193,6 +3250,7 @@ async def voice_live(
                     extra_context=(dict(delegate_ctx) if delegate_ctx else None),
                 )
                 tool_timer.delegate_ms = (time.monotonic() - _t0) * 1000.0
+                _log_delegated(result)
                 tool_timer.prefetch_hit = result.prefetch_hit
                 tool_timer.rendered_tool = result.rendered_tool
                 tool_timer.rendered_failure = getattr(result, "rendered_failure", False)
@@ -3417,6 +3475,7 @@ async def voice_live(
                         extra_context=(dict(delegate_ctx) if delegate_ctx else None),
                     )
                     tool_timer.delegate_ms = (time.monotonic() - _t0) * 1000.0
+                    _log_delegated(result)
                     tool_timer.rendered_tool = getattr(result, "rendered_tool", None)
                     tool_timer.rendered_failure = getattr(result, "rendered_failure", False)
                     # A commit turn is not expected to touch the OTP flow
@@ -3646,6 +3705,7 @@ async def voice_live(
                 extra_context=(dict(delegate_ctx) if delegate_ctx else None),
             )
             tool_timer.delegate_ms = (time.monotonic() - _t0) * 1000.0
+            _log_delegated(result)
             tool_timer.prefetch_hit = getattr(result, "prefetch_hit", False)
             tool_timer.rendered_tool = getattr(result, "rendered_tool", None)
             tool_timer.rendered_failure = getattr(result, "rendered_failure", False)
@@ -4480,6 +4540,7 @@ async def voice_live(
                 extra_context=(turn_ctx or None),
             )
             tool_timer.delegate_ms = (time.monotonic() - _delegate_t0) * 1000.0
+            _log_delegated(result)
             tool_timer.prefetch_hit = getattr(result, "prefetch_hit", False)
             tool_timer.rendered_tool = getattr(result, "rendered_tool", None)
             tool_timer.rendered_failure = getattr(result, "rendered_failure", False)
@@ -4796,6 +4857,13 @@ async def voice_live(
                                     event.role, bool(getattr(event, "out_of_band", False))),
                             )
                         )
+                    if call_log is not None and not getattr(event, "out_of_band", False):
+                        # The same words the screen was sent (a holding line
+                        # is the endpoint's filler, not part of the record).
+                        if event.role == "user":
+                            call_log.caller_text(event.text, final=bool(event.final))
+                        elif screen_text:
+                            call_log.agent_text(screen_text)
                     # The assistant's own reply text, per model turn — read
                     # by the announce-then-stall tripwire at turn_end.
                     if (
@@ -5318,6 +5386,8 @@ async def voice_live(
                     # flush's safety valve still decides, as before.
                     await websocket.send_json(transcript_frame("user", "", final=True))
                 elif event.type == "user_turn_end":
+                    if call_log is not None:
+                        call_log.caller_committed()
                     # A committed utterance is the confirmation a pending
                     # interrupt was real. Metrics already counted it above;
                     # nothing is forwarded to the client for it (see the
@@ -5345,6 +5415,8 @@ async def voice_live(
                         held_flush["pending"] = True
                         held_flush["valve"] = asyncio.create_task(_flush_valve())
                 elif event.type == "turn_end":
+                    if call_log is not None:
+                        call_log.response_ended()
                     sustain["muting"] = False
                     if answer_track.get("skip_turns") and answer_track["start"] is None:
                         # The announce/holding line ahead of the answer ended;
@@ -5877,6 +5949,12 @@ async def voice_live(
         except Exception:
             pass
     finally:
+        if call_log is not None:
+            # First, and with no await: this task may be on its way out
+            # (cancelled by the server or by the demo's call cap), and an
+            # await here could be the one that never returns. `save` hands
+            # the rows to a worker thread and never raises.
+            call_log.save()
         # Both counters, and POPPED at zero rather than left at 0: every key
         # here is remote-influenced (a peer IP, a claimed identity), so a bare
         # decrement would leave a dead entry in the dict forever for every

@@ -14,14 +14,51 @@
 
   var root = document.querySelector("[data-run-detail]");
   if (!root) return;
-  if (root.getAttribute("data-inflight") !== "1") return;
-
   var runId = root.getAttribute("data-run-id");
+  var TERMINAL = { passed: 1, failed: 1, errored: 1, cancelled: 1 };
+
+  // The public demo's guided tour (demo-tour.js) listens for these; on any
+  // other install nothing does. builder-assistant.js (demo only) marks a
+  // "Start run" submit in this tab, so a run counts as the visitor's own only
+  // when this page is where that submit landed. Never throws.
+  function tourEmit(name, detail) {
+    try { window.dispatchEvent(new CustomEvent(name, { detail: detail })); } catch (e) { /* optional */ }
+  }
+  function tourEmitAfterLoad(name, detail) {
+    // While the page's deferred scripts run, demo-tour.js may not be
+    // listening yet: wait for DOMContentLoaded, which fires after all of them.
+    if (document.currentScript && document.readyState !== "complete") {
+      document.addEventListener("DOMContentLoaded", function () { tourEmit(name, detail); });
+    } else {
+      tourEmit(name, detail);
+    }
+  }
+  try {
+    var mark = null;
+    try { mark = JSON.parse(sessionStorage.getItem("demo-tour:run-submit") || "null"); } catch (e) { mark = null; }
+    // The form's page redirected here: the referrer is that page.
+    var fromRef = "";
+    try { fromRef = document.referrer ? new URL(document.referrer).pathname : ""; } catch (e) { fromRef = ""; }
+    if (mark) { try { sessionStorage.removeItem("demo-tour:run-submit"); } catch (e) { /* blocked */ } }
+    if (mark && runId && Date.now() - (mark.at || 0) < 2 * 60 * 1000 && (!mark.from || mark.from === fromRef)) {
+      var started = { run_id: runId, href: location.pathname };
+      window.__tourRunStarted = started;
+      tourEmitAfterLoad("tour:run-started", started);
+      var loadedStatus = (root.querySelector("[data-detail-status]") || {}).textContent || "";
+      if (root.getAttribute("data-inflight") !== "1") {
+        // It finished before this page loaded.
+        var st = /pass/i.test(loadedStatus) ? "passed" : /fail/i.test(loadedStatus) ? "failed"
+          : /cancel/i.test(loadedStatus) ? "cancelled" : "errored";
+        tourEmitAfterLoad("tour:run-finished", { run_id: runId, status: st });
+      }
+    }
+  } catch (e) { /* the tour is optional */ }
+
+  if (root.getAttribute("data-inflight") !== "1") return;
   if (!runId) return;
 
   var POLL_MS = 4000;
   var timer = null;
-  var TERMINAL = { passed: 1, failed: 1, errored: 1, cancelled: 1 };
 
   var LABELS = { passed: ["Passed", "ok"], failed: ["Failed", "err"], errored: ["Error", "err"],
                  running: ["Running", "info"], queued: ["Queued", "neutral"], cancelled: ["Cancelled", "warn"] };
@@ -50,6 +87,7 @@
       .then(function (data) {
         patch(data);
         if (TERMINAL[data.status]) {
+          tourEmit("tour:run-finished", { run_id: runId, status: data.status });
           // Settled — reload once so scenario cards + charts render.
           window.location.reload();
           return;

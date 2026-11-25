@@ -174,6 +174,23 @@ def estimate_cache_savings_usd(client, cache_read_tokens: int) -> float:
     return pricing.cache_savings_usd(primary, int(cache_read_tokens or 0))
 
 
+def _row_key(row: Dict[str, Any]) -> Optional[str]:
+    """What a per-agent rollup groups a trace under: its agent kind, or
+    ``custom:<slug>`` for a generic agent (they all share one kind, so the
+    kind alone would fold every one of them into a single "Custom" row)."""
+    return row.get("agent_key") or row.get("agent_kind")
+
+
+def _rollup_key(row: Dict[str, Any]) -> str:
+    """The row of the technical rollups (per-agent table, cost share) a trace
+    is counted in. Test traffic and the engine's own background work get a row
+    of their own kind of activity (``activity:test_runs``, ``activity:test_judge``,
+    ...: observability.activity_class), so a test run is not counted as the
+    agent's customer traffic and helper calls are not one "unknown" row. Every
+    trace is still in exactly one row, so the totals do not change."""
+    return row.get("activity") or _row_key(row) or "unknown"
+
+
 def _bucket_start(ts: datetime, bucket: timedelta, origin: datetime) -> datetime:
     """Floor `ts` to the bucket grid anchored at `origin`."""
     delta = (ts - origin).total_seconds()
@@ -233,9 +250,16 @@ def bucket_series(
         series["ttlt_p95"].append(percentile(ttlts, 0.95))
         per_kind: Dict[Any, int] = {}
         for r in bucket_rows:
-            kind = r.get("agent_kind")
+            # Test traffic and background work are in the total above, not in
+            # an agent's own series (the same split as the per-agent table).
+            kind = None if r.get("activity") else _row_key(r)
             per_kind[kind] = per_kind.get(kind, 0) + 1
-        for kind in _chart_kinds:
+        for kind in per_kind:
+            # A generic agent's own key is not in the pre-seeded list: give
+            # it a series, zero for the buckets before it first appeared.
+            if kind and kind not in vol_by_agent and ":" in str(kind):
+                vol_by_agent[kind] = [0] * (len(series["volume"]) - 1)
+        for kind in vol_by_agent:
             vol_by_agent[kind].append(per_kind.get(kind, 0))
 
     # Drop agent rows that never appear so the stacked chart stays tidy.
@@ -244,10 +268,12 @@ def bucket_series(
 
 
 def per_agent_rollup(rows: List[Dict[str, Any]], cost_map: CostMap) -> List[Dict[str, Any]]:
-    """One rollup row per agent_kind present in `rows`, volume desc."""
+    """One rollup row per agent present in `rows` (a kind, or one generic
+    agent: `_row_key`) and per kind of non-agent activity (`_rollup_key`),
+    volume desc."""
     by_kind: Dict[str, List[Dict[str, Any]]] = {}
     for r in rows:
-        by_kind.setdefault(r.get("agent_kind") or "unknown", []).append(r)
+        by_kind.setdefault(_rollup_key(r), []).append(r)
 
     out: List[Dict[str, Any]] = []
     for kind, krows in by_kind.items():
@@ -273,10 +299,10 @@ def per_agent_rollup(rows: List[Dict[str, Any]], cost_map: CostMap) -> List[Dict
 
 
 def cost_share(rows: List[Dict[str, Any]], cost_map: CostMap) -> List[Dict[str, Any]]:
-    """Total USD per agent_kind, desc."""
+    """Total USD per agent or kind of activity (`_rollup_key`), desc."""
     totals: Dict[str, float] = {}
     for r in rows:
-        kind = r.get("agent_kind") or "unknown"
+        kind = _rollup_key(r)
         totals[kind] = totals.get(kind, 0.0) + cost_for_row(r, cost_map)
     share = [{"agent_kind": k, "cost_usd": round(v, 4)} for k, v in totals.items()]
     share.sort(key=lambda d: d["cost_usd"], reverse=True)
@@ -418,21 +444,31 @@ SELECT
   toString(t.start_time) AS created_at,
   sagg.agent_kind AS agent_kind,
   sagg.channel_slug AS channel_slug,
-  toInt64(t.input_tokens) AS input_tokens,
-  toInt64(t.output_tokens) AS output_tokens,
-  toInt64(sagg.cache_read_tokens) AS cache_read_tokens,
-  toFloat64(t.total_cost) AS cost_usd,
+  sagg.agent_slug AS agent_slug,
+  t.top_span_name AS top_span_name,
+  -- The eval runner's correlation id on the trace's OWN root span (trace
+  -- metadata: core/channel_resolver.eval_trace_attrs), i.e. an agent's turn a
+  -- test run made. Not any span's: a test run started from inside another
+  -- trace nests its suite span, which carries the id too, in that trace.
+  simpleJSONExtractString(t.metadata, 'waj.eval.run_id') AS eval_run_id,
+  toInt64(sagg.input_tokens_once) AS input_tokens,
+  toInt64(sagg.output_tokens_once) AS output_tokens,
+  toInt64(sagg.cache_read_once) AS cache_read_tokens,
+  toFloat64(sagg.cost_once) AS cost_usd,
   toFloat64(t.duration) * 1000 AS latency_ms,
-  toUInt32(sagg.llm_spans) AS iteration_count,
+  toUInt32(sagg.llm_calls_once) AS iteration_count,
   toUInt8(sagg.has_error) AS error,
   nullIf(sagg.ttft_ms, 0) AS ttft_ms,
   nullIf(sagg.ttlt_ms, 0) AS ttlt_ms
 FROM traces_replacing AS t FINAL
 INNER JOIN (
   SELECT trace_id,
-         countIf(span_type = 1) AS llm_spans,
-         sumIf(simpleJSONExtractUInt(attributes, 'gen_ai.usage.cache_read_input_tokens'),
-               span_type = 1) AS cache_read_tokens,
+         -- Tokens, cost and model calls with each call counted once: a call
+         -- is exported as two LLM spans on some providers (core/llm_calls.py),
+         -- and Laminar's own per-trace totals add both.
+         __ONCE__,
+         maxIf(simpleJSONExtractString(attributes, 'waj.agent_slug'),
+               simpleJSONExtractString(attributes, 'waj.agent_slug') != '') AS agent_slug,
          max(arrayExists(x -> x.2 IN ('exception', 'error'), events)) AS has_error,
          maxIf(simpleJSONExtractString(attributes, 'waj.agent_kind'),
                simpleJSONExtractString(attributes, 'waj.agent_kind') != '') AS agent_kind,
@@ -457,6 +493,9 @@ __FILTERS__
 ORDER BY created_at DESC
 LIMIT {limit:UInt32}
 """
+from core.llm_calls import once_columns as _once_columns  # noqa: E402
+
+_TRACE_SQL = _TRACE_SQL.replace("__ONCE__", _once_columns().replace("\n", "\n         "))
 
 # Tool-call volume: DEFAULT spans named "<tool>.tool", scoped to the same
 # window/agent/channel via the same per-trace `waj.*` aggregate as _TRACE_SQL
@@ -560,9 +599,18 @@ def _map_trace_row(r: Dict[str, Any]) -> Dict[str, Any]:
     Coercion is defensive: ClickHouse may serialise 64-bit ints as JSON strings
     depending on settings, so we never assume the wire type.
     """
+    from admin.agent_kinds import agent_choice
+    from admin.screens.observability import activity_class
+
+    kind = r.get("agent_kind") or None
     return {
         "created_at": r.get("created_at"),
-        "agent_kind": r.get("agent_kind") or None,
+        "agent_kind": kind,
+        "agent_key": agent_choice(kind, r.get("agent_slug") or None) if kind else None,
+        # Test traffic and the engine's own background work, named from what
+        # the engine stamped on the trace (None for an agent's ordinary turn).
+        "activity": activity_class(r.get("top_span_name"), agent_kind=kind,
+                                   eval_run_id=r.get("eval_run_id") or None),
         "channel_slug": r.get("channel_slug") or None,
         "input_tokens": _as_int(r.get("input_tokens")),
         "output_tokens": _as_int(r.get("output_tokens")),
@@ -708,6 +756,22 @@ def load_analytics(
     ts = bucket_series(rows, choose_bucket(hours), cost_map)
     top_tools = [{"name": r.get("name"), "calls": _as_int(r.get("calls"))} for r in tool_rows]
 
+    per_agent = per_agent_rollup(rows, cost_map)
+    shares = cost_share(rows, cost_map)
+    volumes = ts["volume_by_agent"]
+    # A generic agent's key (`custom:<slug>`) reads as its name on the charts.
+    from admin.screens.observability import ACTIVITY_LABELS
+
+    labels = _agent_key_labels({r["agent_kind"] for r in per_agent
+                                if r["agent_kind"] not in ACTIVITY_LABELS} | set(volumes))
+    labels.update(ACTIVITY_LABELS)   # "activity:test_runs" reads "Test runs"
+    for r in per_agent + shares:
+        r["label"] = labels.get(r["agent_kind"], r["agent_kind"])
+        r["is_agent"] = r["agent_kind"] not in ACTIVITY_LABELS and r["agent_kind"] != "unknown"
+    # Agents first (each list keeps its own order), then the other activity.
+    per_agent.sort(key=lambda r: not r["is_agent"])
+    volumes = {labels.get(k, k): v for k, v in volumes.items()}
+
     payload = _empty_payload(hours, agent_kind, channel, status, environment, ok=True)
     if truncated:
         payload["notice"] = (
@@ -717,11 +781,26 @@ def load_analytics(
     payload.update({
         "buckets": ts["buckets"],
         "series": ts["series"],
-        "volume_by_agent": ts["volume_by_agent"],
-        "cost_share": cost_share(rows, cost_map),
+        "volume_by_agent": volumes,
+        "cost_share": shares,
         "latency_hist": latency_histogram(rows),
         "top_tools": top_tools,
-        "per_agent": per_agent_rollup(rows, cost_map),
+        "per_agent": per_agent,
         "totals": _totals(rows, cost_map),
     })
     return payload
+
+
+def _agent_key_labels(keys) -> Dict[str, str]:
+    """``{custom:<slug>: the agent's name}`` for the generic agents among
+    `keys`. Kinds are left to the caller's own labels. Best-effort."""
+    out: Dict[str, str] = {}
+    try:
+        from admin.agent_kinds import agent_label
+
+        for key in keys:
+            if key and ":" in str(key):
+                out[key] = agent_label(key) or key
+    except Exception:  # noqa: BLE001 - names are cosmetic
+        pass
+    return out

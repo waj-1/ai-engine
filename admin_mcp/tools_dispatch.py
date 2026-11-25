@@ -17,7 +17,7 @@ import logging
 import sys
 import time
 import uuid
-from typing import Annotated, Any, Dict, List, Tuple
+from typing import Annotated, Any, Dict, List, Optional, Tuple
 
 from pydantic import Field
 
@@ -72,11 +72,57 @@ async def _post_chat(endpoint: str, body: Dict[str, Any], headers: Dict[str, str
         with use_env(env):
             base_url = await asyncio.to_thread(_base_url_for, env)
         transport, target = None, base_url
-    async with httpx.AsyncClient(transport=transport, base_url=base_url,
-                                 timeout=timeout_seconds) as client:
-        resp = await client.post(endpoint, json=body, headers=headers)
-        return (resp.status_code, resp.headers.get("content-type", ""),
-                resp.text or "", target)
+    async def _send() -> Tuple[int, str, str, str]:
+        async with httpx.AsyncClient(transport=transport, base_url=base_url,
+                                     timeout=timeout_seconds) as client:
+            resp = await client.post(endpoint, json=body, headers=headers)
+            return (resp.status_code, resp.headers.get("content-type", ""),
+                    resp.text or "", target)
+
+    if transport is None:
+        return await _send()
+    # In process, the request runs in a context of its own, as one that
+    # arrives over HTTP does: it inherits nothing from its caller. Without
+    # this the agent's turn became part of the CALLER's trace (the public
+    # demo's builder assistant testing an agent turned its own trace into a
+    # conversation of that agent, and the agent's turn had no trace).
+    import contextvars
+
+    return await asyncio.get_running_loop().create_task(_send(), context=contextvars.Context())
+
+
+def portal_origin(agent_kind: str, slug: Optional[str]) -> Optional[str]:
+    """The portal's own address, for a test chat the portal sends from inside
+    this process, or None when the engine does not know it.
+
+    The portal's Test panel is a page of the portal: the browser names the
+    portal's address as the request's ``Origin``, and Conversations lists the
+    chat under whichever channel has that address. This tool sends no
+    ``Origin`` of its own, so the same test chat held through it (the public
+    demo's Build with AI assistant testing an agent) listed under channel
+    "Unknown". Where the engine knows the portal's address (demo mode's
+    ``DEMO_PUBLIC_URL``), the tool names it the same way.
+
+    Only when that address is a channel that may reach this agent: a channel
+    that does not list the agent would refuse the turn (403), and an
+    unattributed test chat is better than a refused one."""
+    from demo_mode import settings as demo_settings
+
+    if not demo_settings.enabled():
+        return None
+    try:
+        from core.channel_resolver import _channels_snapshot, _match_channel
+
+        origin = demo_settings.public_url()
+        channel = _match_channel(origin, _channels_snapshot())
+    except Exception:  # noqa: BLE001 — attribution only: never fail the chat
+        return None
+    if not channel:
+        return None
+    allowed = channel.get("allowed_agent_kinds") or []
+    if allowed and agent_kind not in allowed and not (slug and f"{agent_kind}:{slug}" in allowed):
+        return None
+    return origin
 
 
 def parse_sse(text: str) -> Dict[str, Any]:
@@ -270,6 +316,13 @@ async def chat(
         headers["X-WAJ-Profile-Version"] = profile_version_id
     else:
         headers["X-WAJ-Profile-Id"] = profile_id
+    if env == _process_env():
+        # A turn inside this process arrives with no Origin: name the
+        # portal's, as the Test panel's browser does (see portal_origin).
+        origin = await asyncio.to_thread(portal_origin, str(profile.get("agent_kind") or ""),
+                                         profile.get("slug"))
+        if origin:
+            headers["Origin"] = origin
 
     started = time.monotonic()
     try:

@@ -79,7 +79,7 @@
 
   {% if recent_runs %}
   <div class="row mb-s mt-m">
-    <button type="button" id="cmp-go" class="btn" disabled aria-disabled="true">Compare selected</button>
+    <button type="button" id="cmp-go" class="btn" disabled aria-disabled="true" data-tour="runs-compare">Compare selected</button>
     <span class="caption" id="cmp-count" aria-live="polite">Tick two or more runs to compare them</span>
   </div>
   <div class="table-wrap">
@@ -95,7 +95,7 @@
       {# Voice runs have no status.json poller — they refresh on reload. #}
       {% set inflight = r.status in ['queued','running'] and not is_voice %}
       <tr data-run-id="{{ r.run_id }}" data-inflight="{{ '1' if inflight else '0' }}" data-kind="{{ 'voice' if is_voice else 'text' }}">
-        <td class="col-pick"><input type="checkbox" class="cmp-pick" value="{{ r.run_id }}" data-kind="{{ 'voice' if is_voice else 'text' }}" aria-label="Select run of {{ r._suite_name|humanize }}"></td>
+        <td class="col-pick"><input type="checkbox" class="cmp-pick" data-tour="runs-pick" value="{{ r.run_id }}" data-kind="{{ 'voice' if is_voice else 'text' }}" aria-label="Select run of {{ r._suite_name|humanize }}"></td>
         <td>
           {% if is_voice %}<span class="chip chip-info" title="Voice check — a scripted live call">Voice</span> {% elif r._voice_suite %}<span class="chip chip-info" title="Voice test suite">Voice</span> {% endif %}<a href="/admin/evals/runs/{{ r.run_id }}">{{ r._suite_name|humanize }}</a>
           {% if is_voice and r.error and r.status not in ('passed','failed') %}<div class="caption">{{ r.error|truncate(90) }}</div>{% endif %}

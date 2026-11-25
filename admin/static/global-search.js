@@ -104,6 +104,20 @@
     } catch (e) { /* private window / storage blocked: recents are a convenience */ }
   }
 
+  // The public demo's guided tour (demo-tour.js): "Resume tour" / "Restart
+  // tour" quick actions carry a "#tour:<name>" href (admin/nav.py
+  // search_quick_actions adds them only when the tour is on), and opening any
+  // result tells the tour the palette was used. Every event is wrapped so a
+  // tour problem can never break search.
+  function tourOn() { return !!document.getElementById("demo-tour-config"); }
+  function isTourAction(r) { return !!(r && typeof r.href === "string" && r.href.indexOf("#tour:") === 0); }
+  function tourEmit(name, detail) {
+    try { window.dispatchEvent(new CustomEvent(name, { detail: detail || {} })); } catch (e) { /* optional */ }
+  }
+  function paletteUsed(item) {
+    tourEmit("tour:palette-used", { kind: (item && (item.type || item.group)) || "", href: (item && item.href) || "" });
+  }
+
   function init() {
     var overlay = document.getElementById("global-search-dialog");
     var input = document.getElementById("global-search");
@@ -118,6 +132,8 @@
     var env = input.getAttribute("data-env") || "staging";
     var quick = [];
     try { quick = JSON.parse((document.getElementById("global-search-quick") || {}).textContent || "[]"); } catch (e) {}
+    if (!tourOn()) quick = quick.filter(function (r) { return !isTourAction(r); });
+    var tourActions = quick.filter(isTourAction);
     var timer = null, reqId = 0, items = [], rowEls = [], active = -1, lastFocus = null;
     var openOnLoad = null;  // Enter pressed before results arrived: {newTab}
 
@@ -167,6 +183,12 @@
     function go(i, newTab) {
       var item = items[i];
       if (!item) return;
+      paletteUsed(item);
+      if (isTourAction(item)) {
+        close();
+        tourEmit("tour:" + item.href.slice("#tour:".length), {});
+        return;
+      }
       saveRecent(item);
       if (newTab) { window.open(item.href, "_blank", "noopener"); return; }
       close();
@@ -211,7 +233,10 @@
           a.innerHTML = rowHtml(r, idx, words);
           a.addEventListener("mousemove", function () { if (active !== idx) setActive(idx, false); });
           a.addEventListener("click", function (e) {
-            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) { saveRecent(r); return; }
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
+              if (isTourAction(r)) { e.preventDefault(); go(idx, false); return; }
+              paletteUsed(r); saveRecent(r); return;
+            }
             e.preventDefault();
             go(idx, false);
           });
@@ -272,6 +297,12 @@
           if (my !== reqId) return;
           setLoading(false);
           var groups = [], byName = {};
+          // The tour's own actions answer "> tour" (and a plain "tour") too.
+          var tourHits = (p.scope === ">" || !p.scope) ? tourActions.filter(function (r) {
+            var hay = (r.label + " " + (r.context || "")).toLowerCase();
+            return p.words.length ? p.words.every(function (w) { return hay.indexOf(w) !== -1; }) : p.scope === ">";
+          }) : [];
+          if (tourHits.length) { byName.Tour = { name: "Tour", rows: tourHits.slice() }; groups.push(byName.Tour); }
           (data.results || []).forEach(function (r) {
             var g = r.group || "Results";
             if (!byName[g]) { byName[g] = { name: g, rows: [] }; groups.push(byName[g]); }

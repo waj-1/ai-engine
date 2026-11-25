@@ -13,7 +13,7 @@ import json
 from typing import Any, Awaitable, Callable, Dict, Optional
 from urllib.parse import parse_qsl
 
-from demo_mode import limits, policy, protect, settings
+from demo_mode import analytics, limits, policy, protect, settings
 
 ADMIN_COOKIE = "waj_admin_token"
 
@@ -56,12 +56,14 @@ async def _send(send: Callable, status: int, body: bytes, content_type: str,
     await send({"type": "http.response.body", "body": body})
 
 
-def _page(message: str) -> bytes:
+def _page(message: str, kind: str = "locked") -> bytes:
     text = html.escape(message)
     return (
         "<!doctype html><html lang=en><meta charset=utf-8>"
         "<meta name=viewport content='width=device-width, initial-scale=1'>"
         "<title>Public demo</title>"
+        # Usage analytics (demo_mode/analytics.py): "" unless it is on.
+        + analytics.head_tags(kind) +
         "<body style='font-family:system-ui,sans-serif;max-width:36rem;margin:4rem auto;padding:0 1rem'>"
         f"<h1 style='font-size:1.3rem'>The public demo</h1><p>{text}</p>"
         f"<p>To use every screen, run the engine yourself: "
@@ -83,7 +85,9 @@ def _wants_html(scope: Dict[str, Any], headers: Dict[str, str]) -> bool:
 async def _refuse(scope: Dict[str, Any], headers: Dict[str, str], send: Callable, status: int,
                   message: str, extra: Optional[Dict[str, str]] = None) -> None:
     if _wants_html(scope, headers):
-        return await _send(send, status, _page(message), "text/html; charset=utf-8", extra)
+        kind = ("locked" if status == 403 else "upload_size" if status == 413
+                else "daily" if message == limits.CAP_MESSAGE else "rate")
+        return await _send(send, status, _page(message, kind), "text/html; charset=utf-8", extra)
     return await _send(send, status, json.dumps({"detail": message}).encode(), "application/json", extra)
 
 

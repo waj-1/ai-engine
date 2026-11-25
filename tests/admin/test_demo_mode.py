@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import uuid
 from typing import Any, Dict, List
 
@@ -133,13 +134,18 @@ def test_portal_pages_show_banner_and_assistant(client, demo):
     assert "data-demo-banner" in page.text
     assert "https://github.com/waj-1/ai-engine" in page.text
     assert 'id="ba-panel"' in page.text and "builder-assistant.js" in page.text
+    # A phone's first visit shows this hint instead of opening the sheet
+    # (builder-assistant.js); it starts hidden and can be dismissed.
+    hint = re.search(r'<div class="ba-hint" id="ba-hint"[^>]*>', page.text)
+    assert hint and " hidden" in hint.group(0)
+    assert "data-hint-close" in page.text
 
 
 def test_no_banner_or_assistant_outside_demo(client, monkeypatch):
     monkeypatch.delenv("DEMO_MODE", raising=False)
     page = client.get("/admin/settings")
     assert "data-demo-banner" not in page.text
-    assert 'id="ba-panel"' not in page.text
+    assert 'id="ba-panel"' not in page.text and 'id="ba-hint"' not in page.text
 
 
 def test_settings_hides_locked_screens(client, demo):
@@ -204,8 +210,14 @@ def test_process_lockdown_switches_off_admin_mcp():
     changed = settings.apply_process_lockdown(env)
     assert "ENABLE_ADMIN_MCP" not in env and "MCP_ALLOW_LOCAL_ENDPOINTS" not in env
     assert "HTTP_TOOL_ALLOW_HOSTS" not in env
-    assert env["ENABLE_GENERIC_AGENTS"] == "1" and env["CONVERSATION_INSIGHTS"] == "0"
+    # The insights sweep is on under the demo's own budget (demo_mode/insights.py)...
+    assert env["ENABLE_GENERIC_AGENTS"] == "1" and env["CONVERSATION_INSIGHTS"] == "1"
+    assert env["TOOL_ERROR_EVENTS"] == "1"
     assert "ENABLE_ADMIN_MCP" in changed
+    # ...and off, whatever the operator set, when that budget is zero.
+    capped = {"DEMO_MODE": "1", "CONVERSATION_INSIGHTS": "1", "DEMO_INSIGHTS_DAILY_CALLS": "0"}
+    settings.apply_process_lockdown(capped)
+    assert capped["CONVERSATION_INSIGHTS"] == "0"
     off = {"ENABLE_ADMIN_MCP": "1"}
     assert settings.apply_process_lockdown(off) == [] and off == {"ENABLE_ADMIN_MCP": "1"}
 
@@ -547,7 +559,9 @@ def test_automatic_model_means_the_demo_agent_model(demo):
 _PKS = {"agent_types": "agent_type_id", "agent_data_sources": "source_id", "ai_kb_pages": "id",
         "agent_mcp_servers": "mcp_server_id", "agent_eval_suites": "suite_id",
         "agent_channels": "channel_id", "ai_chat_sessions": "id", "ai_chat_messages": "id",
-        "agent_profile_mcp_servers": "id", "agent_tools": "tool_id"}
+        "agent_profile_mcp_servers": "id", "agent_tools": "tool_id",
+        "agent_skills": "skill_id", "agent_skill_versions": "skill_version_id",
+        "agent_eval_schedules": "schedule_id", "agent_bakeoffs": "bakeoff_id"}
 
 
 _CASCADE = (
@@ -556,6 +570,8 @@ _CASCADE = (
     ("agent_mcp_servers", "agent_profile_mcp_servers", "mcp_server_id", "mcp_server_id"),
     ("ai_chat_sessions", "ai_chat_messages", "session_id", "id"),
     ("agent_data_sources", "ai_kb_pages", "source_id", "source_id"),
+    ("agent_skills", "agent_skill_versions", "skill_id", "skill_id"),
+    ("agent_skills", "agent_profile_skills", "skill_id", "skill_id"),
 )
 
 
@@ -590,6 +606,9 @@ def db(demo, monkeypatch):
     from core.agent_profile import AgentProfileLoader
 
     monkeypatch.setattr(seed, "_env", lambda: "staging")
+    # No tracing store, as on a default install: the stored example chats are seeded.
+    monkeypatch.setenv("LMNR_DISABLED", "true")
+    monkeypatch.delenv("LMNR_CLICKHOUSE_URL", raising=False)
     monkeypatch.setattr(kb_handlers, "embedding_status", lambda: {"ready": False, "problem": "none"})
     monkeypatch.setattr(AgentProfileLoader, "invalidate", classmethod(lambda cls, *a, **k: None))
     store: Dict[str, list] = {}
@@ -620,9 +639,32 @@ def test_seed_builds_the_northwind_demo_and_is_idempotent(db):
     assert support["mcp_server_ids"] and support["data_source_ids"]
     assert builder["model_main_id"] == out["models"]["builder"] != support["model_main_id"]
     assert {c["slug"] for c in db["agent_types"]} == {"support", "sales", "internal-tools"}
-    assert len(db["ai_kb_pages"]) == 2
-    suite = db["agent_eval_suites"][0]
-    assert len(suite["scenarios"]) == 5 and suite["evaluator_model_id"] == out["models"]["judge"]
+    # Four knowledge bases, each with its own pages, attached where they belong.
+    bases = {d["name"]: d["source_id"] for d in db["agent_data_sources"]}
+    assert set(bases) == {"Northwind help center", "Northwind plans and pricing",
+                          "Northwind billing and refunds", "Northwind IT handbook"}
+    assert len(db["ai_kb_pages"]) == 9
+    it = next(p for p in db["agent_profiles"] if p["slug"] == "it-helpdesk")
+    sales = next(p for p in db["agent_profiles"] if p["slug"] == "sales-assistant")
+    assert it["data_source_ids"] == [bases["Northwind IT handbook"]]
+    assert sales["data_source_ids"] == [bases["Northwind plans and pricing"],
+                                        bases["Northwind help center"]]
+    assert billing["data_source_ids"][0] == bases["Northwind billing and refunds"]
+    assert builder["data_source_ids"] == []
+    # One five-case suite per agent, judged by the judge model.
+    suites = {x["name"]: x for x in db["agent_eval_suites"]}
+    assert len(suites) == 4 and set(out["suites"]) == {"support-desk", "sales-assistant",
+                                                       "billing-helper", "it-helpdesk"}
+    assert all(len(x["scenarios"]) == 5 and x["evaluator_model_id"] == out["models"]["judge"]
+               for x in suites.values())
+    assert suites["IT helpdesk: staff questions"]["profile_id"] == it["profile_id"]
+    # Playbooks attached to their agents, and a schedule per suite.
+    assert {k["slug"] for k in db["agent_skills"]} == {
+        "calm-an-upset-customer", "compare-two-plans", "report-a-security-problem"}
+    assert len(db["agent_skill_versions"]) == 3 and len(db["agent_profile_skills"]) == 3
+    assert {(x["cadence"], x["is_enabled"]) for x in db["agent_eval_schedules"]} == {
+        ("daily", True), ("weekly", True)}
+    assert all(x["suite_id"] and x["next_run_at"] for x in db["agent_eval_schedules"])
     server = db["agent_mcp_servers"][0]
     assert server["endpoint"] == "https://demo.example.com/demo/northwind/mcp"
     assert len(db["ai_chat_sessions"]) == 5
@@ -713,7 +755,8 @@ def _rpc(method, params=None, msg_id=1):
 
 def test_northwind_tools():
     names = [t["name"] for t in _rpc("tools/list")["result"]["tools"]]
-    assert names == ["check_outage", "get_order_status", "create_ticket", "list_plans"]
+    assert names == ["check_outage", "get_order_status", "create_ticket", "escalate_to_human",
+                     "list_plans"]
     text = lambda r: r["result"]["content"][0]["text"]  # noqa: E731
     assert "planned maintenance in Riverside" in text(_rpc("tools/call", {"name": "check_outage", "arguments": {"area": "Riverside"}}))
     assert "No known outage" in text(_rpc("tools/call", {"name": "check_outage", "arguments": {"area": "Hilltop"}}))
@@ -837,6 +880,8 @@ def test_assistant_streams_steps_and_changed(client, demo, monkeypatch):
 
         async def run_stream(self, message, context):
             seen["actor"] = assistant.TURN.get().actor
+            seen["task"] = asyncio.current_task()
+            seen["spans_open"] = list(spans)
             await assistant.run_tool("mcp_servers", {"action": "create", "name": "Northwind 2",
                                                      "endpoint": northwind.northwind_endpoint()})
             await assistant.run_tool("users", {"action": "list"})
@@ -849,6 +894,23 @@ def test_assistant_streams_steps_and_changed(client, demo, monkeypatch):
             yield event
         yield {"type": "done"}
 
+    # The turn's root span: where it is opened, and by which task.
+    import contextlib
+
+    from core import observability
+
+    spans: List[Any] = []
+    closed: List[str] = []
+
+    @contextlib.contextmanager
+    def fake_root_span(name, attributes=None, **_k):
+        if name:
+            spans.append((name, asyncio.current_task()))
+        yield None
+        if name:
+            closed.append(name)
+
+    monkeypatch.setattr(observability, "root_span", fake_root_span)
     monkeypatch.setattr(demo_handlers, "_build_assistant", lambda page: _Agent())
     monkeypatch.setattr(chat_session, "run_turn", fake_run_turn)
     resp = client.post("/admin/demo/assistant/chat", json={"message": "add the tools"},
@@ -861,6 +923,12 @@ def test_assistant_streams_steps_and_changed(client, demo, monkeypatch):
     assert any(e.get("type") == "changed" for e in events)
     assert seen["slug"] == assistant.BUILDER_SLUG
     assert seen["actor"]["user_id"] == "00000000-0000-0000-0000-000000000001"
+    # One root span for the turn, opened INSIDE the task that runs the model
+    # calls and before the first of them (around the response stream it was in
+    # another task's context, and every model call was a trace of its own).
+    assert [name for name, _task in spans] == ["demo.builder_assistant"]
+    assert spans[0][1] is seen["task"] and seen["spans_open"] == spans
+    assert closed == ["demo.builder_assistant"]
 
 
 # --------------------------------------------------------------------------
@@ -1136,3 +1204,209 @@ def test_panel_keeps_suggestions_and_about_note(client, demo):
     js = client.get("/admin/static/builder-assistant.js").text
     assert "ba-chips-compact" in js and "/admin/demo/assistant/history" in js
     assert "chips.hidden" not in js
+
+
+# --------------------------------------------------------------------------
+# 9. The assistant across turns, and the demo's own test round
+# --------------------------------------------------------------------------
+
+
+def test_assistant_remembers_what_a_turn_made_for_the_next_turn():
+    assistant._ACTIONS.clear()
+    steps = [
+        {"tool": "templates", "action": "list", "ok": True, "label": "Looked at the templates"},
+        {"tool": "templates", "action": "use", "ok": True, "label": "Created Outage helper from a template",
+         "links": [{"href": "/admin/agents?profile_id=p-1&env=staging", "label": "Open the agent"}]},
+        {"tool": "chat", "action": "", "ok": False, "label": "Chatted with Outage helper"},
+        {"tool": "get_profile", "action": "", "ok": True, "label": "Looked at Outage helper"},
+    ]
+    assistant.remember("s-1", steps)
+    note = assistant.earlier_note("s-1")
+    # Only the change is kept, with the id a follow-up needs.
+    assert "Created Outage helper from a template" in note and "profile_id=p-1" in note
+    assert "Looked at" not in note and "Chatted" not in note
+    assert "do not make new ones" in note
+    assert assistant.earlier_note("another-conversation") == ""
+    assert assistant.earlier_note(None) == ""
+    assistant.remember(None, steps)  # no conversation yet: nothing to key it by
+    assert set(assistant._ACTIONS) == {"s-1"}
+    assistant._ACTIONS.clear()
+
+
+def test_builder_instructions_say_a_follow_up_edits_and_a_draft_goes_live_first():
+    from demo_mode import content
+
+    text = content.BUILDER_INSTRUCTIONS
+    assert "Never create another agent for a follow-up" in text
+    # A request to build is never answered with "one already exists".
+    assert 'always means a NEW agent' in text and 'Never answer a \
+build request' in text
+    assert 'status "active"' in text and "a draft cannot be chatted with" in text
+    for name in (content.KB_NAME, content.PLANS_KB_NAME, content.BILLING_KB_NAME, content.IT_KB_NAME):
+        assert name in text
+
+
+def test_assistant_will_not_chat_with_a_draft(fake_admin, monkeypatch):
+    monkeypatch.setattr(assistant, "_is_live", lambda profile_id: False)
+    out = _run("chat", {"profile_id": "p-draft", "message": "hi"})
+    assert out == {"ok": False, "error": assistant.DRAFT_MESSAGE}
+    turn = assistant.TURN.get()
+    assert turn.steps[-1]["ok"] is False and "draft" in turn.steps[-1]["note"]
+    assert turn.calls == 0 and "chat" not in fake_admin.tools  # refused before it ran
+
+
+def test_a_second_message_waits_while_the_first_turn_runs(client, demo, monkeypatch):
+    """A message sent while the conversation's last turn is still running is
+    answered with a wait note and builds no agent, and the next turn is told
+    what the first one made."""
+    import time
+
+    from admin import demo_handlers
+    import common.chat_session as chat_session
+
+    server = _FakeServer()
+    monkeypatch.setattr(assistant, "_admin_mcp", lambda: server)
+    assistant._ACTIONS.clear()
+    sid = "abcdefab-cdef-abcd-efab-cdefabcdef01"
+    built: List[str] = []
+    seen: Dict[str, Any] = {}
+
+    class _Agent:
+        profile = None
+
+        async def run_stream(self, message, context):
+            seen["note"] = assistant.earlier_note(assistant.TURN.get().conversation)
+            await assistant.run_tool("update_profile", {"profile_id": "p-9", "display_name": "Ali"})
+            yield {"type": "tool_activity", "tools": ["update_profile"]}
+            yield {"type": "answer", "content": "Renamed."}
+
+    async def fake_run_turn(*, agent, message, identity, profile, extra_context=None):
+        yield {"type": "session", "id": sid}
+        async for event in agent.run_stream(message, {}):
+            yield event
+        yield {"type": "done"}
+
+    def _build(page):
+        built.append(page or "")
+        return _Agent()
+
+    monkeypatch.setattr(demo_handlers, "_build_assistant", _build)
+    monkeypatch.setattr(chat_session, "run_turn", fake_run_turn)
+    monkeypatch.setattr(assistant, "_profile_name", lambda profile_id: "Outage helper")
+    monkeypatch.setattr("core.auth.get_service_client", lambda: _Client({}))
+    headers = {"Authorization": f"Bearer {_token('lv-2')}"}
+
+    # The first turn is still running: the second message waits.
+    user_id = client.get(f"/admin/demo/assistant/history?session_id={sid}", headers=headers)
+    assert user_id.status_code == 200
+    demo_handlers._LIVE[sid] = {"answer": "", "steps": [], "changed": False, "done": False,
+                                "at": time.monotonic(), "user_id": None}
+    first = client.post("/admin/demo/assistant/chat", json={"message": "x", "session_id": sid},
+                        headers=headers)
+    # Another visitor's (or nobody's) live turn does not block this one.
+    assert demo_handlers.STILL_WORKING not in first.text and len(built) == 1
+    live_user = demo_handlers._LIVE[sid]["user_id"]
+    demo_handlers._LIVE[sid] = {"answer": "", "steps": [], "changed": False, "done": False,
+                                "at": time.monotonic(), "user_id": live_user}
+    waiting = client.post("/admin/demo/assistant/chat", json={"message": "name it ali",
+                                                              "session_id": sid}, headers=headers)
+    assert demo_handlers.STILL_WORKING in waiting.text and len(built) == 1
+    # Once it is done, the follow-up runs and is told what the first turn changed.
+    demo_handlers._LIVE[sid]["done"] = True
+    client.post("/admin/demo/assistant/chat", json={"message": "name it ali", "session_id": sid},
+                headers=headers)
+    assert len(built) == 2
+    assert "profile_id=p-9" in seen["note"] or "Outage helper" in seen["note"] or "Ali" in seen["note"]
+    demo_handlers._LIVE.pop(sid, None)
+    assistant._ACTIONS.clear()
+
+
+def test_warmup_runs_each_suite_then_compares_models(db, monkeypatch):
+    from admin.services import bakeoffs, evals
+    from demo_mode import account, content, warmup
+
+    client = _Client(db)
+    seed.seed(client)
+    started: List[Dict[str, Any]] = []
+    compared: List[Dict[str, Any]] = []
+
+    def _start(**kw):
+        run_id = f"run-{len(db.setdefault('agent_eval_runs', []))}"
+        db["agent_eval_runs"].append({"run_id": run_id, "status": "passed"})
+        started.append(kw)
+        return run_id
+
+    def _compare(**kw):
+        compared.append(kw)
+        ids = [_start(suite_id=kw["suite_ids"][0], profile_id=kw["profile_id"], bakeoff=True)
+               for _ in kw["variants"]]
+        return {"bakeoff_id": f"b-{len(compared)}", "run_ids": ids}
+
+    monkeypatch.setattr(evals, "start_suite_run", _start)
+    monkeypatch.setattr(bakeoffs, "create_bakeoff", _compare)
+    settled: List[str] = []
+    monkeypatch.setattr(bakeoffs, "get_bakeoff", lambda bakeoff_id: settled.append(bakeoff_id))
+    monkeypatch.setattr(account, "sign_in", lambda: "token")
+    monkeypatch.setattr(account, "ensure_demo_user", lambda: {"user_id": "demo-user"})
+    monkeypatch.setattr(warmup, "run_chats", lambda token, env: 7)
+
+    out = warmup.run_round(client, sleep=lambda _s: None)
+    assert len(out["runs"]) == 4 and len(out["comparisons"]) == 4
+    # The sample-traffic generator holds the conversations; the round holds none.
+    assert out["chat_turns"] == 0
+    scheduled = [k for k in started if not k.get("bakeoff")]
+    assert all(k["user_token"] == "token" and k["actor_user_id"] == "demo-user" for k in scheduled)
+    assert {k["schedule_id"] for k in scheduled} == {x["schedule_id"] for x in db["agent_eval_schedules"]}
+    assert all(x.get("last_run_at") for x in db["agent_eval_schedules"])
+    models = {m["name"]: m["model_id"] for m in db["agent_models"]}
+    for kw in compared:
+        assert [v["model_id"] for v in kw["variants"]] == [models["Demo agents model"],
+                                                         models["Demo builder model"]]
+        assert kw["repeats"] == 1 and len(kw["suite_ids"]) == 1
+    assert len(compared) == len(content.SUITES)
+    assert settled == out["comparisons"]  # each comparison's status is brought up to date
+    # A second round (a restart) does nothing: the runs are there.
+    assert warmup.run_round(client, sleep=lambda _s: None) == {"skipped": "runs exist"}
+    assert len(started) == 12
+
+
+def test_warmup_is_off_outside_demo_mode_and_by_setting(monkeypatch):
+    from demo_mode import warmup
+
+    monkeypatch.delenv("DEMO_MODE", raising=False)
+    assert warmup.enabled() is False and warmup.start_in_background() is None
+    monkeypatch.setenv("DEMO_MODE", "true")
+    assert warmup.enabled() is True
+    monkeypatch.setenv("DEMO_WARMUP", "off")
+    assert warmup.enabled() is False
+
+
+def test_warmup_holds_real_conversations_one_session_each(demo, monkeypatch):
+    from admin_mcp import tools_dispatch
+    from demo_mode import warmup
+
+    posted: List[Dict[str, Any]] = []
+
+    async def _post(endpoint, body, headers, env, timeout):
+        posted.append({"endpoint": endpoint, **body, "auth": headers["Authorization"], "env": env,
+                       "origin": headers.get("Origin")})
+        if "sales" in endpoint and len([p for p in posted if "sales" in p["endpoint"]]) == 1:
+            return 503, "application/json", "{}", "in-process"   # one agent is unavailable
+        return 200, "text/event-stream", 'data: {"type": "answer", "content": "ok"}\n\n', "in-process"
+
+    monkeypatch.setattr(tools_dispatch, "_post_chat", _post)
+    answered = warmup.run_chats("tok", "staging")
+    assert all(p["auth"] == "Bearer tok" and p["env"] == "staging" for p in posted)
+    # Each names the sample channel's origin, so it is not listed under "Unknown".
+    assert {p["origin"] for p in posted} == {"https://sample-traffic.northwind.example"}
+    assert all(p["endpoint"].startswith("/v1/agents/") and p["endpoint"].endswith("/chat")
+               for p in posted)
+    # A conversation's turns share one session; different conversations do not.
+    by_session: Dict[str, List[str]] = {}
+    for p in posted:
+        by_session.setdefault(p["session_id"], []).append(p["endpoint"])
+    assert len(by_session) == len(warmup.CHATS)
+    assert all(len(set(v)) == 1 for v in by_session.values())
+    # The agent that answered 503 is skipped after its first message; the rest go on.
+    total = sum(len(m) for _s, m in warmup.CHATS)
+    assert answered == total - 2 and len(posted) == total - 1

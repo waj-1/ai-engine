@@ -1070,14 +1070,20 @@ def resolve_say_exactly_instruction(cfg: LiveVoiceConfig, spoken: str) -> str:
 
 def resolve_session_voice(cfg: LiveVoiceConfig) -> str:
     """Voice for this session: the language-mapped voice if the session's
-    resolved language has one, else `voice_id`. Keyed on the PRIMARY subtag
-    ("ar-SA" -> "ar") so one entry covers every regional variant."""
-    primary = (cfg.language or "").split("-")[0].strip().lower()
+    resolved language has one, else `voice_id`. A full tag ("ar-EG") is
+    looked up first, then the PRIMARY subtag ("ar-SA" -> "ar"), so one entry
+    covers every regional variant and a regional entry can name an accent."""
+    tag = (cfg.language or "").strip().replace("_", "-")
+    primary = tag.split("-")[0].strip().lower()
     if primary:
         # Raw operator JSON: anything non-dict (a string, a list) falls back
         # to voice_id instead of raising AttributeError at session build.
         mapping = cfg.voice_by_language
-        mapped = mapping.get(primary) if isinstance(mapping, dict) else None
+        mapped = None
+        if isinstance(mapping, dict):
+            parts = tag.split("-")
+            full = "-".join([parts[0].lower()] + [p.upper() for p in parts[1:]]) if len(parts) > 1 else ""
+            mapped = (mapping.get(full) if full else None) or mapping.get(primary)
         if mapped:
             return mapped
     return cfg.voice_id

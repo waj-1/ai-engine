@@ -80,6 +80,8 @@ def load_agent_display_names(env: Optional[str]) -> Dict[str, str]:
     Prefers the root profile (no parent) of each kind; falls back to the other
     env's profiles so a kind that only exists on one side still reads as a
     name. ``{}`` on failure — callers then humanise the slug."""
+    from admin.agent_kinds import SLUG_ADDRESSED_KIND
+
     out: Dict[str, str] = {}
     try:
         from admin.router import client_for
@@ -100,7 +102,9 @@ def load_agent_display_names(env: Optional[str]) -> Dict[str, str]:
             for r in rows:
                 kind = r.get("agent_kind")
                 name = (r.get("display_name") or "").strip()
-                if kind and name and kind not in out:
+                # The generic agents all share one kind: no single agent
+                # names it (a trace of one read as whichever profile came first).
+                if kind and name and kind not in out and kind != SLUG_ADDRESSED_KIND:
                     out[kind] = name
     except Exception as exc:  # noqa: BLE001 - names are cosmetic
         logger.debug("agent display names unavailable (%s)", exc)

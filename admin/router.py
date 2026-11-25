@@ -573,8 +573,9 @@ async def live_monitor(
         kpis["cache_saved_usd"] = "—"
     agent_names = pl.load_agent_display_names(env)
     per_agent_tech = [
-        {**r, "name": pl.agent_label(r.get("agent_kind") if r.get("agent_kind") != "unknown" else None,
-                                     agent_names)}
+        {**r, "name": (r.get("label") if ":" in str(r.get("agent_kind") or "") else None)
+            or pl.agent_label(r.get("agent_kind") if r.get("agent_kind") != "unknown" else None,
+                              agent_names)}
         for r in (analytics.get("per_agent") or [])
     ]
     show_voice = bool(

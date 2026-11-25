@@ -1,0 +1,417 @@
+/* The demo's guided tour (admin/static/demo-tour.js). Linked from _base.html only
+   when DEMO_MODE and DEMO_TOUR are both on, so none of it loads elsewhere. */
+
+/* Tokens only, light and dark. Layers: drawer 59 < Build with AI panel 61 <
+   spotlight 62 < coach card 63 < toasts 64 < phone sheets 70 < modal 150 < search palette 200. */
+:root { --dt-code-bg: var(--gray-900); --dt-code-fg: var(--gray-200); --dt-scrim: rgba(14, 17, 19, .52); }
+html[data-theme="dark"] { --dt-code-bg: var(--gray-950); --dt-code-fg: var(--gray-200); --dt-scrim: rgba(0, 0, 0, .62); }
+.dt-sr { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.dt-icon { display: inline-flex; flex: 0 0 auto; }
+.dt-icon svg { display: block; }
+.dt-h { font-size: 16px; font-weight: 600; margin: 0; color: var(--fg-1); line-height: 1.3; }
+.dt-h-xl { font-size: 24px; font-weight: 700; letter-spacing: -.2px; }
+.dt-h-l { font-size: 20px; font-weight: 700; }
+.dt-lead { margin: var(--space-s) 0 0; color: var(--fg-2); font-size: 14.5px; line-height: 1.55; }
+.dt-muted { color: var(--fg-2); }
+.dt-small { font-size: 12px; }
+.dt-m0 { margin: 0; }
+.dt-label { font-size: 13px; font-weight: 600; color: var(--fg-1); margin: 0; }
+.dt-eyebrow { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); }
+.dt-spacer { flex: 1; }
+.dt-code-inline { font-family: var(--font-mono); font-size: .92em; }
+.dt-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-s); }
+.dt-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px;
+  padding: 0 14px; font-size: 14px; font-weight: 600; white-space: nowrap; border-color: var(--border-strong); }
+.dt-btn.ghost { border-color: transparent; background: transparent; color: var(--fg-1); }
+.dt-btn.ghost:hover { background: var(--surface-sunken); }
+.dt-btn.primary { border-color: var(--accent); }
+.dt-btn-s { min-height: 30px; padding: 0 10px; font-size: 13px; }
+.dt-btn-l, a.dt-btn-l { min-height: 40px; padding: 0 18px; font-size: 14.5px; font-weight: 600; }
+a.dt-btn { font-weight: 600; }
+.dt-btn-dark, a.dt-btn-dark { background: var(--fg-1); color: var(--surface); border-color: var(--fg-1); }
+.dt-btn-dark:hover { filter: brightness(1.15); }
+.dt-link { border: 0; background: transparent; padding: 2px 0; min-height: 24px; color: var(--accent); font-weight: 600;
+  font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
+.dt-link[aria-pressed="true"] { text-decoration-thickness: 2px; }
+.dt-x { flex: 0 0 auto; width: 32px; height: 32px; padding: 0; border: 0; background: transparent; font-size: 22px; line-height: 1;
+  color: var(--fg-2); display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-btn); }
+.dt-x:hover { background: var(--surface-sunken); color: var(--fg-1); }
+.dt-pill-soft { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.dt-pill-grey { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px;
+  background: var(--surface-sunken); color: var(--fg-2); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.dt-note { margin: 0; padding: var(--space-xs) var(--space-s); border-radius: var(--radius-btn);
+  background: var(--surface-sunken); color: var(--fg-1); font-size: 13px; line-height: 1.45; }
+.dt-note-warn { background: var(--warning-soft); border-left: 3px solid var(--warning); }
+.dt-note-ok { background: var(--success-soft); border-left: 3px solid var(--success); }
+.dt-dot { display: inline-block; flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  animation: dt-blink 1.4s ease-in-out infinite; }
+@keyframes dt-blink { 50% { opacity: .35; } }
+.dt-grabber { display: none; width: 36px; height: 4px; border-radius: 4px; background: var(--border-strong); margin: 0 auto var(--space-s); flex: 0 0 auto; }
+
+/* segmented tabs (code tabs, "Show calls as") */
+.dt-seg-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 8px; background: var(--surface-sunken); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.dt-seg-tab { position: relative; display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--fg-2); font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.dt-seg-tab[aria-selected="true"], .dt-seg-radio .dt-seg-tab:has(input:checked) { background: var(--surface); color: var(--fg-1);
+  box-shadow: 0 1px 2px rgba(20, 24, 27, .12); }
+html[data-theme="dark"] .dt-seg-tab[aria-selected="true"], html[data-theme="dark"] .dt-seg-radio .dt-seg-tab:has(input:checked) { background: var(--gray-700); }
+.dt-seg-tab:focus-visible, .dt-seg-tab:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dt-seg-radio input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+
+/* code block */
+.dt-code { min-width: 0; display: flex; flex-direction: column; gap: var(--space-s); }
+.dt-code-row { display: flex; align-items: center; gap: var(--space-s); flex-wrap: wrap; }
+.dt-code-label { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; color: var(--fg-2); line-height: 1.3; }
+.dt-code-row .dt-code-label { flex: 1 1 70px; }
+.dt-panel { position: relative; }
+.dt-panel[hidden] { display: none; }
+.dt-panel:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+.dt-pre { margin: 0; padding: 12px 14px; background: var(--dt-code-bg); color: var(--dt-code-fg); border-radius: 8px;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.6; white-space: pre; overflow: auto; max-height: 200px; }
+html[data-theme="dark"] .dt-pre { border: 1px solid var(--border); }
+.dt-pre-path { white-space: pre-wrap; font-family: var(--font-ui); font-size: 13px; background: var(--surface-sunken); color: var(--fg-1); }
+.dt-copy-row { display: flex; justify-content: flex-end; margin-top: 6px; }
+/* Icon-only Copy over the top-right corner of a code block (coach cards, Finish). */
+.dt-copy.dt-copy-icon { position: absolute; top: 6px; right: 6px; width: 28px; min-height: 28px; padding: 0; justify-content: center;
+  border-color: var(--gray-700); background: var(--dt-code-bg); color: var(--dt-code-fg); }
+.dt-copy.dt-copy-icon:hover:not(:disabled), .dt-copy.dt-copy-icon.dt-copied { border-color: var(--gray-500); color: var(--gray-0); }
+.dt-copy.dt-copy-icon:focus-visible { outline: 2px solid var(--teal-300); outline-offset: 1px; }
+.dt-copy.dt-copy-icon .dt-icon svg { width: 14px; height: 14px; }
+.dt-pre:has(+ .dt-copy-icon) { padding-right: 40px; }
+.dt-copy { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 0 10px; font-size: 12.5px; font-weight: 600;
+  border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--fg-1); }
+.dt-copy:hover:not(:disabled) { border-color: var(--fg-2); }
+.dt-copy-big { min-height: 36px; padding: 0 14px; font-size: 14px; background: var(--surface); color: var(--fg-1); border-color: var(--border-strong); }
+.dt-copy-big:hover:not(:disabled) { border-color: var(--fg-2); }
+.dt-copy[hidden] { display: none; }
+.dt-incode > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent); padding: 4px 0; min-height: 28px; }
+.dt-incode[open] > summary { margin-bottom: var(--space-s); }
+
+/* modal (Welcome, Finish) */
+html.dt-modal-open { overflow: hidden; }
+.dt-overlay { position: fixed; inset: 0; z-index: 150; background: var(--dt-scrim);
+  display: flex; align-items: center; justify-content: center; padding: var(--space-m); }
+.dt-modal { width: min(720px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column;
+  background: var(--surface); color: var(--fg-1); border-radius: 14px; box-shadow: 0 24px 64px rgba(14, 17, 19, .32);
+  outline: none; animation: dt-rise .18s ease-out; }
+html[data-theme="dark"] .dt-modal { border: 1px solid var(--border); }
+@keyframes dt-rise { from { transform: translateY(8px); opacity: 0; } }
+.dt-modal-head { display: flex; align-items: flex-start; gap: var(--space-m); padding: 28px 28px var(--space-s); }
+.dt-modal-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.dt-modal-body { padding: var(--space-sm) 28px; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-m); }
+.dt-modal-foot { padding: var(--space-m) 28px 28px; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-s) var(--space-m); }
+.dt-foot-note { flex: 1 1 240px; margin: 0; font-size: 12.5px; color: var(--fg-2); line-height: 1.4; }
+.dt-modal-foot .dt-actions { margin-left: auto; }
+.dt-goals { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm); }
+.dt-goal { display: flex; gap: var(--space-sm); align-items: flex-start; cursor: pointer; padding: 16px 18px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-card); background: var(--surface); }
+.dt-goal:hover { border-color: var(--fg-3); }
+.dt-goal:has(input:checked) { border: 2px solid var(--accent); padding: 15px 17px; background: var(--accent-soft); }
+.dt-goal:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dt-radio { flex: 0 0 auto; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--accent); }
+.dt-goal-text { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; line-height: 1.5; }
+.dt-goal-text strong { font-size: 15px; font-weight: 600; }
+.dt-goal-blurb { color: var(--fg-2); font-size: 13px; }
+.dt-goal-meta { color: var(--fg-2); font-size: 12.5px; font-weight: 600; }
+.dt-options { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm) var(--space-m);
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); }
+.dt-row-field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-s) var(--space-sm); }
+.dt-check { display: flex; gap: var(--space-s); align-items: center; cursor: pointer; font-size: 13px; color: var(--fg-1); }
+.dt-check input { margin: 0; width: 18px; height: 18px; accent-color: var(--accent); }
+.dt-chev-r { font-size: 18px; line-height: 1; margin-left: 4px; }
+
+/* Finish */
+.dt-finish { width: min(960px, 100%); }
+.dt-finish-tile { flex: 0 0 auto; width: 48px; height: 48px; border-radius: 10px; background: var(--accent); color: var(--accent-fg);
+  display: inline-flex; align-items: center; justify-content: center; }
+.dt-finish-tile .dt-icon svg { width: 24px; height: 24px; stroke-width: 2; }
+.dt-stats { display: flex; flex-wrap: wrap; gap: var(--space-s) 0; }
+.dt-stat { display: flex; flex-direction: column; padding: 0 var(--space-ml) 0 var(--space-m); border-left: 1px solid var(--border); }
+.dt-stat:first-child { padding-left: 0; border-left: 0; }
+.dt-stat strong { font-size: 22px; font-weight: 700; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.dt-stat span { font-size: 12.5px; color: var(--fg-2); }
+.dt-ways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-sm); }
+.dt-way { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); min-width: 0; }
+.dt-way-title { display: flex; align-items: center; gap: var(--space-s); margin: 0; font-size: 15px; font-weight: 600; }
+.dt-way-title .dt-icon { color: var(--accent); }
+.dt-way-code { position: relative; }
+.dt-way-body { margin: 0; font-size: 13px; color: var(--fg-2); line-height: 1.5; }
+.dt-way-links { display: flex; flex-wrap: wrap; gap: var(--space-s); }
+.dt-way-more { font-weight: 600; font-size: 13px; }
+.dt-finish-foot { gap: var(--space-s) var(--space-sm); }
+.dt-finish-foot .dt-link { font-size: 14px; text-decoration: none; }
+
+/* checklist drawer: docks from the sidebar's right edge, not modal */
+.dt-drawer { position: fixed; top: 0; bottom: 0; left: var(--sidebar-w); z-index: 59; width: 392px;
+  max-width: calc(100vw - var(--sidebar-w)); display: flex; flex-direction: column; background: var(--surface);
+  border-right: 1px solid var(--border); border-left: 1px solid var(--border); box-shadow: 12px 0 32px rgba(14, 17, 19, .12);
+  transform: translateX(-12px); opacity: 0; transition: transform .18s ease-out, opacity .18s ease-out; }
+.dt-drawer.dt-in { transform: none; opacity: 1; }
+.dt-drawer[hidden] { display: none; }
+html[data-nav="collapsed"] .dt-drawer { left: var(--sidebar-w-collapsed); max-width: calc(100vw - var(--sidebar-w-collapsed)); }
+/* With Build with AI open on the right, the drawer gives way so the two never overlap. */
+body.ba-open .dt-drawer { width: max(320px, min(392px, calc(100vw - var(--sidebar-w) - 420px))); }
+html[data-nav="collapsed"] body.ba-open .dt-drawer { width: max(320px, min(392px, calc(100vw - var(--sidebar-w-collapsed) - 420px))); }
+.dt-drawer-head { padding: 20px 18px 14px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+.dt-drawer-top { display: flex; align-items: center; gap: var(--space-s); }
+.dt-drawer-top .dt-h { flex: 1; outline: none; font-size: 18px; font-weight: 700; }
+.dt-progress-row { display: flex; align-items: center; gap: var(--space-sm); }
+.dt-progress { flex: 1; height: 6px; border-radius: 999px; background: var(--surface-sunken); overflow: hidden; }
+html[data-theme="dark"] .dt-progress { background: var(--gray-800); }
+.dt-progress-fill { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width .3s ease; }
+.dt-count { font-size: 12.5px; font-weight: 600; color: var(--fg-1); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dt-drawer-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-s); font-size: 13px; }
+.dt-track-pick { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.dt-drawer-body { flex: 1; overflow-y: auto; padding: 4px 12px var(--space-m); }
+.dt-section { border-bottom: 1px solid var(--border); }
+.dt-section-h { margin: 0; font-size: inherit; }
+.dt-section-head { width: 100%; display: flex; align-items: center; gap: var(--space-s); border: 0; background: transparent;
+  padding: 12px 10px; min-height: 46px; text-align: left; border-radius: var(--radius-btn); color: var(--fg-1); }
+.dt-section-head:hover:not(:disabled) { background: var(--surface-sunken); }
+.dt-section-title { flex: 1; font-weight: 600; font-size: 14.5px; }
+.dt-section-count { font-size: 12.5px; font-weight: 600; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.dt-chev { color: var(--fg-2); transform: rotate(-90deg); transition: transform .15s ease; }
+.dt-section-head[aria-expanded="true"] .dt-chev { transform: none; }
+.dt-steps { list-style: none; margin: 0 0 var(--space-s); padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.dt-steps[hidden] { display: none; }
+.dt-step { border-radius: var(--radius-card); border: 1px solid transparent; }
+.dt-step.dt-expanded { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.dt-step-title { width: 100%; display: flex; gap: 10px; align-items: center; border: 0; background: transparent;
+  text-align: left; padding: 8px 10px; min-height: 40px; border-radius: var(--radius-card); line-height: 1.4; color: var(--fg-1); }
+.dt-step-title:hover:not(:disabled) { background: var(--surface-sunken); }
+.dt-expanded .dt-step-title:hover { background: transparent; }
+.dt-mark { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border-strong); color: var(--accent-fg);
+  display: inline-flex; align-items: center; justify-content: center; }
+.dt-mark .dt-icon svg { width: 13px; height: 13px; stroke-width: 2.2; }
+.dt-done .dt-mark { background: var(--accent); border-color: var(--accent); }
+.dt-expanded .dt-mark { border: 2px solid var(--accent); }
+.dt-step-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; }
+.dt-expanded .dt-step-name { font-weight: 600; }
+.dt-done .dt-step-name { color: var(--fg-2); text-decoration: line-through; text-decoration-color: var(--fg-3); }
+.dt-via { flex: 0 0 auto; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center;
+  background: var(--surface-sunken); color: var(--fg-2); }
+.dt-via-ai { background: var(--accent-soft); color: var(--accent); }
+.dt-mins { font-size: 12.5px; color: var(--fg-2); }
+.dt-step-details { padding: 0 12px 12px 40px; display: flex; flex-direction: column; gap: var(--space-s); }
+.dt-step-summary { margin: 0; font-size: 13px; color: var(--fg-2); line-height: 1.5; }
+.dt-step-actions { display: flex; flex-wrap: wrap; gap: var(--space-s); }
+.dt-step-actions .dt-btn:not(.primary) { background: var(--surface); }
+.dt-drawer-foot { padding: 0; border-top: 1px solid var(--border); background: var(--surface-raised); }
+.dt-finish-btn { width: 100%; display: flex; align-items: center; gap: 10px; border: 0; border-radius: 0; background: transparent;
+  padding: 16px 18px; min-height: 56px; text-align: left; font-size: 13px; color: var(--fg-2); line-height: 1.4; }
+.dt-finish-btn .dt-icon { color: var(--accent); }
+.dt-finish-btn .dt-code-inline { color: var(--fg-1); }
+.dt-finish-btn:hover:not(:disabled) { background: var(--surface-sunken); color: var(--fg-1); }
+
+/* sidebar entry + phone pill */
+.app-nav .dt-entry { width: 100%; min-height: 40px; border: 1px solid var(--border); background: var(--surface); text-align: left;
+  font: inherit; font-weight: 600; color: var(--fg-1); cursor: pointer; margin-bottom: var(--space-xs); }
+.app-nav .dt-entry:hover { background: var(--surface-sunken); }
+.app-nav .dt-entry[aria-expanded="true"] { border-color: var(--accent); background: var(--surface); color: var(--fg-1); box-shadow: inset 0 0 0 1px var(--accent); }
+.dt-entry[hidden], .dt-pill[hidden] { display: none; }
+.dt-entry .dt-entry-label { flex: 1; }
+.dt-entry-count { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg-2); }
+html[data-nav="collapsed"] .app-nav .dt-entry { justify-content: center; }
+.dt-ring-slot { display: inline-flex; flex: 0 0 auto; }
+.dt-ring { display: block; flex: 0 0 auto; }
+.dt-ring-bg { fill: none; stroke: var(--surface-sunken); }
+html[data-theme="dark"] .dt-ring-bg { stroke: var(--gray-700); }
+.dt-ring-fg { fill: none; stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .3s ease; }
+.dt-pill { display: none; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px 0 8px; border-radius: 999px;
+  border: 1px solid var(--border-strong); background: var(--surface); font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+
+/* coach mark: spotlight ring (its shadow is the scrim; it never takes a click) + card */
+.dt-ring-spot { position: fixed; z-index: 62; pointer-events: none; border-radius: 10px;
+  outline: 2px solid var(--teal-300); outline-offset: 1px; box-shadow: 0 0 0 9999px var(--dt-scrim); }
+.dt-ring-spot.dt-pulse { animation: dt-pulse 2.4s ease-in-out infinite; }
+@keyframes dt-pulse { 50% { outline-color: color-mix(in srgb, var(--teal-300) 40%, transparent); outline-offset: 4px; } }
+.dt-coach { position: fixed; z-index: 63; width: 340px; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow-y: auto;
+  background: var(--surface); color: var(--fg-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
+  box-shadow: 0 18px 48px rgba(14, 17, 19, .28); outline: none; line-height: 1.5; display: flex; flex-direction: column; gap: 12px; }
+html[data-theme="dark"] .dt-coach { border-color: var(--border-strong); box-shadow: 0 18px 48px rgba(0, 0, 0, .6); }
+html.dt-hide-launcher .ba-launcher, html.dt-hide-launcher .waj-tc-launcher { visibility: hidden; }
+/* A tab with a save bar (A4, A5): both launchers sit above the bar so Save stays
+   clickable. portal.css places them (Test agent on the bar, Build with AI above it). */
+.dt-coach:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dt-coach-head { display: flex; align-items: center; gap: var(--space-s); margin: -4px -8px -8px 0; }
+.dt-coach-head .dt-eyebrow { flex: 1; }
+.dt-coach-title { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.3; }
+.dt-body { margin: 0; color: var(--fg-2); font-size: 13.5px; line-height: 1.55; }
+.dt-coach .dt-code-label { font-weight: 600; letter-spacing: .06em; }
+.dt-coach:not(.dt-codecard) .dt-seg-tab { padding: 0 10px; }
+/* In a 300-340 px card a long call wraps rather than hiding off the edge. */
+.dt-coach:not(.dt-codecard) .dt-pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.dt-btn.dt-ai-link { color: var(--accent); padding: 0 6px; font-size: 13px; }
+.dt-btn.dt-ai-link:hover { background: var(--accent-soft); }
+.dt-yourturn { margin: 0; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;
+  background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600; line-height: 1.4; }
+html[data-theme="dark"] .dt-yourturn { color: var(--fg-1); }
+.dt-running a { font-weight: 700; }
+.dt-donewhen { margin: 0; display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: var(--fg-2); line-height: 1.45; }
+.dt-donewhen .dt-icon { color: var(--fg-2); margin-top: 1px; }
+.dt-donewhen .dt-icon svg { width: 13px; height: 13px; }
+.dt-coach-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; padding-top: 12px; border-top: 1px solid var(--border); }
+.dt-coach-foot .dt-btn-s { padding: 0 8px; }
+.dt-coach-foot .dt-dots { margin-right: 6px; }
+/* Let AI do it, Back and Skip step all on one card: the dots give way so the row fits. */
+.dt-coach:not(.dt-sheet) .dt-coach-foot:has(> :nth-child(5)) > .dt-dots { display: none; }
+.dt-dots { display: inline-flex; gap: 4px; align-items: center; }
+.dt-dot-s { width: 6px; height: 6px; border-radius: 3px; background: var(--border-strong); }
+.dt-dot-s.dt-past { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.dt-dot-s.dt-on { background: var(--accent); width: 16px; }
+.dt-coach-center { box-shadow: 0 0 0 9999px var(--dt-scrim), 0 18px 48px rgba(14, 17, 19, .28); }
+html[data-theme="dark"] .dt-coach-center { box-shadow: 0 0 0 9999px var(--dt-scrim), 0 18px 48px rgba(0, 0, 0, .6); }
+.dt-arrow { position: absolute; width: 12px; height: 12px; background: var(--surface); border: 1px solid var(--border); transform: rotate(45deg); pointer-events: none; display: none; }
+.dt-coach[data-side] { overflow: visible; }
+.dt-coach[data-side] > .dt-arrow { display: block; }
+.dt-coach[data-side="right"] > .dt-arrow { left: -7px; top: calc(var(--dt-arrow, 40px) - 6px); border-top: 0; border-right: 0; }
+.dt-coach[data-side="left"] > .dt-arrow { right: -7px; top: calc(var(--dt-arrow, 40px) - 6px); border-bottom: 0; border-left: 0; }
+.dt-coach[data-side="below"] > .dt-arrow { top: -7px; left: calc(var(--dt-arrow, 40px) - 6px); border-bottom: 0; border-right: 0; }
+.dt-coach[data-side="above"] > .dt-arrow { bottom: -7px; left: calc(var(--dt-arrow, 40px) - 6px); border-top: 0; border-left: 0; }
+.dt-coach[data-side] { max-height: none; }
+/* Code step card */
+/* Over a page's own floating panel (Test chat sits at 9999). */
+.dt-codecard { z-index: 10000; }
+.dt-codecard { width: min(880px, calc(100vw - 24px)); padding: 24px 24px 20px; border-radius: 14px; gap: 14px; }
+.dt-codecard .dt-coach-title { font-size: 20px; font-weight: 700; margin-top: -4px; }
+.dt-cc-grid { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: var(--space-m); align-items: start; }
+.dt-code-big .dt-pre { min-height: 240px; max-height: 320px; font-size: 12.5px; padding: 14px 16px; }
+.dt-cc-aside { display: flex; flex-direction: column; gap: var(--space-sm); }
+.dt-cc-notes { padding: 12px 12px 10px; border: 1px solid var(--border); border-radius: var(--radius-card); display: flex; flex-direction: column; gap: 8px; }
+.dt-cc-list { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 12.5px; line-height: 1.35; }
+.dt-cc-list dt { font-family: var(--font-mono); color: var(--accent); }
+.dt-cc-list dd { margin: 0; color: var(--fg-1); }
+.dt-cc-ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; line-height: 1.45; }
+.dt-cc-warn { margin: 0; padding: 12px; border: 1px solid var(--warning); border-radius: var(--radius-card); background: var(--warning-soft);
+  font-size: 12.5px; line-height: 1.5; color: var(--fg-1); }
+.dt-cc-foot { gap: var(--space-s); padding-top: 14px; }
+.dt-cc-foot .dt-donewhen { flex: 1 1 200px; }
+
+/* toasts: bottom of the page, clear of the drawer; Build with AI owns bottom-right */
+.dt-toasts { position: fixed; left: calc(var(--sidebar-w) + 28px); bottom: 24px; z-index: 64;
+  display: flex; flex-direction: column; gap: var(--space-s); max-width: min(620px, calc(100vw - var(--sidebar-w) - 56px)); }
+html[data-nav="collapsed"] .dt-toasts { left: calc(var(--sidebar-w-collapsed) + 28px); }
+html.dt-drawer-open .dt-toasts { left: calc(var(--sidebar-w) + 392px + 24px); max-width: min(560px, calc(100vw - var(--sidebar-w) - 440px)); }
+/* Build with AI open on the right: the toast stops short of it. */
+body.ba-open .dt-toasts { max-width: max(280px, calc(100vw - var(--sidebar-w) - 28px - 444px)); }
+html.dt-drawer-open body.ba-open .dt-toasts { max-width: max(280px, calc(100vw - var(--sidebar-w) - 416px - 444px)); }
+@media (max-width: 1383.98px) {
+  /* No room between the drawer and the panel: the toast sits at the foot of the drawer. */
+  html.dt-drawer-open body.ba-open .dt-toasts { left: calc(var(--sidebar-w) + 12px); bottom: 72px; max-width: 368px; }
+  html.dt-drawer-open[data-nav="collapsed"] body.ba-open .dt-toasts { left: calc(var(--sidebar-w-collapsed) + 12px); }
+}
+.dt-toast { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; min-height: 46px;
+  background: var(--gray-900); color: var(--gray-0); border-radius: var(--radius-card); box-shadow: 0 10px 28px rgba(14, 17, 19, .3);
+  animation: dt-rise .18s ease-out; font-size: 14px; }
+html[data-theme="dark"] .dt-toast { background: var(--gray-100); color: var(--gray-900); }
+.dt-toast-check { width: 22px; height: 22px; border-radius: 50%; background: var(--teal-500); color: #fff; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.dt-toast-check .dt-icon svg { width: 13px; height: 13px; stroke-width: 2.2; }
+.dt-toast-text { flex: 1; line-height: 1.4; min-width: 55%; }
+.dt-toast-next { border: 0; background: transparent; padding: 0 4px; min-height: 30px; color: var(--teal-300); font-weight: 600; font-size: 14px; text-decoration: underline; text-underline-offset: 2px; }
+html[data-theme="dark"] .dt-toast-next { color: var(--teal-600); }
+a.dt-toast-next { display: inline-flex; align-items: center; flex: 0 1 auto; line-height: 1.3; }
+.dt-toast .dt-x { color: inherit; opacity: .75; }
+.dt-toast .dt-x:hover { background: transparent; opacity: 1; }
+
+/* resume card on Overview */
+.dt-resume-mount[hidden] { display: none; }
+.dt-resume { display: flex; align-items: center; gap: var(--space-m); flex-wrap: wrap; margin: 0 0 var(--space-m);
+  padding: 18px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
+.dt-resume-text { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.dt-resume-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-s); }
+.dt-resume-title .dt-h { font-size: 15px; font-weight: 700; }
+.dt-resume-line { margin: 0; font-size: 14px; color: var(--fg-1); line-height: 1.45; }
+.dt-resume .dt-actions { margin-left: auto; gap: var(--space-sm); }
+
+/* phone: sheets */
+@media (max-width: 639.98px) {
+  .dt-pill { display: inline-flex; }
+  /* The pill joins the phone top bar's first row (menu, search, environment,
+     theme): tighten that row so the theme button does not wrap under it. */
+  .app-topbar:has(.dt-pill:not([hidden])) { column-gap: 4px; }
+  .app-topbar:has(.dt-pill:not([hidden])) .env-switcher a { padding-left: 5px; padding-right: 5px; letter-spacing: 0; font-size: 11px; }
+  .app-topbar .dt-pill { gap: 4px; padding: 0 8px 0 6px; }
+  .dt-grabber { display: block; }
+  .dt-overlay { padding: 56px 0 0; align-items: stretch; }
+  .dt-modal { width: 100%; max-height: none; height: 100%; border-radius: 16px 16px 0 0; padding-top: 10px; }
+  .dt-modal-head { padding: 6px 16px 4px; }
+  .dt-h-xl { font-size: 21px; }
+  .dt-modal-head .dt-lead { display: none; }
+  .dt-modal-body, .dt-modal-foot { padding-left: 16px; padding-right: 16px; }
+  .dt-modal-body { flex: 1; }
+  .dt-goals { grid-template-columns: 1fr; gap: 10px; }
+  .dt-goal { flex-direction: row-reverse; padding: 12px 14px; }
+  .dt-goal:has(input:checked) { padding: 11px 13px; }
+  .dt-goal-text { gap: 2px; }
+  .dt-modal-foot { flex-direction: column-reverse; align-items: stretch; }
+  .dt-modal-foot .dt-actions { width: 100%; flex-direction: column-reverse; align-items: stretch; margin: 0; }
+  .dt-modal-foot .dt-actions .dt-btn { width: 100%; min-height: 48px; }
+  .dt-welcome .dt-foot-note, .dt-welcome .dt-options { display: none; }
+  .dt-finish .dt-modal-head { flex-wrap: wrap; }
+  .dt-ways { grid-template-columns: 1fr; }
+  .dt-stat { padding: 0 12px; }
+  .dt-stat strong { font-size: 18px; }
+  .dt-drawer, html[data-nav="collapsed"] .dt-drawer, body.ba-open .dt-drawer { left: 0; right: 0; top: 56px; width: 100%; max-width: none;
+    border-right: 0; border-left: 0; border-radius: 16px 16px 0 0; box-shadow: 0 0 0 9999px var(--dt-scrim); transform: translateY(16px); z-index: 70; padding-top: 10px; }
+  .dt-drawer.dt-in { transform: none; }
+  .dt-drawer-head { padding-top: 4px; }
+  .dt-coach.dt-sheet { left: 0; right: 0; bottom: 0; top: auto; width: 100%; max-width: none; max-height: 62vh;
+    border-radius: 16px 16px 0 0; border-width: 1px 0 0; padding: 10px 16px calc(16px + env(safe-area-inset-bottom)); }
+  .dt-coach.dt-sheet:not(.dt-coach-center) { box-shadow: 0 -10px 32px rgba(14, 17, 19, .25); }
+  .dt-sheet .dt-coach-foot { border-top: 0; padding-top: 4px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .dt-sheet .dt-coach-foot.dt-foot-one { grid-template-columns: 1fr; }
+  .dt-sheet .dt-coach-foot .dt-btn { min-height: 46px; width: 100%; }
+  .dt-sheet .dt-coach-foot .dt-btn:not(.primary) { border-color: var(--border-strong); background: var(--surface); }
+  .dt-mini-toggle { display: none; align-self: flex-start; }
+  .dt-coach.dt-sheet-mini > :not(.dt-coach-head):not(.dt-coach-title):not(.dt-yourturn):not(.dt-mini-toggle):not(.dt-grabber) { display: none; }
+  .dt-coach.dt-sheet-mini .dt-mini-toggle { display: inline-flex; }
+  .dt-coach.dt-sheet-mini { gap: 8px; }
+  .dt-coach.dt-sheet.dt-sheet-top { top: 0; bottom: auto; border-radius: 0 0 16px 16px; border-width: 0 0 1px; padding-top: 12px; }
+  .dt-coach.dt-sheet.dt-sheet-top .dt-grabber { display: none; }
+  /* Folded at the top edge: above a page's own floating panel (Test chat), and
+     short enough to leave that panel's header clear. */
+  .dt-coach.dt-sheet, .dt-coach.dt-sheet.dt-sheet-top { z-index: 10000; }
+  .dt-coach.dt-sheet-mini.dt-sheet-top > .dt-coach-title { display: none; }
+  .dt-cc-grid { grid-template-columns: 1fr; }
+  .dt-codecard.dt-sheet { max-height: 86vh; }
+  .dt-code-big .dt-pre { min-height: 0; }
+  .dt-cc-foot .dt-btn { grid-column: auto; }
+  .dt-toasts, html.dt-drawer-open .dt-toasts, html[data-nav="collapsed"] .dt-toasts { left: 8px; right: 8px; bottom: 8px; max-width: none; }
+  /* Full width at the foot: above the Test agent launcher, which sits there too. */
+  .dt-toasts { z-index: 10001; }
+  html.dt-coach-sheet .ba-launcher, html.dt-coach-sheet .waj-tc-launcher { display: none; }
+  /* The checklist is a sheet too: neither launcher floats over it. */
+  html.dt-drawer-open .ba-launcher, html.dt-drawer-open .waj-tc-launcher { visibility: hidden; }
+  .dt-finish .dt-modal-foot.dt-finish-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .dt-finish-foot .dt-spacer { display: none; }
+  .dt-finish-foot .dt-link { grid-column: 1 / -1; text-align: center; padding: 6px 0; }
+  .dt-finish-foot > .ghost { grid-column: 1 / -1; order: 5; }
+  .dt-finish-foot .dt-btn { width: 100%; min-height: 44px; }
+  .dt-resume { padding: 14px 44px 14px 14px; position: relative; }
+  .dt-resume .dt-x { position: absolute; top: 4px; right: 4px; }
+  .dt-resume-ring { display: none; }
+  .dt-resume .dt-actions { width: 100%; justify-content: flex-start; margin: 0; }
+}
+@media (pointer: coarse) {
+  .dt-btn, .dt-btn-s, .dt-x, .dt-seg-tab, .dt-copy, .dt-link, .dt-incode > summary, .dt-pill, .dt-toast-next, .dt-step-title,
+  .dt-section-head, .dt-finish-btn, .app-nav .dt-entry { min-height: 44px; }
+  .dt-x { width: 44px; }
+  .dt-copy.dt-copy-icon { width: 44px; top: 2px; right: 2px; }
+  .dt-pre:has(+ .dt-copy-icon) { padding-right: 52px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dt-drawer, .dt-modal, .dt-toast, .dt-progress-fill, .dt-ring-fg, .dt-chev { transition: none; animation: none; }
+  .dt-drawer { transform: none; }
+  .dt-ring-spot, .dt-ring-spot.dt-pulse, .dt-dot { animation: none; }
+}
+
+/* The guided tour's strip (builder-assistant.js), under the header while a tour step's prompt runs. */
+.ba-tour-strip { display: flex; align-items: center; gap: 8px; padding: 10px var(--space-m); background: var(--accent-soft); border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--accent); }
+.ba-tour-strip[hidden] { display: none; }
+.ba-tour-strip svg { flex: none; }
+.ba-tour-strip-label { flex: 1; min-width: 0; }
+.ba-tour-back { background: none; border: 0; padding: 4px 0; font: inherit; font-weight: 600; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.ba-tour-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (pointer: coarse) { .ba-tour-back { min-height: 44px; } }

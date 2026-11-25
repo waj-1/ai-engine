@@ -1682,6 +1682,32 @@ tr.diff-changed td { background: var(--warning-soft); }
   background: var(--surface); border-left: 1px solid var(--border);
   box-shadow: -8px 0 24px rgba(0, 0, 0, .12);
 }
+/* An agent page also has the Test chat's launcher (test-chat.js: 24px from the
+   corner, or above the save bar). This one stacks above it, right edges lined
+   up, so neither covers the other. Phones: the same in the 640px block. */
+/* A page with a save bar (agents.js sets --savebar-h): above the bar, so the
+   launcher never covers Save. */
+body:has([data-savebar]) .ba-launcher { bottom: calc(var(--savebar-h, 64px) + 12px); }
+body:has(#waj-test-chat-root) .ba-launcher { right: 24px; bottom: calc(24px + 52px); }
+body:has([data-savebar]):has(#waj-test-chat-root) .ba-launcher { bottom: calc(var(--savebar-h, 64px) + 20px + 52px); }
+/* A phone's first visit (builder-assistant.js): a small note above the
+   launcher, and a soft ring on the launcher. Never blocks the page. */
+.ba-hint {
+  position: fixed; z-index: 60; right: var(--space-sm); bottom: calc(max(var(--space-sm), env(safe-area-inset-bottom)) + 52px);
+  max-width: min(280px, calc(100vw - 2 * var(--space-sm))); display: flex; align-items: center; gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm); font-size: 13.5px; line-height: 1.35;
+  background: var(--surface-raised); color: var(--fg-1); border: 1px solid var(--border); border-radius: var(--radius-btn);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .14);
+}
+.ba-hint-close { flex: none; font-size: 20px; line-height: 1; min-width: 40px; min-height: 40px; padding: 0; }
+body:has(#waj-test-chat-root) .ba-hint { bottom: calc(max(var(--space-sm), env(safe-area-inset-bottom)) + 108px); }
+body:has([data-savebar]) .ba-hint { bottom: calc(var(--savebar-h, 64px) + 12px + 52px); }
+.ba-launcher.ba-launcher-nudge { animation: ba-nudge 1.8s ease-out 3; }
+@keyframes ba-nudge {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent), 0 4px 16px rgba(0, 0, 0, .18); }
+  100% { box-shadow: 0 0 0 14px transparent, 0 4px 16px rgba(0, 0, 0, .18); }
+}
+@media (prefers-reduced-motion: reduce) { .ba-launcher.ba-launcher-nudge { animation: none; } }
 .ba-panel[hidden], .ba-launcher[hidden] { display: none; }
 .ba-head { display: flex; align-items: flex-start; gap: var(--space-xs); padding: var(--space-m); border-bottom: 1px solid var(--border); }
 .ba-head > div { flex: 1; display: flex; flex-direction: column; gap: 2px; }
@@ -1695,6 +1721,10 @@ tr.diff-changed td { background: var(--warning-soft); }
 .ba-steps { display: flex; flex-direction: column; gap: 4px; }
 .ba-step { font-size: 12px; color: var(--fg-2); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .ba-step code { font-size: 11.5px; }
+/* The mark sits in the row's padding, not in the flex row: a label longer than
+   the panel then wraps beside it instead of dropping below a lone mark. */
+.ba-step { position: relative; padding-left: 1.2em; }
+.ba-step::before { position: absolute; left: 0; top: 0; }
 .ba-step.ok::before { content: "\2713"; color: var(--accent); }
 .ba-step.bad::before { content: "\2715"; color: var(--error); }
 .ba-step.run::before { content: "\2026"; }
@@ -1710,3 +1740,255 @@ tr.diff-changed td { background: var(--warning-soft); }
 .ba-chips.ba-chips-compact .chip-btn { flex: none; font-size: 11.5px; padding: 3px 9px; }
 .ba-step-label { color: var(--fg-1); }
 .ba-foot summary { cursor: pointer; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Small screens (phones and touch). Everything below is scoped to a phone
+   width (max-width: 720px), a touch pointer (pointer: coarse) or both, so the
+   desktop layout is untouched. Principles:
+   - the page is never wider than the screen: the sidebar becomes an
+     off-canvas drawer, grids go to one column, and anything genuinely wide
+     (a table, a code block) scrolls inside its own container
+     (admin/static/mobile.js wraps tables that do not fit);
+   - touch targets are at least 40px and form fields are 16px on touch, so iOS
+     does not zoom the page when one is focused;
+   - full-screen sheets (Build with AI, Test chat, search, dialogs) size to
+     the visible viewport (--vvh / --vv-top from mobile.js, 100dvh otherwise)
+     so their composer stays above the on-screen keyboard.
+   ════════════════════════════════════════════════════════════════════════════ */
+.nav-menu-btn, .nav-backdrop { display: none; }
+/* A scroll box clips an absolutely positioned child (the .sr-only labels in
+   table headers) only when it is that child's containing block; otherwise the
+   label escapes and widens the page whenever the table scrolls (any width). */
+.table-wrap, .table-scroll, .scroll-x, .tabulator-host { position: relative; }
+
+@media (max-width: 720px) {
+  /* -- shell: one column, the sidebar slides in over the page ------------- */
+  .app-shell, html[data-nav="collapsed"] .app-shell { grid-template-columns: minmax(0, 1fr); }
+  .app-nav {
+    position: fixed; z-index: 150; top: 0; bottom: 0; left: 0;
+    width: min(280px, 86vw); height: 100vh; height: 100dvh;
+    padding-top: max(var(--space-sm), env(safe-area-inset-top));
+    padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom));
+    transform: translateX(-105%); visibility: hidden;
+    transition: transform .2s ease, visibility 0s linear .2s;
+    box-shadow: 8px 0 32px rgba(0, 0, 0, .2);
+  }
+  html[data-nav-open] .app-nav { transform: none; visibility: visible; transition: transform .2s ease; }
+  .nav-backdrop { display: block; position: fixed; inset: 0; z-index: 149; background: rgba(14, 17, 19, .45);
+    opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+  html[data-nav-open] .nav-backdrop { opacity: 1; pointer-events: auto; }
+  html[data-nav-open], html[data-nav-open] body { overflow: hidden; }
+  html[data-nav-open] .ba-launcher, html[data-nav-open] .ba-hint, html[data-nav-open] #waj-test-chat-root { visibility: hidden; }
+  /* In the drawer the labels always show, whatever the desktop rail setting. */
+  html[data-nav="collapsed"] .nav-label { display: inline; }
+  html[data-nav="collapsed"] .app-nav .nav-link { justify-content: flex-start; padding: var(--space-xs) var(--space-s); }
+  html[data-nav="collapsed"] .nav-brand { justify-content: flex-start; padding: var(--space-xs) var(--space-s); }
+  html[data-nav="collapsed"] .nav-user { justify-content: flex-start; }
+  html[data-nav="collapsed"] .nav-signout { display: block; }
+  .app-nav .nav-link { min-height: 44px; font-size: 14px; }
+  .nav-collapse-btn { display: none; }
+  .nav-menu-btn { display: inline-flex; flex: 0 0 auto; }
+
+  /* -- top bar: menu, title, then the icon-sized search, env, theme -------- */
+  /* Row 1: menu, then search, environment and theme on the right.
+     Row 2: the page title, full width, so it is never cut to a letter. */
+  .app-topbar { height: auto; min-height: 52px; gap: var(--space-xs) var(--space-s); flex-wrap: wrap;
+    padding: max(var(--space-xs), env(safe-area-inset-top)) var(--space-sm) var(--space-xs); }
+  .app-topbar .titles { order: 10; flex: 1 1 100%; min-width: 0; }
+  .app-topbar .titles:not(:has(h1:not(:empty))) { display: none; }
+  .app-topbar .titles h1 { font-size: 17px; }
+  .app-topbar .spacer { display: none; }
+  .app-topbar .global-search { flex: 0 0 auto; min-width: 0; margin-left: auto; }
+  body:has(.ba-launcher:not([hidden])) .app-content,
+  body:has(#waj-test-chat-root) .app-content { padding-bottom: 96px; }
+  .gs-trigger { width: 40px; height: 40px; padding: 0; justify-content: center; }
+  .env-switcher a { padding: var(--space-xxs) var(--space-xs); letter-spacing: .2px; font-size: 12px;
+    display: inline-flex; align-items: center; min-height: 40px; }
+  .app-content { padding: var(--space-m) var(--space-sm) var(--space-l); overflow-wrap: anywhere; }
+  .app-content table { overflow-wrap: normal; }
+
+  /* -- banners take less of the first screen ------------------------------ */
+  .demo-banner, .env-banner { padding: var(--space-xs) var(--space-sm); font-size: 12.5px; line-height: 1.4;
+    gap: 2px var(--space-s); margin-bottom: var(--space-sm); }
+  .demo-banner a, .env-banner a { margin-left: 0; }
+
+  /* -- headings, grids and rows go to one column -------------------------- */
+  .page-head, .verdict-banner { gap: var(--space-sm); }
+  .page-head .page-head-text { flex-basis: 100%; }
+  .form-grid-2, .grid-2, .grid-3, .chart-grid, .diff-cols, .legacy-grid, .model-form,
+  .model-form-wide, .form-grid, .field-grid, .check-grid, .actions-grid, .settings-grid { grid-template-columns: minmax(0, 1fr); }
+  .tile-grid, .agent-health-grid, .template-grid, .template-pick-grid { grid-template-columns: minmax(0, 1fr); }
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .diff-sides { grid-template-columns: minmax(0, 1fr); }
+  .diff-arrow { transform: rotate(90deg); }
+  .field, .form-stack, .deploy-form, .settings-list, .quote, .form-grid-2 .span-2 { max-width: 100%; }
+  .agents-search, .team-search, .runs-filters select { width: 100%; max-width: 100%; min-width: 0; }
+  .agents-table .agent-cell { min-width: 0; max-width: none; }
+  /* "Can use" (5th column) is in the agent's own page; the list keeps name, channel, status. */
+  .agents-table th:nth-child(5), .agents-table td:nth-child(5) { display: none; }
+  .agents-sub-of { max-width: 100%; }
+  .attached-row { flex-wrap: wrap; gap: var(--space-s); padding: var(--space-sm); }
+  .attached-actions { margin-left: auto; }
+  .health-strip { gap: var(--space-m); }
+  .health-action { margin-left: 0; }
+  .mini-bar-label { flex-basis: 96px; }
+  .verdict-main { flex-basis: 100%; }
+  .case-row > summary { padding: var(--space-s) var(--space-sm); }
+  .case-body { padding: var(--space-sm); }
+
+  /* -- strips of tabs and segmented controls scroll sideways -------------- */
+  .tab-strip, .section-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .tab-strip .tab, .section-tabs .section-tab { white-space: nowrap; flex: 0 0 auto; }
+  .segmented { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .segmented > * { flex: 0 0 auto; white-space: nowrap; }
+
+  /* -- wide content scrolls inside its own box ---------------------------- */
+  .table-wrap, .table-scroll, .scroll-x { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab-strip, .section-tabs, .segmented { position: relative; }
+  .table-wrap > table { overflow-wrap: normal; }
+  pre, .code-block, .raw-json, .markdown-body pre { max-width: 100%; overflow-x: auto; }
+  code, .mono, .technical, .gs-tech { overflow-wrap: anywhere; }
+  img, svg, canvas, video { max-width: 100%; }
+  .tabulator-host { max-width: 100%; }
+
+  /* -- menus and pickers never hang off the screen ------------------------ */
+  .menu-panel, .menu-list, .combobox-panel, .switcher-panel { max-width: calc(100vw - 2 * var(--space-sm)); }
+  /* The agent switcher opens under the breadcrumb: pin it to the screen edges. */
+  .switcher-panel { position: fixed; left: var(--space-sm); right: var(--space-sm); top: auto; width: auto; }
+  .info-pop-body { position: fixed; left: var(--space-sm); right: var(--space-sm); top: auto; width: auto; max-width: none; }
+
+  /* -- dialogs and drawers become full-screen sheets ---------------------- */
+  dialog, dialog.dialog, dialog.dialog-wide, dialog.drawer, dialog.drawer.wide, .promote-dialog {
+    width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: 100vh; max-height: 100dvh;
+    margin: 0; border-radius: 0; border-width: 0;
+    padding: max(var(--space-m), env(safe-area-inset-top)) var(--space-m) max(var(--space-m), env(safe-area-inset-bottom));
+    overflow-y: auto; }
+  dialog.drawer { padding: 0; }
+  dialog.drawer .drawer-body { padding: var(--space-m); }
+  .model-form-actions { bottom: 0; }
+  .prompt-editor.is-expanded { inset: 0; border-radius: 0; }
+
+  /* -- sticky save bar: fits the narrower padding --------------------------- */
+  .savebar { margin-left: calc(-1 * var(--space-sm)); margin-right: calc(-1 * var(--space-sm));
+    padding: var(--space-s) var(--space-sm); padding-bottom: max(var(--space-s), env(safe-area-inset-bottom)); gap: var(--space-s); }
+  [data-tab-root] { min-height: 0; }
+
+  /* -- the Ctrl-K palette is a full-screen sheet --------------------------- */
+  .gs-overlay { padding: 0; align-items: stretch; }
+  .gs-palette { max-width: none; border-radius: 0; border: 0;
+    height: var(--vvh, 100dvh); max-height: none; margin-top: var(--vv-top, 0); }
+  .gs-esc { min-width: 44px; min-height: 40px; }
+  .gs-footer { display: none; }
+  .gs-row { min-height: 44px; }
+
+  /* -- small text: nothing under 12px on a phone ---------------------------- */
+  .caption, .hint, .eyebrow, .chip, .kpi-delta, .gs-ctx, .gs-type, .gs-group, .tile-meta,
+  .filter-label, .technical, .small-code, .bubble-role, .chart-card figcaption, .vbar-label,
+  .table thead th, .form-table thead th, .form-table, .tabulator, .tabulator .tabulator-header,
+  .mini-bar-row, .gs-tech, .field-label, .field .hint, .pill, .pill.ok, .pill.warn, .pill.bad, .filter-bar label, .demo-banner strong,
+  .env-banner strong, .gs-esc kbd, .cv-row .cv-time, .cv-row .cv-row-meta, .cv-row .cv-row-meta .chip,
+  .ox-turn .ox-turn-role, .ox-turn-role .num { font-size: 12px; }
+}
+
+/* Touch: 40px tap targets and 16px form fields (iOS zooms the page when a
+   field under 16px gets focus). Applies to touch tablets and to every phone
+   width; a mouse on a desktop-sized window keeps the compact sizes. */
+@media (pointer: coarse), (max-width: 720px) {
+  :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select),
+  .gs-input-row input, .tabulator .tabulator-header-filter input, textarea.code-block, input.mono { font-size: 16px; }
+  input[type=checkbox], input[type=radio] { width: 20px; height: 20px; flex: 0 0 auto; }
+  button, .btn, a.btn, .button, select, summary.btn,
+  .tab-strip .tab, .section-tabs .section-tab, .segmented > a, .segmented > button, .segmented > label,
+  .filter-chip, .chip-btn, .menu-panel > a, .menu-panel > button, .menu-panel > form > button,
+  .switcher-item, .combobox-option {
+    min-height: 40px; }
+  .tab-strip .tab, .section-tabs .section-tab, .segmented > a, .segmented > button, .segmented > label,
+  .menu-panel > a, .switcher-item { display: inline-flex; align-items: center; }
+  button, .btn { align-items: center; }
+  .icon-btn, .ba-icon, details.menu > summary { min-width: 40px; min-height: 40px; }
+  input:not([type=checkbox]):not([type=radio]):not([type=range]), select { min-height: 40px; }
+  .nav-collapse-btn { min-height: 0; }
+  /* Rows a whole card wide are their own tap target. */
+  details > summary { min-height: 40px; }
+}
+
+/* Reduced motion: no slide-in for the drawer or sheets. */
+@media (prefers-reduced-motion: reduce) {
+  .app-nav, .nav-backdrop, dialog.drawer[open] { transition: none !important; animation: none !important; }
+}
+
+/* ── Build with AI (demo) and Test chat on a phone: full-screen sheets ───── */
+@media (max-width: 640px) {
+  .ba-panel {
+    top: var(--vv-top, 0); bottom: auto; left: 0; right: 0;
+    width: 100%; height: 100vh; height: var(--vvh, 100dvh);
+    border-left: 0; box-shadow: none; z-index: 160;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  body.ba-open { overflow: hidden; }
+  .ba-head { padding: max(var(--space-s), env(safe-area-inset-top)) var(--space-sm) var(--space-s); align-items: center; }
+  .ba-head .caption { display: none; }
+  .ba-head strong { font-size: 15px; }
+  #ba-close { font-size: 26px; line-height: 1; min-width: 44px; min-height: 44px; }
+  #ba-new { min-height: 40px; }
+  .ba-log { padding: var(--space-sm); overscroll-behavior: contain; }
+  .ba-msg { font-size: 15px; }
+  .ba-user { max-width: 90%; }
+  .ba-step { font-size: 13.5px; gap: 2px 6px; padding: 2px 0 2px 1.2em; }
+  .ba-step::before { top: 2px; }
+  .ba-step:has(> a)::before { line-height: 32px; }
+  .ba-step code { font-size: 12px; }
+  .ba-step a { display: inline-flex; align-items: center; min-height: 32px; }
+  .ba-msg pre { max-width: 100%; overflow-x: auto; font-size: 12.5px; }
+  .ba-msg table { display: block; max-width: 100%; overflow-x: auto; }
+  /* Starter prompts: one swipeable row, so the log keeps the height. */
+  .ba-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: var(--space-xs) var(--space-sm); }
+  .ba-chips .chip-btn, .ba-chips.ba-chips-compact .chip-btn { flex: none; font-size: 13px; padding: 4px 12px; }
+  .ba-form { padding: 0 var(--space-sm) var(--space-xs); align-items: flex-end; }
+  .ba-form textarea { font-size: 16px; min-height: 44px; max-height: 30vh; }
+  .ba-form button { min-height: 44px; }
+  .ba-foot { padding: 0 var(--space-sm) var(--space-xs); }
+  .ba-foot summary { min-height: 40px; display: flex; align-items: center; }
+  .ba-launcher { right: var(--space-sm); bottom: max(var(--space-sm), env(safe-area-inset-bottom)); }
+  /* Both launchers on an agent page: the Test chat one sits above this one. */
+  body:has(#waj-test-chat-root) .ba-launcher { right: var(--space-sm); bottom: calc(max(var(--space-sm), env(safe-area-inset-bottom)) + 56px); }
+  body:has([data-savebar]):has(#waj-test-chat-root) .ba-launcher { bottom: calc(var(--savebar-h, 64px) + 12px + 56px); }
+
+  /* Test chat (admin/static/test-chat.js): its own styles are injected with
+     class selectors, so these use the root id to win. */
+  #waj-test-chat-root { right: var(--space-sm) !important; bottom: max(var(--space-sm), env(safe-area-inset-bottom)) !important; }
+  #waj-test-chat-root:has(.waj-tc-open) {
+    left: 0; right: 0 !important; bottom: auto !important; top: var(--vv-top, 0);
+    height: 100vh; height: var(--vvh, 100dvh); z-index: 160;
+  }
+  #waj-test-chat-root .waj-tc-panel { width: 100%; height: 100%; border-radius: 0; border: 0;
+    padding-bottom: env(safe-area-inset-bottom); }
+  #waj-test-chat-root .waj-tc-header { padding: max(var(--space-s), env(safe-area-inset-top)) var(--space-sm) var(--space-s); }
+  #waj-test-chat-root .waj-tc-title-name { font-size: 15px; }
+  #waj-test-chat-root .waj-tc-close { font-size: 26px; min-width: 44px; min-height: 44px; }
+  #waj-test-chat-root .waj-tc-bubble { font-size: 15px; max-width: 88%; }
+  #waj-test-chat-root .waj-tc-input { font-size: 16px; min-height: 44px; }
+  #waj-test-chat-root .waj-tc-send { min-height: 44px; }
+  #waj-test-chat-root .waj-tc-business, #waj-test-chat-root .waj-tc-case { font-size: 16px; min-height: 40px; }
+  #waj-test-chat-root .waj-tc-ctxbar-label, #waj-test-chat-root .waj-tc-answering, #waj-test-chat-root .waj-tc-title-eyebrow,
+  #waj-test-chat-root .waj-tc-status { font-size: 12px; }
+  #waj-test-chat-root .waj-tc-launcher { font-size: 13px; min-height: 44px; }
+  body:has(#waj-test-chat-root .waj-tc-open) { overflow: hidden; }
+  /* One full-screen sheet at a time: the other launcher stays off it. */
+  body.ba-open #waj-test-chat-root:not(:has(.waj-tc-open)) { visibility: hidden; }
+  body:has(#waj-test-chat-root .waj-tc-open) .ba-launcher { visibility: hidden; }
+  body:has([data-savebar]) #waj-test-chat-root:not(:has(.waj-tc-open)) { bottom: calc(var(--savebar-h, 64px) + 12px) !important; }
+}
+
+/* Tablet widths with the sidebar expanded: the search box gives way first. */
+@media (max-width: 900px) { .app-topbar .global-search { min-width: 0; } }
+
+/* Sign-in and first-run pages (login.html, setup.html): a card with room
+   around it, not edge to edge. */
+@media (max-width: 720px) {
+  body.standalone-page { padding: max(var(--space-m), env(safe-area-inset-top)) var(--space-sm) var(--space-m) !important;
+    place-items: start center !important; }
+  body.standalone-page > .card { padding: var(--space-ml) var(--space-m) !important; }
+  body.standalone-page .setup-steps { flex-direction: column; gap: var(--space-xs); }
+  body.standalone-page .setup-example pre { padding-right: 72px; }
+}

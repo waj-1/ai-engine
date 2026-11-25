@@ -1,0 +1,36 @@
+/* The builder assistant panel's voice controls (builder-assistant.js):
+ * the microphone button and the call's strip. Scoped to `.ba-panel`; loaded
+ * only where the public demo's voice is on (admin/templates/_base.html). */
+.ba-panel .ba-mic {
+  flex: none; align-self: stretch; display: inline-flex; align-items: center;
+  justify-content: center; min-width: 44px; padding: 0 10px;
+}
+.ba-panel .ba-mic[aria-pressed="true"] {
+  background: var(--error); border-color: var(--error); color: #fff;
+}
+.ba-panel .ba-mic[aria-pressed="true"] svg { animation: ba-mic-pulse 1.6s ease-in-out infinite; }
+.ba-panel .ba-mic:disabled { opacity: 0.5; cursor: not-allowed; }
+@keyframes ba-mic-pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) {
+  .ba-panel .ba-mic[aria-pressed="true"] svg { animation: none; }
+}
+.ba-panel .ba-voice[hidden] { display: none; }
+.ba-panel .ba-voice {
+  margin: 0 var(--space-m) var(--space-xs); padding: var(--space-xs) var(--space-s);
+  border: 1px solid var(--border); border-radius: var(--radius-btn);
+  background: var(--surface-raised); min-width: 0;
+}
+.ba-panel .ba-voice-status { margin: 0; overflow-wrap: anywhere; }
+.ba-panel .ba-voice-log {
+  max-height: 6.5em; overflow-y: auto; overflow-wrap: anywhere;
+}
+/* A rule between the status line and the scrolled transcript, so a line
+   half scrolled out of view does not read as printed over the status. */
+.ba-panel .ba-voice-log { margin-top: 4px; border-top: 1px solid var(--border); padding-top: 2px; }
+.ba-panel .ba-voice-log:empty { display: none; }
+.ba-panel .ba-voice-log p { font-size: 12.5px; }
+.ba-panel .ba-msg .ba-said { font-size: 11.5px; color: var(--fg-2); display: block; margin-bottom: 2px; }
+@media (max-width: 640px) {
+  .ba-panel .ba-voice-log { max-height: 4.5em; }
+  .ba-panel .ba-mic { min-width: 48px; }
+}

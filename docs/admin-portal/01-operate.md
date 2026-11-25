@@ -77,7 +77,9 @@ calls have their own sources and are unchanged.
    profile, `agent_kind` muted underneath): conversations (+delta), needs
    attention, handed to a person, failed actions of actions, avg response, a
    sparkline (conversations per hour/day), and a link into Conversations
-   pre-filtered by agent and period.
+   pre-filtered by agent and period. The generic agents all share the kind
+   `custom`, so each gets a row of its own, named and linked by its slug
+   (`agent_kind=custom:<slug>`); the shared kind is never named after one of them.
 4. **Needs attention** — failing spans of the period grouped by **cause**
    (`overview.group_failures`): "*Send payment link failed — the service did not
    respond in time* ×7", with conversations affected, agents, last seen, the raw
@@ -138,6 +140,23 @@ calls have their own sources and are unchanged.
    own filter bar + CSV export. The charts fetch only when the section is first
    opened; an empty window or a dead source collapses the grid into **one**
    empty state instead of 14 "No data" boxes.
+   Tokens, cost and model-call counts here (and on the Conversations list and a
+   conversation's detail) count each model call ONCE: on OpenAI / Azure OpenAI
+   models a call is stored as two spans and the store's own per-trace totals add
+   both (`core/llm_calls.py`). The rollup and the by-agent charts list each generic
+   (`custom`) agent on its own row, by slug; a product kind is one row.
+   Test traffic and the engine's own background work are not an agent's traffic and
+   get rows of their own, after the agents, named from what the engine stamps on the
+   trace (`observability.activity_class`): **Test runs** (an agent's turns made by a
+   test run: the trace's `waj.eval.run_id`), **Test judge** (the test runner's own
+   trace, which holds the judge's model calls: `eval_suite::…`), **Builder assistant**
+   (`demo.builder_assistant`), **Conversation insights** (`conversation.insights`),
+   **Embeddings**, **Admin tools (MCP)**, **Voice call measurements** and **Other
+   model calls** (a bare model call no root span was opened for). They used to be one
+   row, "Unlabelled agent / unknown", and a test run's turns were counted in the
+   agent's row. Every trace is in exactly one row, so the totals and the token spend
+   are what they were. A trace nothing identifies still reads "Unlabelled agent".
+   The per-agent volume chart shows agents only.
 
 No conversations in the period → one empty state ("No conversations in the last
 7 days — Test an agent →").
@@ -481,7 +500,10 @@ span.
   the Overview rollups too): **untagged** traces whose top span is the admin MCP's
   own tool call (`ResponseStreamWriter`) or a bare LLM / embedding call
   (`gemini.generate_content[_stream]`, `ChatGoogleGenerativeAI.chat`,
-  `openai.embeddings`), and **test traffic**: the eval runner's `eval_suite::*`
+  `openai.embeddings`, and the same bare calls on OpenAI, Azure OpenAI and Anthropic
+  models: `ChatOpenAI.chat`, `AzureChatOpenAI.chat`, `openai.chat`, `ChatAnthropic.chat`,
+  `anthropic.chat`), the public demo's Builder assistant (`demo.builder_assistant`),
+  and **test traffic**: the eval runner's `eval_suite::*`
   traces and every agent request carrying `waj.eval.run_id`. Before that, 62 of
   the newest 100 prod rows were MCP calls, all shown as *Unlabelled agent*. Test
   traffic shown with Show background gets the *Test call* chip; each eval case
@@ -551,6 +573,12 @@ span.
   the turn), the linked chat-session metadata (agent kind, business, branch, locale,
   message count, title, session id), a per-tool calls/errors rollup, and any error
   spans. Consolidates the numbers the retired Sessions page used to show.
+- **Voice calls with an agent called at its own address**
+  (`WS /v1/agents/{slug}/voice`) are saved as a conversation when the call ends
+  (`voice/live/call_log.py`): the greeting and every turn the voice model
+  answered by itself, at the time it was said, next to the turns the agent
+  looked up (those are saved by the chat turn itself, worded as the voice model
+  asked them). The list shows the call under the agent with the channel Voice.
 - **Audio tab** — **listen to the conversation's voice calls**, real and simulated
   alike. Every `/voice/live` call is captured at the websocket edge
   (`voice/live/recorder.py`, on by default via `VOICE_RECORDING_ENABLED`) and stored

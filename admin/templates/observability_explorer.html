@@ -280,7 +280,7 @@
         <span>{{ total }} conversation{{ 's' if total != 1 }}</span>
         <span>{% for h, label in hours_options %}{% if h == past_hours %}{{ label }}{% endif %}{% endfor %}</span>
       </div>
-      <div class="cv-list" id="ox-trace-list">
+      <div class="cv-list" id="ox-trace-list" data-tour="conversation-list">
         {% for g in groups %}
         {% set conv = {
           'agent': g.agent_name, 'channel': ('Voice call' if g.is_voice else g.channel_name),
@@ -289,7 +289,7 @@
           'outcome': g.outcome, 'outcome_label': g.outcome_label, 'outcome_variant': g.outcome_variant,
           'first_message': g.first_message, 'failed_actions': g.failed_actions, 'actions': g.actions,
           'simulated': g.simulated, 'session_id': g.session_id, 'trace_id': g.newest_trace_id } %}
-        <div class="cv-row" tabindex="0" role="button"
+        <div class="cv-row" tabindex="0" role="button" data-tour="conversation-row"
              data-trace-id="{{ g.newest_trace_id }}"
              data-trace-ids="{{ g.traces|map(attribute='id')|join(' ') }}"
              data-conv="{{ conv|tojson|forceescape }}"

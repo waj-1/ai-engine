@@ -68,11 +68,24 @@ def _points(cur: Optional[float], prev: Optional[float], good_when: str) -> Opti
     return {"text": "%+.1f pts" % diff, "tone": "ok" if better else "bad"}
 
 
+def _agent_name(kind: str, agent_names: Optional[Dict[str, str]]) -> str:
+    """A row's agent: a kind's name, or the one generic agent a
+    ``custom:<slug>`` row is filed under (core.conversation_insights.stored_agent_kind)."""
+    from admin.screens import plain_language as pl
+
+    if ":" in (kind or ""):
+        try:
+            from admin.agent_kinds import agent_label
+
+            return agent_label(kind) or kind
+        except Exception:  # noqa: BLE001 - names are cosmetic
+            return kind
+    return pl.agent_label(kind or None, agent_names or {})
+
+
 def summarize(rows: List[Dict[str, Any]], *, agent_names: Optional[Dict[str, str]] = None,
               top_n: int = 8) -> Dict[str, Any]:
     """Turn rollup rows into the Overview payload (pure — tests drive it)."""
-    from admin.screens import plain_language as pl
-
     def n(r: Dict[str, Any]) -> int:
         try:
             return int(r.get("n") or 0)
@@ -141,7 +154,7 @@ def summarize(rows: List[Dict[str, Any]], *, agent_names: Optional[Dict[str, str
     for r in cur:
         kind = r.get("agent_kind") or ""
         a = per_agent.setdefault(kind, {
-            "kind": kind, "name": pl.agent_label(kind or None, agent_names or {}),
+            "kind": kind, "name": _agent_name(kind, agent_names),
             "total": 0, "outcomes": {k: 0 for k in OUTCOME_ORDER}, "_topics": {},
         })
         a["total"] += n(r)
@@ -197,6 +210,9 @@ def build_insights(*, env: Optional[str], hours: int, client,
                    "Language: the script of the customer's own messages. Conversations are "
                    "analysed about 30 minutes after they go quiet."),
     }
+    demo = ci._demo()
+    if demo is not None:
+        base["method"] += " " + demo.METHOD_NOTE
     try:
         rows = _rollup(client, hours, env, kinds)
     except Exception as exc:  # noqa: BLE001 - render "unavailable", never zero

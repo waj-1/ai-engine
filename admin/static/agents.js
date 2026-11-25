@@ -738,6 +738,28 @@
 
   // Fade the "Saved." flash and drop ?saved from the URL.
   var flash = $("[data-flash]");
+  // The demo's guided tour (demo-tour.js) listens for this; a no-op elsewhere.
+  if (flash) {
+    try {
+      var tabEl = $("[data-agent-tab]");
+      var count = function (sel) { return document.querySelectorAll(sel).length; };
+      var saved = {
+        kind: tabEl ? tabEl.getAttribute("data-agent-tab") : "",
+        profile: tabEl ? (tabEl.getAttribute("data-agent-slug") || "") : "",
+        profile_id: tabEl ? (tabEl.getAttribute("data-profile-id") || "") : "",
+        toolsets: count('[data-attached-list="toolset"] [data-row]'),
+        knowledge: count('[data-attached-list="knowledge"] [data-row]'),
+        subagents: count('#form-subagents [data-row]')
+      };
+      window.__tourSaved = saved;
+      var fireSaved = function () {
+        try { window.dispatchEvent(new CustomEvent("tour:saved", { detail: saved })); } catch (e) { /* optional */ }
+      };
+      // Deferred scripts after this one (the tour) may not listen yet.
+      if (document.currentScript) document.addEventListener("DOMContentLoaded", fireSaved);
+      else fireSaved();
+    } catch (e) { /* the tour is optional */ }
+  }
   if (flash) {
     try { var u = new URL(window.location.href); u.searchParams.delete("saved"); history.replaceState(null, "", u.toString()); } catch (e) { /* ignore */ }
     setTimeout(function () { flash.classList.add("is-fading"); setTimeout(function () { flash.remove(); }, 400); }, 2500);

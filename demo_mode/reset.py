@@ -3,8 +3,12 @@
 `reset()` deletes every row a visitor could have created or changed (agents
 and their versions, instructions, knowledge bases and documents, MCP servers
 and HTTP tools, skills, test suites, runs and fixtures, conversations,
-traces, memories, channels, categories, background jobs and the activity
-log) and calls `demo_mode.seed.seed()`. Templates go back to their first
+traces (the rows here and, where the demo has a trace store, the store itself:
+demo_mode/trace_store.py), memories, channels, categories, background jobs and
+the activity log) and calls `demo_mode.seed.seed()`. The one exception is the
+demo's own sample conversations, which hold nothing a visitor wrote: where the
+demo has a trace store they are kept for ``DEMO_SAMPLE_KEEP_DAYS`` days
+(demo_mode/retention.py says exactly which, and deletes on any doubt). Templates go back to their first
 instructions version. It keeps what the engine itself seeds at start and
 visitors cannot change: model rows, the template catalog, the built-in tool bundles and the settings rows, the
 demo admin, and the day's usage counters (a reset never refills the daily
@@ -18,6 +22,10 @@ When it runs
     * By hand, or from an outside scheduler: ``python -m scripts.demo_reset``.
     * At start, the seed alone runs (`on_boot`): a new install gets the demo,
       an existing one gets back anything missing.
+
+After a reset the demo's own test round runs again (demo_mode/warmup.py) and
+its sample-traffic generator holds its opening burst
+(demo_mode/sample_traffic.py), so no report stays empty.
 """
 from __future__ import annotations
 
@@ -41,6 +49,8 @@ _WIPE_ALL = (
     ("agent_e2e_runs", "run_id"),
     ("agent_test_runs", "run_id"),
     ("test_fixtures", "fixture_id"),
+    ("ai_voice_recording_chunks", "recording_id"),
+    ("ai_voice_recordings", "recording_id"),
     ("ai_chat_messages", "id"),
     ("ai_chat_sessions", "id"),
     ("agent_traces", "trace_id"),
@@ -65,6 +75,16 @@ def _client():
 
 def _rows(resp: Any) -> List[Dict[str, Any]]:
     return list(getattr(resp, "data", None) or [])
+
+
+# Conversation tables: (primary key, the column that names the session). With
+# sample conversations to keep, only the other sessions' rows are deleted.
+_BY_SESSION = {
+    "ai_chat_messages": ("id", "session_id"),
+    "ai_chat_sessions": ("id", "id"),
+    "agent_traces": ("trace_id", "session_id"),
+    "ai_conversation_insights": ("session_id", "session_id"),
+}
 
 
 def _delete_all(client, table: str, pk: str) -> None:
@@ -115,15 +135,33 @@ def _restore_template_instructions(client, templates: List[Dict[str, Any]]) -> i
     return removed
 
 
-def wipe(client) -> Dict[str, int]:
-    """Delete what visitors could have made. Returns rows removed per kind."""
+def _delete_but_kept(client, table: str, keep: frozenset) -> None:
+    """Delete every row of a conversation table but the kept sessions'. If
+    the table cannot be read, it is cleared whole."""
+    from demo_mode import retention
+
+    pk, column = _BY_SESSION[table]
+    try:
+        retention.delete_except(client, table, pk, column, keep)
+    except Exception as exc:  # noqa: BLE001 — in doubt, everything goes
+        logger.warning("demo reset: %s not filtered (%s); clearing it", table, type(exc).__name__)
+        _delete_all(client, table, pk)
+
+
+def wipe(client, keep_sessions: frozenset = frozenset()) -> Dict[str, int]:
+    """Delete what visitors could have made. Returns rows removed per kind.
+    `keep_sessions`: the sample conversations this reset keeps
+    (demo_mode/retention.py); every other conversation goes."""
     counts: Dict[str, int] = {}
     profiles = _rows(client.table("agent_profiles").select("profile_id, slug, status")
                      .eq("agent_kind", "custom").execute())
     templates = {p["slug"] for p in profiles if p.get("status") == "template"}
     doomed = [p for p in profiles if p.get("status") != "template"]
     for table, pk in _WIPE_ALL:
-        _delete_all(client, table, pk)
+        if keep_sessions and table in _BY_SESSION:
+            _delete_but_kept(client, table, keep_sessions)
+        else:
+            _delete_all(client, table, pk)
     # Agents: every custom agent but the templates (versions, attachments and
     # hand-off rows go with them: ON DELETE CASCADE).
     ids = [p["profile_id"] for p in doomed]
@@ -181,15 +219,36 @@ def reset(client=None, *, engine_seeders: bool = True) -> Dict[str, Any]:
     """Wipe and seed again. Raises on a database error (the caller logs it)."""
     from demo_mode import seed
 
+    from demo_mode import retention, trace_store
+
     client = client or _client()
-    removed = wipe(client)
+    # Which of the demo's own sample conversations stay (none on any doubt).
+    # Decided before anything is deleted; the trace store goes first, and if
+    # it could not keep them the database keeps none either.
+    kept = retention.plan(client)
+    traces = trace_store.wipe(kept.traces)
+    if traces is not None and kept.traces and not traces.get("kept_traces"):
+        kept = retention.NOTHING
+    removed = wipe(client, kept.sessions)
+    if traces is not None:
+        removed["trace_tables"] = len(traces.get("emptied") or [])
+    removed["sample_conversations_kept"] = len(kept.sessions)
+    retention.mark_verified(client, kept.to_verify)
     if engine_seeders:
         reseed_engine()
     seeded = seed.seed(client)
+    # The agents are as seeded now: what later sample conversations are compared with.
+    retention.write_baseline(client)
     try:
         from core.agent_profile import AgentProfileLoader
 
         AgentProfileLoader.invalidate("custom", seeded["environment"])
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from demo_mode import protect
+
+        protect.forget()  # new ids: the tour's reset id changes with them
     except Exception:  # noqa: BLE001
         pass
     logger.info("demo reset: removed %s; seeded the Northwind demo again", removed)
@@ -208,10 +267,53 @@ def _boot_sync() -> None:
         account.ensure_demo_user()
     except Exception as exc:  # noqa: BLE001 — the entry page says so instead
         logger.error("demo: could not make the demo account (%s: %s)", type(exc).__name__, exc)
+    new_install = _no_demo_agents()
     try:
         seed.seed()
     except Exception as exc:  # noqa: BLE001 — never gate the engine's start
         logger.error("demo: seeding the Northwind demo failed (%s: %s)", type(exc).__name__, exc)
+        return
+    if new_install:
+        # Only a seed that built the demo from nothing is "as seeded". After
+        # a restart the agents may carry a visitor's edits: the baseline of
+        # the last reset stays.
+        from demo_mode import retention
+
+        retention.write_baseline()
+    _start_warmup()
+
+
+def _no_demo_agents() -> bool:
+    """True when none of the demo's agents exists yet (a new install)."""
+    from demo_mode import content, seed
+
+    try:
+        slugs = [a["slug"] for a in content.AGENTS]
+        return not seed._rows(seed._client().table("agent_profiles").select("profile_id")
+                              .eq("agent_kind", "custom").in_("slug", slugs).limit(1).execute())
+    except Exception:  # noqa: BLE001 — unknown: not a new install
+        return False
+
+
+def _start_warmup() -> None:
+    """The demo's own test round (demo_mode/warmup.py), in the background."""
+    try:
+        from demo_mode import warmup
+
+        warmup.start_in_background()
+    except Exception as exc:  # noqa: BLE001 — the demo works without it
+        logger.warning("demo: test round not started (%s)", type(exc).__name__)
+
+
+def _request_sample_burst() -> None:
+    """After a reset the reports are empty: ask this process's sample-traffic
+    generator (demo_mode/sample_traffic.py) for its opening burst."""
+    try:
+        from demo_mode import sample_traffic
+
+        sample_traffic.request_burst()
+    except Exception as exc:  # noqa: BLE001 — the demo works without it
+        logger.warning("demo: sample burst not requested (%s)", type(exc).__name__)
 
 
 def seconds_until(hour: int, now: Optional[datetime] = None) -> float:
@@ -229,6 +331,8 @@ def run_once_today() -> bool:
     if not limits.take(limits.RESET_BUCKET, 1):
         return False
     reset()
+    _start_warmup()
+    _request_sample_burst()
     return True
 
 
@@ -248,12 +352,21 @@ async def run_loop() -> None:
 
 
 async def on_boot() -> Optional[asyncio.Task]:
-    """At start in demo mode: the demo account and the demo, then the nightly
-    reset task (returned, for the lifespan to cancel). None outside demo mode."""
+    """At start in demo mode: the demo account and the demo, then the
+    background task (the nightly reset and the sample traffic; returned, for
+    the lifespan to cancel). None outside demo mode."""
     if not settings.enabled():
         return None
     await asyncio.to_thread(_boot_sync)
     if settings.reset_hour_utc() is None:
         logger.info("demo: nightly reset is off (DEMO_RESET_HOUR_UTC=off)")
-        return None
-    return asyncio.create_task(run_loop())
+    return asyncio.create_task(_background())
+
+
+async def _background() -> None:
+    """The demo's background work, as one task the lifespan cancels: the
+    nightly reset (returns at once when it is off) and the sample traffic
+    (returns at once when it is off)."""
+    from demo_mode import sample_traffic
+
+    await asyncio.gather(run_loop(), sample_traffic.run_loop())

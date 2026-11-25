@@ -54,7 +54,7 @@
 </div>
 
 {% if items %}
-<ul class="activity-list">
+<ul class="activity-list" data-tour="audit-list">
   {% for i in items %}
   <li class="activity-row">
     <span class="activity-avatar{% if i.actor.is_system %} is-system{% endif %}" aria-hidden="true">{{ i.actor.initial }}</span>
@@ -89,7 +89,7 @@
   </span>
 </nav>
 {% else %}
-<div class="empty-state">
+<div class="empty-state" data-tour="audit-list">
   {% if who or what or when or entity_type %}
   <p>No activity matches these filters.</p>
   <a class="btn" href="/admin/audit">Show all activity</a>
