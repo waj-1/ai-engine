@@ -474,8 +474,12 @@ def test_loop_bursts_at_start_then_ticks_and_never_blocks_the_loop(posts, counte
 
     async def _run():
         task = asyncio.ensure_future(sample_traffic.run_loop(random.Random(5)))
-        for _ in range(4000):
-            await real_sleep(0)
+        # Wait on the clock, not on a count of loop turns: the loop's work
+        # runs in worker threads, and a slow machine (CI) can spin through
+        # thousands of empty turns before one of them finishes.
+        deadline = asyncio.get_running_loop().time() + 20
+        while asyncio.get_running_loop().time() < deadline:
+            await real_sleep(0.005)
             if threads["claims"] and len({p["session_id"] for p in posts.sent}) >= 4:
                 break
         task.cancel()
