@@ -159,3 +159,16 @@ class TestEvalTraceIds:
 
         monkeypatch.setattr(obs, "_ch_trace_query", boom)
         assert obs.eval_trace_ids("11111111-2222-3333-4444-555555555555", None) is None
+
+
+def test_untagged_openai_calls_and_the_demo_builder_are_background():
+    """A build on OpenAI/Azure models: an untagged bare model call (a judge, the
+    demo's Builder assistant) listed as an "Unlabelled agent" conversation with
+    no customer message. Seen on the demo stack with tracing on: one Builder
+    turn made three such rows."""
+    from admin.screens.observability import background_trace_clauses
+
+    untagged = next(c for c in background_trace_clauses() if "top_span_name IN" in c)
+    assert "simpleJSONExtractString(metadata, 'waj.agent_kind') = ''" in untagged
+    for name in ("ChatOpenAI.chat", "AzureChatOpenAI.chat", "openai.chat", "demo.builder_assistant"):
+        assert "'%s'" % name in untagged

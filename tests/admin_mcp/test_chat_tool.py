@@ -201,3 +201,96 @@ async def test_post_chat_goes_in_process_for_own_env(monkeypatch):
         "/chat/stream", {"message": "echo"}, {}, "staging", 10)
     assert status == 200 and target == "in-process"
     assert td.parse_sse(text)["reply"] == "echo"
+
+
+async def test_in_process_chat_does_not_inherit_the_callers_context(monkeypatch):
+    """The in-process request runs like one that arrived over HTTP: nothing of
+    the caller's context (its trace's current span above all) reaches the
+    agent's turn, which would otherwise be recorded inside the caller's trace."""
+    import contextvars
+
+    from fastapi import FastAPI
+
+    from admin_mcp import tools_dispatch as td
+
+    marker: contextvars.ContextVar = contextvars.ContextVar("caller_span", default=None)
+    seen = {}
+    app = FastAPI()
+
+    @app.post("/chat/stream")
+    async def stream(payload: dict):
+        seen["marker"] = marker.get()
+        return {"ok": True}
+
+    monkeypatch.setattr(td, "_app_for_in_process", lambda: app)
+    monkeypatch.setattr(td, "_process_env", lambda: "staging")
+    marker.set("the builder assistant's span")
+    status, _ctype, _text, target = await td._post_chat("/chat/stream", {"message": "x"}, {}, "staging", 10)
+    assert status == 200 and target == "in-process"
+    assert seen["marker"] is None
+    assert marker.get() == "the builder assistant's span"   # the caller keeps its own
+
+
+
+# --- the portal's own address on an in-process test chat ---------------------
+# Conversations lists a chat under the channel whose address is the request's
+# Origin. The portal's Test panel is a page of the portal, so its chats carry
+# the portal's address; this tool sent none, and the public demo's Build with
+# AI assistant's test chats listed under channel "Unknown".
+
+CUSTOM = {"profile_id": "p1", "agent_kind": "custom", "slug": "my-agent", "environment": "staging",
+          "status": "active", "is_active": True, "endpoint_path": "/v1/agents/my-agent/chat"}
+
+
+def _channels(monkeypatch, allowed):
+    from core import channel_resolver
+
+    monkeypatch.setenv("DEMO_MODE", "true")
+    monkeypatch.setenv("DEMO_PUBLIC_URL", "https://demo.example.com/")
+    monkeypatch.setenv("ENABLE_GENERIC_AGENTS", "1")
+    monkeypatch.setattr(td, "_process_env", lambda: "staging")
+    monkeypatch.setattr(channel_resolver, "_channels_snapshot", lambda: {
+        "northwind-website": {"slug": "northwind-website", "kind": "embed",
+                              "allowed_origins": ["https://demo.example.com"],
+                              "allowed_agent_kinds": allowed}})
+
+
+async def test_demo_test_chat_names_the_portals_address(monkeypatch):
+    _channels(monkeypatch, ["custom:support-desk", "custom:my-agent"])
+    sent = _setup(monkeypatch, profile=CUSTOM)
+    await td.chat(profile_id="p1", message="hello")
+    assert sent["headers"]["Origin"] == "https://demo.example.com"
+    # ...which is the channel the portal's Test panel is listed under.
+    assert channel_resolver_match("https://demo.example.com")["slug"] == "northwind-website"
+
+
+def channel_resolver_match(origin):
+    from core import channel_resolver
+
+    return channel_resolver._match_channel(origin, channel_resolver._channels_snapshot())
+
+
+async def test_no_origin_when_the_channel_would_refuse_the_agent(monkeypatch):
+    # A channel that does not list the agent answers 403: unattributed beats refused.
+    _channels(monkeypatch, ["custom:support-desk"])
+    sent = _setup(monkeypatch, profile=CUSTOM)
+    await td.chat(profile_id="p1", message="hello")
+    assert "Origin" not in sent["headers"]
+    # A channel with no list restricts nothing.
+    _channels(monkeypatch, [])
+    sent = _setup(monkeypatch, profile=CUSTOM)
+    await td.chat(profile_id="p1", message="hello")
+    assert sent["headers"]["Origin"] == "https://demo.example.com"
+
+
+async def test_no_origin_outside_demo_mode_or_for_another_environment(monkeypatch):
+    _channels(monkeypatch, [])
+    monkeypatch.delenv("DEMO_MODE")
+    sent = _setup(monkeypatch, profile=CUSTOM)
+    await td.chat(profile_id="p1", message="hello")
+    assert "Origin" not in sent["headers"]
+    monkeypatch.setenv("DEMO_MODE", "true")
+    monkeypatch.setattr(td, "_process_env", lambda: "prod")   # the turn leaves this process
+    sent = _setup(monkeypatch, profile=CUSTOM)
+    await td.chat(profile_id="p1", message="hello")
+    assert "Origin" not in sent["headers"]

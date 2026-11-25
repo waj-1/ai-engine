@@ -43,9 +43,9 @@
     {% set _tc_profile = (active_profile if active_profile is defined and active_profile else (header_profile if header_profile is defined else None)) %}
     {% set _tc = test_chat_shape(_tc_profile) if _tc_profile else None %}
     {% if _tc and _tc.supported and detail_tab == 'voice' %}
-    <a class="btn" href="/admin/agents?env={{ current_env }}&profile_id={{ agent.id }}&test=1">Test</a>
+    <a class="btn" href="/admin/agents?env={{ current_env }}&profile_id={{ agent.id }}&test=1" data-tour="agent-test">Test</a>
     {% elif _tc and _tc.supported %}
-    <button type="button" data-test-chat-open>Test</button>
+    <button type="button" data-test-chat-open data-tour="agent-test">Test</button>
     {% else %}
     <button type="button" disabled title="{{ (_tc.reason if _tc else '') or 'This agent has no chat channel to test — it runs when another agent hands it work.' }}">Test</button>
     {% endif %}
@@ -55,10 +55,10 @@
     </form>
     {% endif %}
     <details class="menu">
-      <summary class="btn" aria-label="More actions">More ▾</summary>
+      <summary class="btn" aria-label="More actions" data-tour="agent-more">More ▾</summary>
       <div class="menu-panel menu-right" role="menu">
         {% if promote_target %}
-        <button type="button" role="menuitem" data-open-dialog="dlg-promote">Promote to {{ promote_target.label }}…</button>
+        <button type="button" role="menuitem" data-open-dialog="dlg-promote" data-tour="agent-promote">Promote to {{ promote_target.label }}…</button>
         {% endif %}
         <button type="button" role="menuitem" data-open-dialog="dlg-compare">Compare with another agent…</button>
         <a role="menuitem" href="/admin/agents?env={{ current_env }}&profile_id={{ agent.id }}&tab=versions">Version history</a>
@@ -72,7 +72,7 @@
 {{ tabs(detail_tabs, detail_tab) }}
 
 {% if promote_target %}
-<dialog id="dlg-promote" class="dialog" aria-labelledby="dlg-promote-title">
+<dialog id="dlg-promote" class="dialog" aria-labelledby="dlg-promote-title" data-tour="promote-dialog">
   <form method="post" action="/admin/env/promote" class="stack-m" data-ajax-action data-reload>
     <input type="hidden" name="profile_id" value="{{ agent.id }}">
     <input type="hidden" name="target_env" value="{{ promote_target.env }}">

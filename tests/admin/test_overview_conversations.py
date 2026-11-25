@@ -171,6 +171,84 @@ def test_outcome_rows_roll_up_into_tiles_and_agents(monkeypatch):
     assert "agent_kind=agents_collection" in agent["href"] and "hours=168" in agent["href"]
 
 
+def test_generic_agents_get_a_row_each(monkeypatch):
+    """Every generic agent is kind `custom`; grouped by kind alone, a build of
+    only such agents showed ONE row, named after whichever profile sorted
+    first. Each is its own row, named and linked by its slug."""
+    from admin.screens import conversations, overview as ov
+
+    sql, _ = ov.outcome_sql("staging")
+    assert "if(sagg.agent_kind = 'custom', sagg.agent_slug, '') AS agent_slug" in sql
+    assert "GROUP BY period, agent_kind, agent_slug" in sql
+    assert "'waj.agent_slug'" in sql
+    assert "GROUP BY bucket, agent_kind, agent_slug" in ov.series_sql("staging")[0]
+
+    def row(period, slug, conversations_, kind="custom"):
+        return {"period": period, "agent_kind": kind, "agent_slug": slug, "turns": conversations_,
+                "conversations": conversations_, "conv_attention": 0, "conv_handoff": 0,
+                "actions": 0, "failed_actions": 0, "avg_response_sec": 1.0}
+
+    rows = [row("cur", "support-desk", 3), row("cur", "sales-assistant", 1),
+            row("prev", "support-desk", 1), row("cur", "", 2, kind="sample_product")]
+
+    def fake(sql, params=None, **_k):
+        if "AS period" in sql:
+            return rows
+        if "AS bucket" in sql:
+            return [{"bucket": "x", "agent_kind": "custom", "agent_slug": "support-desk", "conversations": 3}]
+        return []
+
+    monkeypatch.setattr("core.lmnr_clickhouse.query", fake)
+    monkeypatch.setattr(ov, "voice_usage", lambda *_a, **_k: None)
+    monkeypatch.setattr(ov.pl, "load_agent_display_names",
+                        lambda _e: {"custom": "Billing helper", "sample_product": "Sample"})
+    monkeypatch.setattr(ov.pl, "load_tool_display_names", lambda _e: {})
+    monkeypatch.setattr(conversations, "_agent_slug_name",
+                        lambda kind, slug: {"support-desk": "Support desk",
+                                            "sales-assistant": "Sales assistant"}[slug])
+    out = ov.build_overview(env="staging", period_key="24h", client=None)
+    by_name = {a["name"]: a for a in out["agents"]}
+    assert list(by_name) == ["Support desk", "Sample", "Sales assistant"]     # never "Billing helper"
+    assert by_name["Support desk"]["href"].endswith("agent_kind=custom:support-desk")
+    assert by_name["Support desk"]["delta"]["text"] == "+200%"      # its own previous period
+    assert by_name["Sales assistant"]["delta"] != by_name["Support desk"]["delta"]
+    assert by_name["Support desk"]["series"] == [3] and by_name["Sales assistant"]["series"] == []
+    assert by_name["Sample"]["href"].endswith("agent_kind=sample_product")
+    assert {t["key"]: t for t in out["tiles"]}["conversations"]["value"] == "6"
+
+
+def test_the_shared_generic_kind_is_never_named_after_one_agent(monkeypatch):
+    from admin import router
+    from admin.screens import plain_language as pl
+
+    class _Q:
+        def __getattr__(self, _name):
+            return lambda *a, **k: self
+
+        def execute(self):
+            return type("R", (), {"data": [
+                {"agent_kind": "custom", "display_name": "Billing helper", "parent_profile_id": None},
+                {"agent_kind": "sample_product", "display_name": "Sample", "parent_profile_id": None}]})()
+
+    monkeypatch.setattr(router, "client_for", lambda _e: _Q())
+    assert pl.load_agent_display_names("staging") == {"sample_product": "Sample"}
+
+
+def test_conversation_summary_names_a_generic_agent_by_its_slug(monkeypatch):
+    from admin.screens import conversations, observability as obs
+
+    monkeypatch.setattr(conversations, "_agent_slug_name", lambda kind, slug: "Support desk")
+    trace = {"metadata": '{"waj.agent_kind": "custom", "waj.agent_slug": "support-desk"}'}
+    assert obs._summary_agent_name("custom", trace, None, {}) == "Support desk"
+    # No slug on the trace: the saved session's.
+    assert obs._summary_agent_name("custom", {"metadata": ""},
+                                   {"metadata": {"agent_slug": "support-desk"}}, {}) == "Support desk"
+    # A product kind is one agent: its name, as before.
+    assert obs._summary_agent_name("sample_product", {"metadata": ""}, None,
+                                   {"sample_product": "Sample"}) == "Sample"
+    assert obs._summary_agent_name(None, trace, None, {}) is None
+
+
 # --------------------------------------------------------------------------- #
 # Needs attention — grouped by cause
 # --------------------------------------------------------------------------- #

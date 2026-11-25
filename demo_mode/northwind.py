@@ -1,7 +1,7 @@
 """Northwind Internet's tool server: a fictional MCP server inside the engine.
 
 The demo's Support desk agent has tools (check an outage, look up an order,
-open a ticket, list the plans). They come from an ordinary MCP server row
+open a ticket, hand over to a person, list the plans). They come from an ordinary MCP server row
 (Connections), whose address is this engine's own ``/demo/northwind/mcp``.
 
 Two ways in, one implementation (`handle`):
@@ -24,6 +24,7 @@ notifications. Its data is fixed fiction.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlsplit
@@ -45,12 +46,31 @@ def check_outage(area: str) -> str:
     return f"No known outage in {area}. Suggest restarting the router."
 
 
+_ORDER_FORMAT = re.compile(r"^NW-\d{4}$")
+
+
+class ToolFailure(Exception):
+    """The tool could not do what it was asked: answered as an MCP error
+    result (``isError``), which the engine records as a failed action."""
+
+
 def get_order_status(order_id: str) -> str:
-    return _ORDERS.get((order_id or "").upper().strip(), f"No order {order_id} found.")
+    key = (order_id or "").upper().strip()
+    if not _ORDER_FORMAT.match(key):
+        # A real failure of the call, not an empty answer: the order system
+        # rejects anything that is not an order number.
+        raise ToolFailure(f"Invalid order number '{order_id}': order numbers are NW- and four digits, "
+                          "for example NW-1042.")
+    return _ORDERS.get(key, f"No order {order_id} found.")
 
 
 def create_ticket(summary: str, customer_email: str = "") -> str:
     return "Ticket T-2318 opened. A technician will reply within 4 working hours."
+
+
+def escalate_to_human(reason: str) -> str:
+    return ("Handed to the support team. A person will take over this chat within 10 minutes "
+            "during support hours (8am to 8pm, every day).")
 
 
 def list_plans() -> str:
@@ -76,6 +96,10 @@ TOOLS: List[Dict[str, Any]] = [
      "description": "Open a support ticket for a technician to follow up.",
      "inputSchema": _schema({"summary": "What the problem is, in one or two sentences.",
                              "customer_email": "The customer's email, if they gave one."}, ["summary"])},
+    {"name": "escalate_to_human",
+     "description": "Hand the conversation to a person on Northwind's support team. Use it when the "
+                    "customer asks for a person, or is still stuck or upset after you tried to help.",
+     "inputSchema": _schema({"reason": "Why a person is needed, in one sentence."}, ["reason"])},
     {"name": "list_plans",
      "description": "List Northwind's internet plans and monthly prices.",
      "inputSchema": _schema({}, [])},
@@ -85,6 +109,7 @@ _IMPL: Dict[str, Callable[..., str]] = {
     "check_outage": check_outage,
     "get_order_status": get_order_status,
     "create_ticket": create_ticket,
+    "escalate_to_human": escalate_to_human,
     "list_plans": list_plans,
 }
 TOOL_NAMES = tuple(_IMPL)
@@ -121,7 +146,11 @@ def _call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     missing = [k for k in spec["inputSchema"]["required"] if not args.get(k)]
     if missing:
         return {"content": [{"type": "text", "text": f"Missing: {', '.join(missing)}"}], "isError": True}
-    return {"content": [{"type": "text", "text": fn(**args)}], "isError": False}
+    try:
+        text = fn(**args)
+    except ToolFailure as exc:
+        return {"content": [{"type": "text", "text": str(exc)}], "isError": True}
+    return {"content": [{"type": "text", "text": text}], "isError": False}
 
 
 def handle(message: Dict[str, Any]) -> Optional[Dict[str, Any]]:

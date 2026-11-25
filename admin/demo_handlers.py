@@ -123,21 +123,21 @@ def _one_answer(text: str):
     return _gen
 
 
-def _build_assistant(page: Optional[str]):
+def _build_assistant(page: Optional[str], voice: bool = False):
     """The Builder assistant agent. If a visitor deleted or switched it off,
     seed it back once and try again (blocking)."""
     from core.agent_profile import MissingProfileError
     from demo_mode import assistant
 
     try:
-        return assistant.create_agent(page=page)
+        return assistant.create_agent(page=page, voice=voice)
     except MissingProfileError:
         from core.agent_profile import AgentProfileLoader
         from demo_mode import seed
 
         seed.seed()
         AgentProfileLoader.invalidate("custom", seed._env())
-        return assistant.create_agent(page=page)
+        return assistant.create_agent(page=page, voice=voice)
 
 
 #: The assistant's turns, by conversation id, so a visitor who navigates away
@@ -149,6 +149,24 @@ _LIVE: Dict[str, Dict[str, Any]] = {}
 _TASKS: set = set()
 _LIVE_TTL_SEC = 3600.0
 _KEEPALIVE_SEC = 10.0
+#: The top span of an assistant turn's trace. Listed among the background top
+#: spans (admin/screens/observability.py), so the assistant's turns stay out
+#: of Conversations and Overview: it is a helper in the portal, not one of
+#: the agents' conversations.
+TRACE_NAME = "demo.builder_assistant"
+STILL_WORKING = ("I am still working on your last message. Give me a moment, then ask again.")
+
+
+def _new_live(session_id: str, user_id: Any, **extra: Any) -> Dict[str, Any]:
+    """Start the record of a turn of conversation `session_id`. `id` tells
+    one turn from the next (the panel polls for a spoken turn's record)."""
+    import time
+    import uuid
+
+    live = {"id": uuid.uuid4().hex, "answer": "", "steps": [], "changed": False,
+            "done": False, "at": time.monotonic(), "user_id": user_id, **extra}
+    _LIVE[session_id] = live
+    return live
 
 
 def _prune_live() -> None:
@@ -186,8 +204,6 @@ async def demo_assistant_chat(
     tool call ({tool, action, label, ok, note, links}), `working` while a
     long step runs (also a keep-alive), and `changed` when something in the
     portal was created or changed."""
-    import time
-
     from common.sse import sse_response
     from demo_mode import assistant, limits, settings
 
@@ -199,6 +215,12 @@ async def demo_assistant_chat(
         raise HTTPException(status_code=403, detail="The assistant only works from the demo's own page.")
     # The per-visitor message limit is the gate's ("assistant" bucket); the
     # daily cap is taken here, so a refusal is an answer the panel shows.
+    _prune_live()
+    running = _LIVE.get(body.session_id or "")
+    if running and not running.get("done") and running.get("user_id") == ctx.get("user_id"):
+        # The last message's turn is still running (its stream may have
+        # dropped). A second turn now would not know what the first made.
+        return sse_response(_one_answer(STILL_WORKING))
     if not await asyncio.to_thread(limits.take_turn):
         return sse_response(_one_answer(limits.CAP_MESSAGE))
     try:
@@ -209,16 +231,14 @@ async def demo_assistant_chat(
             "The builder assistant is not available right now. Please try again in a minute."))
 
     ip, session = assistant.visitor_of(request.scope)
-    turn = assistant.Turn(actor=ctx, ip=ip, session=session)
+    turn = assistant.Turn(actor=ctx, ip=ip, session=session, conversation=body.session_id)
     queue: asyncio.Queue = asyncio.Queue()
-    holder: Dict[str, Any] = {"live": None}
-    _prune_live()
+    holder: Dict[str, Any] = {"live": None, "session": body.session_id}
 
     def _start_live(session_id: str) -> None:
-        live = {"answer": "", "steps": [], "changed": False, "done": False,
-                "at": time.monotonic(), "user_id": ctx.get("user_id")}
-        _LIVE[session_id] = live
+        live = _new_live(session_id, ctx.get("user_id"))
         holder["live"] = live
+        holder["session"] = session_id
 
     async def _emit(event: Dict[str, Any]) -> None:
         _record(holder["live"], event)
@@ -231,6 +251,15 @@ async def demo_assistant_chat(
         token = assistant.TURN.set(turn)
         if body.session_id:
             _start_live(body.session_id)
+        # The turn's ONE trace. It is opened here, inside the task that makes
+        # the model calls: the task is created before the response starts to
+        # stream, so a root span opened around the stream (sse_response's
+        # `trace_name`) was not in this task's context, and each model call
+        # became a trace of its own (three traces a turn).
+        from core.observability import root_span
+
+        span_cm = root_span(TRACE_NAME)
+        span_cm.__enter__()
         try:
             identity = TurnIdentity(
                 agent_kind=CUSTOM_AGENT_KIND, session_id=body.session_id,
@@ -256,6 +285,12 @@ async def demo_assistant_chat(
             await _emit({"type": "error", "message": "The assistant hit an error. Please try again."})
             await _emit({"type": "done"})
         finally:
+            # For the conversation's next turn: what this one made or changed.
+            try:
+                span_cm.__exit__(None, None, None)
+            except Exception:  # noqa: BLE001 — tracing never breaks the turn
+                pass
+            assistant.remember(holder["session"], turn.steps)
             if holder["live"] is not None:
                 holder["live"]["done"] = True
             try:
@@ -283,8 +318,7 @@ async def demo_assistant_chat(
                 return
             yield event
 
-    return sse_response(_source, error_message="The assistant hit an error. Please try again.",
-                        trace_name="demo.builder_assistant")
+    return sse_response(_source, error_message="The assistant hit an error. Please try again.")
 
 
 @router.get("/demo/assistant/history")
@@ -325,5 +359,171 @@ async def demo_assistant_history(
         out = {"messages": []}
     live = _LIVE.get(session_id)
     if live and live.get("user_id") == ctx.get("user_id"):
-        out["live"] = {k: live[k] for k in ("answer", "steps", "changed", "done")}
+        keys = ("id", "answer", "steps", "changed", "done", "message", "voice")
+        out["live"] = {k: live.get(k) for k in keys}
     return JSONResponse(out, headers={"Cache-Control": "no-store"})
+
+
+# ---------------------------------------------------------------------------
+# Talking to the builder assistant: WS /admin/demo/assistant/voice
+# ---------------------------------------------------------------------------
+
+import re  # noqa: E402
+
+from fastapi import WebSocket  # noqa: E402
+
+_SESSION_ID = re.compile(r"^[0-9a-fA-F-]{32,36}$")
+NOT_SIGNED_IN = "Open the demo first, then press the microphone again."
+NOT_SET_UP = "Voice is not set up on this demo."
+CROSS_SITE = "The microphone only works from the demo's own page."
+
+
+async def _close_with(websocket: WebSocket, reason: str, code: int = 4403) -> None:
+    """Accept, then close with the reason: a refused handshake reaches a
+    browser as a bare failure with no words."""
+    try:
+        await websocket.accept()
+        await websocket.close(code=code, reason=reason[:120])
+    except Exception:  # noqa: BLE001 (the caller has already gone)
+        pass
+
+
+def _answer(text: str) -> Dict[str, Any]:
+    return {"type": "answer", "content": text}
+
+
+async def _voice_turn(inner, message: str, context: Dict[str, Any], *, ctx: Dict[str, Any],
+                      ip: str, session: Optional[str]) -> AsyncGenerator[Dict[str, Any], None]:
+    """One spoken request, run as a builder message: the same caps, the same
+    step events and the same conversation record as a typed one
+    (`demo_assistant_chat`). Ends with the `spoken_summary` the voice reads."""
+    from demo_mode import assistant, assistant_voice, limits
+
+    session_id = str(context.get("session_id") or "")
+    _prune_live()
+    running = _LIVE.get(session_id)
+    if running and not running.get("done"):
+        yield _answer(STILL_WORKING)
+        return
+    # The gate counts a typed message against the visitor's "assistant"
+    # bucket; a spoken one is counted here, then the daily turn.
+    if not limits.hit("assistant", ip=ip, session=session):
+        yield _answer(limits.RATE_MESSAGE)
+        return
+    if not await asyncio.to_thread(limits.take_turn):
+        yield _answer(limits.CAP_MESSAGE)
+        return
+    turn = assistant.Turn(actor=ctx, ip=ip, session=session, conversation=session_id or None)
+    live = _new_live(session_id, ctx.get("user_id"), message=message, voice=True) if session_id else None
+    token = assistant.TURN.set(turn)
+    answer = []
+    try:
+        async for event in inner(message, context):
+            kind = event.get("type")
+            if kind == "answer" and event.get("content"):
+                answer.append(str(event["content"]))
+            _record(live, event)
+            yield event
+            if kind in ("tool_activity", "thought"):
+                for step in turn.drain():
+                    _record(live, {"type": "step", **step})
+        for step in turn.drain():
+            _record(live, {"type": "step", **step})
+        if turn.wrote:
+            _record(live, {"type": "changed"})
+        summary = assistant_voice.spoken_summary("".join(answer))
+        if summary:
+            yield {"type": "spoken_summary", "content": summary}
+    finally:
+        assistant.remember(session_id or None, turn.steps)
+        if live is not None:
+            live["done"] = True
+        try:
+            assistant.TURN.reset(token)
+        except ValueError:
+            pass
+
+
+def _voice_brain(ctx: Dict[str, Any], ip: str, session: Optional[str], page: Optional[str]):
+    """`VoiceRoute.build_brain`: the builder assistant, each spoken turn of
+    it run through `_voice_turn`. Blocking (profile load)."""
+    def build(_params: Dict[str, Any]):
+        agent = _build_assistant(page, voice=True)
+        inner = agent.run_stream
+
+        async def run_stream(message: str, context: Dict[str, Any]):
+            async for event in _voice_turn(inner, message, context, ctx=ctx, ip=ip, session=session):
+                yield event
+
+        agent.run_stream = run_stream
+        return agent
+    return build
+
+
+@router.websocket("/demo/assistant/voice")
+async def demo_assistant_voice(
+    websocket: WebSocket,
+    sessionId: Optional[str] = Query(None),
+    page: Optional[str] = Query(None),
+) -> None:
+    """A voice call with the builder assistant (demo_mode/assistant_voice.py):
+    the panel's microphone. Only where the demo's voice is on (`DEMO_VOICE`);
+    the visitor's portal sign-in is the caller; every call runs under the
+    demo's voice caps (`demo_mode.voice.guard`)."""
+    from admin.auth import resolve_superuser
+    from admin.first_run_handlers import same_origin
+    from demo_mode import assistant, assistant_voice, gate, settings
+    from demo_mode import voice as demo_voice
+
+    if not settings.voice_enabled():
+        await websocket.close(code=1008)
+        return
+    if not same_origin(websocket):
+        return await _close_with(websocket, CROSS_SITE)
+    headers = gate._headers(websocket.scope)
+    token = (gate._cookie(headers, gate.ADMIN_COOKIE) or "").strip()
+    try:
+        ctx = await asyncio.to_thread(resolve_superuser, token) if token else None
+    except Exception:  # noqa: BLE001 — an expired or foreign sign-in
+        ctx = None
+    if not ctx:
+        return await _close_with(websocket, NOT_SIGNED_IN)
+    try:
+        model_id = await asyncio.to_thread(assistant_voice.voice_model_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("demo assistant voice: model lookup failed (%s)", type(exc).__name__)
+        model_id = None
+    if not model_id:
+        return await _close_with(websocket, NOT_SET_UP)
+    session_id = sessionId if sessionId and _SESSION_ID.match(sessionId) else None
+    page = page if page and page.startswith("/admin") and len(page) <= 300 else None
+    ip, session = gate.visitor(websocket.scope)
+
+    # The shared handler takes its caller from an Authorization header (a
+    # browser socket cannot set one, so the cookie's token is handed over);
+    # the route's caller check is that this is the same signed-in visitor.
+    websocket.scope["headers"] = list(websocket.scope.get("headers") or []) + [
+        (b"authorization", f"Bearer {token}".encode("latin-1"))]
+    websocket.__dict__.pop("_headers", None)
+
+    async def _authenticate(authorization: Optional[str]) -> Dict[str, Any]:
+        if (authorization or "") != f"Bearer {token}":
+            raise HTTPException(status_code=403, detail="Not the signed-in visitor")
+        return ctx
+
+    from endpoints.voice_live import VoiceRoute, serve_voice_route
+    from runtime.agents.custom import CUSTOM_AGENT_KIND
+
+    route = VoiceRoute(
+        agent_slug=assistant.BUILDER_SLUG,
+        authenticate=_authenticate,
+        voice_config=assistant_voice.live_config(model_id),
+        build_brain=_voice_brain(ctx, ip, session, page),
+        own_page=True,
+    )
+
+    async def _serve() -> None:
+        await serve_voice_route(websocket, route, agent_kind=CUSTOM_AGENT_KIND,
+                                session_id=session_id)
+
+    await demo_voice.guard(websocket, _serve)

@@ -50,6 +50,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 logger = logging.getLogger(__name__)
 
 LEASE_NAME = "conversation_insights"
+#: The top span of a classifier call's trace.
+TRACE_NAME = "conversation.insights"
 INSIGHTS_VERSION = 1
 
 OUTCOMES: Tuple[str, ...] = ("resolved", "abandoned", "escalated", "unknown")
@@ -62,7 +64,27 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def _demo():
+    """The public demo's rules for this sweep (demo_mode/insights.py), or
+    None outside demo mode: which conversations it reads, on which model and
+    within which daily budget."""
+    from demo_mode import settings as demo_settings
+
+    if not demo_settings.enabled():
+        return None
+    from demo_mode import insights
+
+    return insights
+
+
 def settings() -> Dict[str, Any]:
+    demo = _demo()
+    if demo is not None:
+        return {**_settings(), **demo.sweep_settings()}
+    return _settings()
+
+
+def _settings() -> Dict[str, Any]:
     return {
         "model": os.getenv("CONVERSATION_INSIGHTS_MODEL", "gemini-3.5-flash-lite"),
         "batch": max(1, min(200, _int_env("CONVERSATION_INSIGHTS_BATCH", 40))),
@@ -88,6 +110,10 @@ def sweep_enabled() -> bool:
 
 def classifier_available() -> bool:
     from core.provider_keys import has_key
+
+    demo = _demo()
+    if demo is not None:
+        return demo.model_row() is not None
 
     return has_key("google_genai")
 
@@ -341,6 +367,11 @@ def _llm(model_string: str):
     if model_string not in _llm_cache:
         from runtime.llm_factory import build_chat_model
 
+        demo = _demo()
+        if demo is not None:
+            # The demo's own agents model (it has no other provider's key).
+            _llm_cache[model_string] = build_chat_model(demo.model_row())
+            return _llm_cache[model_string]
         _llm_cache[model_string] = build_chat_model({
             "provider": "google_genai", "model_string": model_string,
             "temperature": 0.0, "max_output_tokens": 200,
@@ -359,11 +390,20 @@ def classify(agent_kind: Optional[str], transcript: str, *,
 
     labels = topic_set(agent_kind)
     topics = ", ".join(list(labels) + [OTHER_TOPIC])
+    demo = _demo()
+    if demo is not None and not demo.take_call():
+        return None  # the demo's daily budget for this is used up: rules only
     try:
-        resp = _llm(model_string).invoke([
-            SystemMessage(content=_SYSTEM),
-            HumanMessage(content="TOPICS: %s\n\nTRANSCRIPT:\n%s" % (topics, transcript)),
-        ])
+        from core.observability import root_span
+
+        # One trace per call (a background one: admin/screens/observability.py
+        # lists the name). Bare, the call's two spans on some providers were
+        # two traces, which nothing could then count as one call.
+        with root_span(TRACE_NAME):
+            resp = _llm(model_string).invoke([
+                SystemMessage(content=_SYSTEM),
+                HumanMessage(content="TOPICS: %s\n\nTRANSCRIPT:\n%s" % (topics, transcript)),
+            ])
     except Exception as exc:  # noqa: BLE001 - one bad call never stops a sweep
         logger.info("conversation_insights: classifier call failed (%s)", exc)
         return None
@@ -481,6 +521,17 @@ def writer_environment() -> str:
 # Analysis of one conversation
 # ---------------------------------------------------------------------------
 
+def stored_agent_kind(kind: Optional[str], metadata: Optional[Dict[str, Any]]) -> Optional[str]:
+    """What a conversation's insight row is filed under: its agent kind, or
+    ``custom:<slug>`` for a generic agent. They all share one kind, so the
+    kind alone would give every one of them the same outcome mix on the
+    Overview (whose per-agent rows are keyed the same way)."""
+    from admin.agent_kinds import agent_choice
+
+    slug = str((metadata or {}).get("agent_slug") or "").strip()
+    return agent_choice(kind, slug or None) if kind else kind
+
+
 def analyze(session: Dict[str, Any], messages: Sequence[Dict[str, Any]], *,
             signal: Optional[Dict[str, Any]] = None,
             voice: Optional[Dict[str, Any]] = None,
@@ -490,6 +541,7 @@ def analyze(session: Dict[str, Any], messages: Sequence[Dict[str, Any]], *,
     signal = signal or {}
     kind = session.get("agent_kind")
     meta = session.get("metadata") or {}
+    stored_kind = stored_agent_kind(kind, meta)
     users = [m for m in messages if m.get("role") == "user"]
     times = [m.get("created_at") for m in messages if m.get("created_at")]
 
@@ -514,7 +566,7 @@ def analyze(session: Dict[str, Any], messages: Sequence[Dict[str, Any]], *,
     env = normalize_env(meta.get("environment")) or normalize_env(signal.get("env"))
     return {
         "session_id": str(session.get("session_id") or session.get("id")),
-        "agent_kind": kind,
+        "agent_kind": stored_kind,
         "environment": env,
         "channel": channel,
         "outcome": outcome,
@@ -649,10 +701,18 @@ def sweep_once(client=None, *, limit: Optional[int] = None,
                   if _parse_ts(c.get("created_at"))), default=datetime.now(timezone.utc))
     signals = telemetry_signals(sids, oldest)
     model = cfg["model"] if classifier_available() else None
+    demo = _demo()
 
     rows, classified = [], 0
     for c in cands:
         sid = str(c["session_id"])
+        if demo is not None and not demo.covers(c):
+            # Not one of the demo's sample conversations (a visitor's chat, a
+            # test run's case, the builder assistant): no model call, and
+            # kept out of every rollup like a bot-driven call.
+            rows.append({**analyze(c, msgs.get(sid) or [], signal=signals.get(sid)),
+                         "is_simulated": True})
+            continue
         if model and rows:
             time.sleep(cfg["call_gap_sec"])
         row = analyze(c, msgs.get(sid) or [], signal=signals.get(sid),
@@ -683,7 +743,7 @@ async def run_loop() -> None:
     minute so the 30-day backfill finishes in hours, not days — still one
     bounded batch at a time."""
     cfg = settings()
-    await asyncio.sleep(90)
+    await asyncio.sleep(cfg.get("first_delay_sec", 90))
     while True:
         try:
             result = await asyncio.to_thread(sweep_once)
@@ -692,4 +752,5 @@ async def run_loop() -> None:
         except Exception:  # noqa: BLE001 - never let the loop die
             logger.exception("conversation_insights: sweep crashed")
             result = {}
-        await asyncio.sleep(60 if result.get("pending") else cfg["interval_sec"])
+        await asyncio.sleep(min(60, cfg["interval_sec"]) if result.get("pending")
+                            else cfg["interval_sec"])

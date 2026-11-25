@@ -22,7 +22,22 @@ tokens signed with it, the database password, SECRET_KEY (which encrypts the
 model keys stored in the portal) are generated in the container and kept in
 the volume. A second run
 keeps the existing files, so a restarted stack's tokens and passwords stay
-valid; an install made before SECRET_KEY existed gets one added. `docker compose down -v` deletes the volume, and
+valid; an install made before SECRET_KEY existed gets one added.
+
+Tracing (optional, ``STACK_TRACING=1`` on this step). The engine then runs with
+a tracing store beside it: Laminar's ingest server and ClickHouse (see
+docs/deploy/demo.md, "Tracing"). This step makes the store's secrets too and
+writes, in the same volume:
+
+  tracing.env           what the Laminar containers read (their database, the
+                        ClickHouse login, their own secrets)
+  clickhouse/*.xml      ClickHouse settings (the login, memory caps, no
+                        internal log tables)
+
+``engine.env`` gets the ingest key and the two addresses instead of
+``LMNR_DISABLED``, and ``db-init.sql`` also creates the ``lmnr`` database.
+The ingest key is stored where Laminar looks it up by
+deploy/compose/tracing_init.py, which the engine runs before it starts. `docker compose down -v` deletes the volume, and
 the next `up` starts a new install with new secrets.
 
 The admin account. There is no default login. With ADMIN_EMAIL and
@@ -55,8 +70,22 @@ ADDRESSES = {
 }
 
 
+# The tracing store's addresses (STACK_TRACING=1), same rule as above.
+ADDRESSES.update({
+    "STACK_LMNR_URL": "http://lmnr-app-server",     # scheme and host, no port
+    "STACK_LMNR_HTTP_PORT": "8000",
+    "STACK_LMNR_GRPC_PORT": "8001",
+    "STACK_CLICKHOUSE_URL": "http://lmnr-clickhouse:8123",
+})
+LMNR_DATABASE = "lmnr"
+
+
 def address(name: str) -> str:
     return (os.getenv(name) or "").strip() or ADDRESSES[name]
+
+
+def tracing_on() -> bool:
+    return (os.getenv("STACK_TRACING") or "").strip().lower() in ("1", "true", "yes", "on")
 LOCAL = Path(__file__).resolve().parents[1] / "local"
 # A model served on the host machine (Ollama's default port), from a container.
 HOST_OLLAMA_URL = "http://host.docker.internal:11434/v1"
@@ -100,6 +129,79 @@ def render(admin_email: str | None, admin_password: str | None) -> dict[str, str
             "postgrest.conf": postgrest}
 
 
+def _clickhouse_memory_mb() -> int:
+    """ClickHouse's own memory ceiling. It reads the HOST's memory where a
+    container has no limit of its own, so it is told (STACK_CLICKHOUSE_MEMORY_MB)."""
+    try:
+        return max(512, int(os.getenv("STACK_CLICKHOUSE_MEMORY_MB") or 1024))
+    except ValueError:
+        return 1024
+
+
+def render_tracing(stack_env: str, engine_env: str) -> dict[str, str]:
+    """{file name: content} for the tracing store, and the engine.env that
+    points the engine at it. Secrets are new on every call: call it once."""
+    import secrets
+    import string
+
+    stack = dict(line.split("=", 1) for line in stack_env.splitlines() if "=" in line)
+    pg = shlex.split(stack["POSTGRES_PASSWORD"])[0]
+    db_host = address("STACK_DB_HOST")
+    alphabet = string.ascii_letters + string.digits
+    # The shape Laminar's own key page makes: 64 letters and digits.
+    ingest_key = "".join(secrets.choice(alphabet) for _ in range(64))
+    ch_password = secrets.token_urlsafe(24)
+    ch_url = address("STACK_CLICKHOUSE_URL")
+    lmnr_dsn = f"postgres://postgres:{pg}@{db_host}/{LMNR_DATABASE}"
+    tracing = {
+        "DATABASE_URL": lmnr_dsn,
+        "CLICKHOUSE_URL": ch_url,
+        "CLICKHOUSE_USER": "clickhouse",
+        "CLICKHOUSE_PASSWORD": ch_password,
+        "CLICKHOUSE_RO_USER": "clickhouse",
+        "CLICKHOUSE_RO_PASSWORD": ch_password,
+        "SHARED_SECRET_TOKEN": secrets.token_urlsafe(32),
+        "AEAD_SECRET_KEY": secrets.token_hex(32),
+        "NEXTAUTH_SECRET": secrets.token_urlsafe(32),
+    }
+    kept = [line for line in engine_env.splitlines() if not line.startswith("LMNR_")]
+    engine = {
+        "LMNR_PROJECT_API_KEY": ingest_key,
+        "LMNR_BASE_URL": address("STACK_LMNR_URL"),
+        "LMNR_HTTP_PORT": address("STACK_LMNR_HTTP_PORT"),
+        "LMNR_GRPC_PORT": address("STACK_LMNR_GRPC_PORT"),
+        "LMNR_CLICKHOUSE_URL": ch_url,
+        "LMNR_CLICKHOUSE_USER": "clickhouse",
+        "LMNR_CLICKHOUSE_PASSWORD": ch_password,
+        "LMNR_CLICKHOUSE_DB": "default",
+        # Read by deploy/compose/tracing_init.py only.
+        "TRACING_DATABASE_URL": lmnr_dsn,
+    }
+    cap = _clickhouse_memory_mb() * 1024 * 1024
+    users_xml = (
+        "<clickhouse>\n  <profiles><default>\n"
+        "    <date_time_input_format replace=\"replace\">best_effort</date_time_input_format>\n"
+        f"    <max_memory_usage>{cap // 2}</max_memory_usage>\n"
+        "    <max_threads>2</max_threads>\n"
+        "  </default></profiles>\n</clickhouse>\n")
+    memory_xml = (
+        "<clickhouse>\n"
+        f"  <max_server_memory_usage>{cap}</max_server_memory_usage>\n"
+        "  <mark_cache_size>67108864</mark_cache_size>\n"
+        "  <uncompressed_cache_size>0</uncompressed_cache_size>\n"
+        "  <index_mark_cache_size>33554432</index_mark_cache_size>\n"
+        "</clickhouse>\n")
+    logs_xml = (LOCAL.parents[1] / "lmnr-clickhouse-config" / "clickhouse-system-logs.xml") \
+        .read_text(encoding="utf-8")
+    return {
+        "tracing.env": _env_file(tracing),
+        "engine.env": "\n".join(kept) + "\n" + _env_file(engine),
+        "clickhouse/users.xml": users_xml,
+        "clickhouse/memory.xml": memory_xml,
+        "clickhouse/system-logs.xml": logs_xml,
+    }
+
+
 def _read_env_file(path: Path) -> dict[str, str]:
     out: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -125,9 +227,13 @@ def write_portable_files(state: Path) -> None:
     # One file (the scripts in order): the database copies it into its
     # /docker-entrypoint-initdb.d at first start.
     scripts = sorted((LOCAL / "db-init").glob("*.sql"))
-    (state / "db-init.sql").write_text(
-        "\n".join(f"-- {p.name}\n" + p.read_text(encoding="utf-8") for p in scripts),
-        encoding="utf-8")
+    sql = "\n".join(f"-- {p.name}\n" + p.read_text(encoding="utf-8") for p in scripts)
+    if (state / "tracing.env").exists():
+        # Laminar keeps its projects and ingest keys in a database of its own,
+        # on this same server (one statement: CREATE DATABASE runs outside a
+        # transaction).
+        sql += f"\n-- tracing store\nCREATE DATABASE {LMNR_DATABASE};\n"
+    (state / "db-init.sql").write_text(sql, encoding="utf-8")
     (state / "db-init.sql").chmod(0o644)
 
 
@@ -151,6 +257,14 @@ def main() -> int:
               "admin account is created in the browser, on the engine's first-run page.")
         return 1
     files = render(email, password)
+    if tracing_on():
+        files.update(render_tracing(files["stack.env"], files["engine.env"]))
+        (state / "clickhouse").mkdir(exist_ok=True)
+        (state / "clickhouse").chmod(0o755)
+        for name in sorted(n for n in files if n.startswith(("clickhouse/", "tracing."))):
+            (state / name).write_text(files[name], encoding="utf-8")
+            (state / name).chmod(0o644)
+        print("[setup] tracing is on: wrote the tracing store's settings")
     # engine.env is written last: it is the marker that setup finished, so a
     # run interrupted halfway is redone instead of leaving a partial install.
     for name in ("stack.env", "postgrest.conf", "engine.env"):

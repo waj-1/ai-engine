@@ -37,3 +37,49 @@ services:
       DEMO_MAX_OUTPUT_TOKENS: ${DEMO_MAX_OUTPUT_TOKENS:-}
       DEMO_MAX_UPLOAD_BYTES: ${DEMO_MAX_UPLOAD_BYTES:-}
       DEMO_RESET_HOUR_UTC: ${DEMO_RESET_HOUR_UTC:-}
+      # The guided tour for visitors (blank = on; false switches it off).
+      DEMO_TOUR: ${DEMO_TOUR:-}
+      # The demo's own test round after a seed or a reset (off to skip it).
+      DEMO_WARMUP: ${DEMO_WARMUP:-}
+      # The demo's own conversations around the clock, so no report is empty
+      # (docs/deploy/demo.md, "Sample traffic"). off stops them.
+      DEMO_SAMPLE_TRAFFIC: ${DEMO_SAMPLE_TRAFFIC:-}
+      DEMO_SAMPLE_DAILY_TURNS: ${DEMO_SAMPLE_DAILY_TURNS:-}
+      DEMO_SAMPLE_STOP_AT_PERCENT: ${DEMO_SAMPLE_STOP_AT_PERCENT:-}
+      DEMO_SAMPLE_MIN_GAP_SEC: ${DEMO_SAMPLE_MIN_GAP_SEC:-}
+      DEMO_SAMPLE_MAX_GAP_SEC: ${DEMO_SAMPLE_MAX_GAP_SEC:-}
+      DEMO_SAMPLE_BURST: ${DEMO_SAMPLE_BURST:-}
+      DEMO_SAMPLE_TURN_DELAY_SEC: ${DEMO_SAMPLE_TURN_DELAY_SEC:-}
+      DEMO_SAMPLE_UTC_OFFSET: ${DEMO_SAMPLE_UTC_OFFSET:-}
+      # "What happened in conversations": model calls a day (0 switches it off).
+      DEMO_INSIGHTS_DAILY_CALLS: ${DEMO_INSIGHTS_DAILY_CALLS:-}
+      DEMO_INSIGHTS_IDLE_MINUTES: ${DEMO_INSIGHTS_IDLE_MINUTES:-}
+      DEMO_INSIGHTS_INTERVAL_SEC: ${DEMO_INSIGHTS_INTERVAL_SEC:-}
+      # Anonymous usage analytics (blank key = off; docs/deploy/demo.md).
+      DEMO_POSTHOG_KEY: ${DEMO_POSTHOG_KEY:-}
+      DEMO_POSTHOG_HOST: ${DEMO_POSTHOG_HOST:-}
+      # The product-page showcase (blank = off; docs/deploy/demo.md).
+      DEMO_SHOWCASE: ${DEMO_SHOWCASE:-}
+      DEMO_SHOWCASE_ORIGINS: ${DEMO_SHOWCASE_ORIGINS:-}
+      DEMO_SHOWCASE_PAGE_URL: ${DEMO_SHOWCASE_PAGE_URL:-}
+      DEMO_SHOWCASE_DAILY_TURNS: ${DEMO_SHOWCASE_DAILY_TURNS:-}
+      DEMO_SHOWCASE_VOICE_DAILY_SECONDS: ${DEMO_SHOWCASE_VOICE_DAILY_SECONDS:-}
+      DEMO_SHOWCASE_VOICE_MAX_CALL_SECONDS: ${DEMO_SHOWCASE_VOICE_MAX_CALL_SECONDS:-}
+      DEMO_SHOWCASE_VOICE_MAX_CALLS: ${DEMO_SHOWCASE_VOICE_MAX_CALLS:-}
+      # Voice calls (off unless DEMO_VOICE=true; docs/deploy/demo.md, "Voice
+      # calls"): the Support desk's Call button and the Build with AI microphone.
+      DEMO_VOICE: ${DEMO_VOICE:-}
+      DEMO_VOICE_PROVIDER: ${DEMO_VOICE_PROVIDER:-}
+      DEMO_VOICE_ENDPOINT: ${DEMO_VOICE_ENDPOINT:-}
+      DEMO_VOICE_API_KEY: ${DEMO_VOICE_API_KEY:-}
+      DEMO_VOICE_MODEL: ${DEMO_VOICE_MODEL:-}
+      DEMO_VOICE_API_VERSION: ${DEMO_VOICE_API_VERSION:-}
+      DEMO_VOICE_NAME: ${DEMO_VOICE_NAME:-}
+      DEMO_VOICE_LANGUAGE: ${DEMO_VOICE_LANGUAGE:-}
+      DEMO_VOICE_DAILY_SECONDS: ${DEMO_VOICE_DAILY_SECONDS:-}
+      DEMO_VOICE_MAX_CALL_SECONDS: ${DEMO_VOICE_MAX_CALL_SECONDS:-}
+      DEMO_VOICE_MAX_CALLS: ${DEMO_VOICE_MAX_CALLS:-}
+      DEMO_VOICE_CALLS_PER_HOUR: ${DEMO_VOICE_CALLS_PER_HOUR:-}
+      # Keep the audio of calls with the demo's agents (off unless true). Anyone
+      # visiting the demo can play them until the nightly reset.
+      DEMO_VOICE_RECORDING: ${DEMO_VOICE_RECORDING:-}

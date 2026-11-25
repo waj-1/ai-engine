@@ -31,7 +31,7 @@
 {% endif %}
 <div class="agents-toolbar-row">
   <span class="caption">{{ (singles|length) + (composites|length) }} templates</span>
-  {% if singles or composites %}<button type="button" class="primary" data-new-agent>New agent</button>{% endif %}
+  {% if singles or composites %}<button type="button" class="primary" data-new-agent data-tour="agents-new">New agent</button>{% endif %}
 </div>
 
 {% macro template_card(t) %}
@@ -80,7 +80,7 @@
     <div data-step="1">
       {% set all_templates = singles + composites %}
       {% if all_templates %}
-      <div class="template-pick-grid" role="radiogroup" aria-label="Template">
+      <div class="template-pick-grid" role="radiogroup" aria-label="Template" data-tour="template-pick">
         {% for t in all_templates %}
         <label class="template-pick">
           <input type="radio" name="template_id" value="{{ t.template_id }}" required data-template-name="{{ t.display_name or t.slug }}" data-template-model="{{ t.default_model.label if t.default_model else '' }}">
@@ -101,7 +101,7 @@
       <p class="caption">Template: <strong data-chosen-template></strong> · <button type="button" class="btn ghost small" data-step-back>Change</button></p>
       <div class="stack-m mt-s">
         <label class="field">Name
-          <input name="display_name" required placeholder="e.g. Reports assistant">
+          <input name="display_name" required placeholder="e.g. Reports assistant" data-tour="template-name">
         </label>
         {% if model_options %}
         <label class="field"><span class="field-label">Model</span>
@@ -140,8 +140,8 @@
 
     <div class="row end">
       <button type="button" class="ghost" data-close-dialog>Cancel</button>
-      <button type="button" class="primary" data-step-next>Next</button>
-      <button type="submit" class="primary" data-step-submit hidden>Create draft agent</button>
+      <button type="button" class="primary" data-step-next data-tour="template-next">Next</button>
+      <button type="submit" class="primary" data-step-submit hidden data-tour="agent-create">Create draft agent</button>
     </div>
   </form>
 </dialog>

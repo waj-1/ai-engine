@@ -97,6 +97,27 @@ def compile_profile_snapshot(
     target = target_client or source
     read_id = source_profile_id or profile_id
 
+    snapshot = build_snapshot(source, read_id)
+    return _insert_version(
+        target=target,
+        profile_id=profile_id,
+        environment=environment,
+        snapshot=snapshot,
+        promoted_by=promoted_by,
+        notes=notes,
+    )
+
+
+def build_snapshot(source: Any, read_id: str) -> Dict[str, Any]:
+    """The fully-denormalized snapshot of profile `read_id` as it is now:
+    the profile's own fields and every row it depends on (model, prompt
+    contents, tools, data sources, MCP servers and attachments, skills with
+    their bodies, delegates). Reads only; writes nothing.
+
+    `compile_profile_snapshot` stores this as a version. It is also the
+    engine's own answer to "what does this agent run on right now", for a
+    caller that wants to compare two moments (demo_mode/retention.py).
+    Raises `SnapshotCompileError` when the profile does not exist."""
     rows = (
         source.table("agent_profiles").select("*")
         .eq("profile_id", read_id).limit(1).execute().data or []
@@ -187,14 +208,7 @@ def compile_profile_snapshot(
         logger.warning("compile_profile_snapshot: downstream_delegates freeze failed (%s)", exc)
         snapshot["downstream_delegates"] = []
 
-    return _insert_version(
-        target=target,
-        profile_id=profile_id,
-        environment=environment,
-        snapshot=snapshot,
-        promoted_by=promoted_by,
-        notes=notes,
-    )
+    return snapshot
 
 
 def _insert_version(

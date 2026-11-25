@@ -91,9 +91,10 @@ def _loopback(ip: Optional[str]) -> bool:
     return (ip or "") in ("127.0.0.1", "::1")
 
 
-def hit(bucket: str, *, ip: str, session: Optional[str]) -> bool:
-    """Count one request; False (and nothing counted) when it is over a limit."""
-    limit = _limit_for(bucket)
+def hit(bucket: str, *, ip: str, session: Optional[str], limit: Optional[int] = None) -> bool:
+    """Count one request; False (and nothing counted) when it is over a limit.
+    `limit` overrides the bucket's setting (the showcase's own caps)."""
+    limit = _limit_for(bucket) if limit is None else max(1, int(limit))
     keys = []
     if not _loopback(ip) or not session:
         keys.append((bucket, "ip:" + (ip or "unknown"), limit * settings.ip_multiplier()))

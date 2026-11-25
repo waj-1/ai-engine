@@ -1,6 +1,6 @@
 # WAJ AI Engine
 
-**The self-hosted agent platform your AI assistant can operate. Build, test and ship agents over MCP, or from a portal. No agent code.**
+**Describe the agent you want, and an AI assistant builds, tests and ships it. A self-hosted agent platform your assistant operates over MCP, with a portal for everything else. No agent code.**
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Tests](https://github.com/waj-1/ai-engine/actions/workflows/ai-agent-tests.yaml/badge.svg)](https://github.com/waj-1/ai-engine/actions/workflows/ai-agent-tests.yaml)
@@ -10,7 +10,12 @@
 
 ### ▶ [Try the live demo](https://engine-demo.waj.ai)
 
-One click, no sign-up. Build and test agents with the built-in AI assistant. The demo resets every night.
+One click, no sign-up. Open **Build with AI** and type or say "build me a support
+agent that checks outages": the assistant creates it, gives it tools and knowledge,
+tests it, and changes it when you follow up ("name it Ali", "make it shorter"). On
+your own install the same conversation happens in Claude Code, Cursor or any MCP
+client ([Connect your AI assistant](#connect-your-ai-assistant)). The demo resets
+every night.
 
 <!-- overview-video -->
 [![WAJ AI Engine in action](docs/media/overview/engine-overview.webp)](docs/media/overview/engine-overview.mp4)

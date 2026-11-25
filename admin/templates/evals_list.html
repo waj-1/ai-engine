@@ -29,7 +29,7 @@
       {% set lr = s._last_run %}
       <tr>
         <td>
-          <a href="/admin/evals/suites/{{ s.suite_id }}">{{ s.name|humanize }}</a>
+          <a href="/admin/evals/suites/{{ s.suite_id }}" data-tour="suite-row" data-tour-name="{{ s.name }}">{{ s.name|humanize }}</a>
           {% if not s.is_active %}<span class="chip chip-neutral">Paused</span>{% endif %}
           <div class="technical">{{ s.name }}</div>
         </td>

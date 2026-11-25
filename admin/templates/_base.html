@@ -5,14 +5,18 @@
 <!doctype html>
 {% set _brand = brand() %}
 {% set _nav = portal_nav() %}
+{% set _dc = demo_chrome() %}
+{# The demo's guided tour (admin/static/demo-tour.js): demo mode with DEMO_TOUR on. #}
+{% set _tour = _dc.enabled and _dc.get('tour') %}
 {% set _section = nav_section(request.url.path if request is defined and request else '', active if active is defined else none) %}
 <html lang="en"{% if _brand.key %} data-brand="{{ _brand.key }}"{% endif %}>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>{% block title %}{{ _brand.title }}{% endblock %}</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="apple-touch-icon" href="/static/favicon.png">
+  {% from "_components/demo_analytics.html" import demo_analytics %}{{ demo_analytics('portal', _section) }}
   <script>
     (function () {
       try {
@@ -30,6 +34,7 @@
     })();
   </script>
   <link rel="stylesheet" href="/admin/static/portal.css?v={{ asset_version }}">
+  {% if _tour %}<link rel="stylesheet" href="/admin/static/demo-tour.css?v={{ asset_version }}">{% endif %}
   {% if _brand.css %}<style>{{ _brand.css|safe }}</style>{% endif %}
   {# Tabulator: vanilla tables with sort / filter / CSV+JSON+XLSX export.
      No vendor CSS theme — the token-based skin lives in portal.css so the
@@ -43,6 +48,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
   <script src="/admin/static/portal-table.js?v={{ asset_version }}" defer></script>
   <script src="/admin/static/global-search.js?v={{ asset_version }}" defer></script>
+  <script src="/admin/static/mobile.js?v={{ asset_version }}" defer></script>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -65,6 +71,11 @@
       {% endfor %}
     </nav>
     <div class="nav-foot">
+      {% if _tour %}
+      <button type="button" class="nav-link dt-entry" id="dt-entry" aria-controls="dt-drawer" aria-expanded="false" title="Getting started" hidden>
+        <span class="dt-ring-slot" aria-hidden="true"></span><span class="nav-label dt-entry-label">Getting started</span><span class="nav-label dt-entry-count"></span>
+      </button>
+      {% endif %}
       {% set item = _nav.settings %}
       <a class="nav-link {% if _section == item.key %}active{% endif %}" href="{{ item.href }}" title="{{ item.label }}">
         {{ icon(item.icon) }}<span class="nav-label">{{ item.label }}</span>
@@ -106,6 +117,10 @@
   </script>
   <main class="app-main">
     <header class="app-topbar">
+      {# Phones: the sidebar is an off-canvas drawer opened from here (admin/static/mobile.js). #}
+      <button type="button" class="ghost icon-btn nav-menu-btn" id="nav-menu" aria-controls="app-nav" aria-expanded="false" aria-label="Open the menu" title="Menu">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
       <div class="titles">
         <h1>{% block page_title %}{% endblock %}</h1>
         <span class="caption">{% block page_subtitle %}{% endblock %}</span>
@@ -114,8 +129,12 @@
       {% set _env = current_env if current_env is defined else 'staging' %}
       {# Global search: the top-bar button opens the Ctrl-K palette below.
          admin/static/global-search.js drives it; admin/search.py answers. #}
+      {% if _tour %}
+      {# Phone only (CSS): the tour's checklist, as an n/17 pill. #}
+      <button type="button" class="dt-pill" id="dt-pill" aria-controls="dt-drawer" aria-expanded="false" hidden>Tour</button>
+      {% endif %}
       <div class="global-search" id="global-search-wrap">
-        <button type="button" class="gs-trigger" id="global-search-trigger"
+        <button type="button" class="gs-trigger" id="global-search-trigger"{% if _tour %} data-tour="search-trigger"{% endif %}
                 aria-haspopup="dialog" aria-controls="global-search-dialog" title="Search (Ctrl K)">
           <svg class="icon" aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><line x1="10.4" y1="10.4" x2="14" y2="14"/></svg>
           <span class="gs-trigger-text">Search<span class="gs-trigger-more"> screens, agents, people…</span></span>
@@ -157,6 +176,7 @@
         <strong>Public demo</strong>
         <span>Anyone can see what you type here, so do not enter anything private. Everything resets every night.</span>
         {% if _demo.voice %}<a href="/admin/demo/call" data-demo-call>Talk to the Support desk: place a voice call</a>{% endif %}
+        {% if _demo.showcase_url %}<a href="{{ _demo.showcase_url }}" target="_blank" rel="noopener" data-demo-showcase>See these agents in a real product page</a>{% endif %}
         <a href="{{ _demo.repo_url }}" target="_blank" rel="noopener">Run your own: get it on GitHub</a>
       </div>
       {% endif %}
@@ -181,6 +201,7 @@
       {% block content %}{% endblock %}
     </div>
   </main>
+  <div class="nav-backdrop" id="nav-backdrop" aria-hidden="true"></div>
 </div>
 {# Ctrl-K palette. Hidden until opened; quick actions come from
    admin/search_registry.py (partner-aware) so the empty state works offline. #}
@@ -213,6 +234,12 @@
 {# The public demo's builder assistant (demo_mode/assistant.py): a chat that
    builds and tests agents with the engine's own admin tools. #}
 <button type="button" class="ba-launcher" id="ba-launcher" aria-controls="ba-panel" aria-expanded="false" hidden>Build with AI</button>
+{# A phone's first visit: the panel does not open by itself there (it covers the
+   screen), so this note points at the launcher instead (builder-assistant.js). #}
+<div class="ba-hint" id="ba-hint" role="status" hidden>
+  <span>New here? Ask the assistant to build or test an agent for you.</span>
+  <button type="button" class="ghost ba-hint-close" data-hint-close aria-label="Dismiss the hint">&times;</button>
+</div>
 <aside class="ba-panel" id="ba-panel" aria-label="Builder assistant" hidden>
   <header class="ba-head">
     <div>
@@ -230,8 +257,24 @@
     <button type="button" class="chip-btn" data-prompt="Why did the last test fail?">Why did this test fail?</button>
     <button type="button" class="chip-btn" data-prompt="Chat with the Sales assistant as a family of four and tell me what it recommends">Chat with the Sales assistant</button>
   </div>
+  {% if demo_chrome().voice %}
+  {# Talking to the assistant (demo_mode/assistant_voice.py): the call's
+     words, and what the call is doing. #}
+  <div class="ba-voice" id="ba-voice" hidden>
+    <p class="caption ba-voice-status" id="ba-voice-status" role="status" aria-live="polite"></p>
+    <div class="ba-voice-log" id="ba-voice-log" aria-label="What was said"></div>
+  </div>
+  {% endif %}
   <form class="ba-form" id="ba-form">
     <textarea id="ba-input" rows="2" maxlength="4000" placeholder="Ask the assistant to build or test an agent…" aria-label="Message to the builder assistant"></textarea>
+    {% if demo_chrome().voice %}
+    <button type="button" class="ghost ba-mic" id="ba-mic" aria-pressed="false"
+            aria-label="Talk to the assistant" title="Talk to the assistant"
+            data-voice-src="/static/shared/voice-live.js?v={{ asset_version }}"
+            data-call-src="/admin/static/voice-call.js?v={{ asset_version }}">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg>
+    </button>
+    {% endif %}
     <button type="submit" class="primary" id="ba-send">Send</button>
   </form>
   <details class="caption ba-foot">
@@ -240,9 +283,17 @@
     engine's own admin tools, on the demo's agents only. It is read-only here so every visitor
     gets the same one, and it is not in the Agents list. Anyone can see what you type, and
     everything resets every night.
+    {% if demo_chrome().voice %}With the microphone button you can talk to it instead of
+    typing. Calls are not recorded, and they share the demo's daily voice minutes.{% endif %}
   </details>
 </aside>
+{% if demo_chrome().voice %}<link rel="stylesheet" href="/admin/static/builder-voice.css?v={{ asset_version }}">{% endif %}
 <script src="/admin/static/builder-assistant.js?v={{ asset_version }}" defer></script>
+{% endif %}
+{% if _tour %}
+<script type="application/json" id="demo-tour-config">{{ {"reset_id": _dc.get('reset_id') or '', "repo_url": _dc.get('repo_url') or '', "tracing": _dc.get('tracing', True)} | tojson }}</script>
+<script src="/admin/static/demo-tour-steps.js?v={{ asset_version }}" defer></script>
+<script src="/admin/static/demo-tour.js?v={{ asset_version }}" defer></script>
 {% endif %}
 </body>
 </html>

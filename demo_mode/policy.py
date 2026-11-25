@@ -58,6 +58,8 @@ _BLOCKED_PATTERNS = (
 # on, and then capped by `demo_mode.voice` (call length, calls at once, the
 # day's seconds).
 _VOICE_CALL = re.compile(r"^/v1/agents/[^/]+/voice$")
+# The builder assistant's microphone (admin/demo_handlers.py): the same switch.
+_ASSISTANT_VOICE = re.compile(r"^/admin/demo/assistant/voice$")
 
 #: Requests counted against a visitor's limits: (bucket, method, path pattern).
 _LIMITED = (
@@ -86,6 +88,22 @@ HIDDEN_SETTINGS = frozenset({
 })
 
 
+# Span attributes kept out of a conversation's Technical tab in demo mode:
+# where the model is served (the provider resource's address) and anything an
+# instrumentation records about the request's transport. Diagnostics, which
+# shows the same connection details, is blocked above; a trace must not be the
+# way round it. Matched on the end of the attribute's name.
+_HIDDEN_SPAN_ATTRIBUTE = re.compile(
+    r"(?:^|[._])(?:base_url|api_base|endpoint|api_version|headers|address|port|url|uri|host)$",
+    re.IGNORECASE)
+
+
+def span_attribute_hidden(key: str) -> bool:
+    """True for a span attribute a demo visitor is not shown (never outside
+    demo mode)."""
+    return demo_on() and bool(_HIDDEN_SPAN_ATTRIBUTE.search(key or ""))
+
+
 def _under(path: str, prefix: str) -> bool:
     return path == prefix or path.startswith(prefix.rstrip("/") + "/")
 
@@ -100,7 +118,7 @@ def refusal(method: str, path: str, query: Optional[Mapping[str, str]] = None) -
     for pattern in _BLOCKED_PATTERNS:
         if pattern.match(p):
             return "This part of the engine is switched off in the public demo."
-    if _VOICE_CALL.match(p) and not voice_on():
+    if (_VOICE_CALL.match(p) or _ASSISTANT_VOICE.match(p)) and not voice_on():
         return "Voice calls are switched off in the public demo."
     if m not in ("GET", "HEAD"):
         for prefix in READ_ONLY_PREFIXES:

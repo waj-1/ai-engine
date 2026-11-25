@@ -103,6 +103,8 @@ def _per_trace_subquery(window_param: str) -> str:
         "SELECT trace_id,\n"
         "  maxIf(simpleJSONExtractString(attributes, 'waj.agent_kind'),\n"
         "        simpleJSONExtractString(attributes, 'waj.agent_kind') != '') AS agent_kind,\n"
+        "  maxIf(simpleJSONExtractString(attributes, 'waj.agent_slug'),\n"
+        "        simpleJSONExtractString(attributes, 'waj.agent_slug') != '') AS agent_slug,\n"
         "  maxIf(simpleJSONExtractString(attributes, 'waj.env'),\n"
         "        simpleJSONExtractString(attributes, 'waj.env') != '') AS env,\n"
         "  maxIf(simpleJSONExtractString(attributes, 'waj.session_id'),\n"
@@ -168,6 +170,22 @@ def _trace_subquery(window_param: str) -> str:
 _CONV_KEY = "if(sagg.session_id != '', sagg.session_id, toString(t.id))"
 
 
+def _agent_slug_sql() -> str:
+    """The agent's slug for the kind whose agents are told apart by slug (the
+    generic agents all share one kind), '' for every other kind: a product
+    kind is one agent however its profiles are named."""
+    from admin.agent_kinds import SLUG_ADDRESSED_KIND
+
+    return "if(sagg.agent_kind = '%s', sagg.agent_slug, '')" % SLUG_ADDRESSED_KIND
+
+
+def _agent_key(row: Dict[str, Any]) -> str:
+    """One per-agent row's key: the kind, or ``custom:<slug>`` for a generic agent."""
+    from admin.agent_kinds import agent_choice
+
+    return agent_choice(row.get("agent_kind") or "", row.get("agent_slug") or None)
+
+
 def outcome_sql(env: Optional[str], scope_kinds: Sequence[str] = ()) -> Tuple[str, Dict[str, Any]]:
     """Per (period, agent) outcome rollup over the current AND previous
     period in one scan. ``{hours}`` is the period length, ``{hours2}`` twice
@@ -179,6 +197,7 @@ def outcome_sql(env: Optional[str], scope_kinds: Sequence[str] = ()) -> Tuple[st
     sql = (
         "SELECT if(t.start_time > now() - toIntervalHour({hours:UInt32}), 'cur', 'prev') AS period,\n"
         "  sagg.agent_kind AS agent_kind,\n"
+        f"  {_agent_slug_sql()} AS agent_slug,\n"
         "  count() AS turns,\n"
         f"  uniqExact({_CONV_KEY}) AS conversations,\n"
         f"  uniqExactIf({_CONV_KEY}, sagg.tool_errors > 0 OR sagg.has_error = 1 "
@@ -190,7 +209,7 @@ def outcome_sql(env: Optional[str], scope_kinds: Sequence[str] = ()) -> Tuple[st
         "FROM (" + _trace_subquery("hours2") + ") AS t\n"
         "INNER JOIN (" + _per_trace_subquery("hours2") + ") AS sagg ON sagg.trace_id = t.id\n"
         "WHERE " + " AND ".join(clauses) + "\n"
-        "GROUP BY period, agent_kind\n"
+        "GROUP BY period, agent_kind, agent_slug\n"
     )
     params["handoff_re"] = pl.HANDOFF_TOOL_RE
     return sql, params
@@ -202,11 +221,12 @@ def series_sql(env: Optional[str], scope_kinds: Sequence[str] = ()) -> Tuple[str
     sql = (
         "SELECT toString(toStartOfInterval(t.start_time, toIntervalSecond({bucket:UInt32}))) AS bucket,\n"
         "  sagg.agent_kind AS agent_kind,\n"
+        f"  {_agent_slug_sql()} AS agent_slug,\n"
         f"  uniqExact({_CONV_KEY}) AS conversations\n"
         "FROM (" + _trace_subquery("hours") + ") AS t\n"
         "INNER JOIN (" + _per_trace_subquery("hours") + ") AS sagg ON sagg.trace_id = t.id\n"
         "WHERE " + " AND ".join(clauses) + "\n"
-        "GROUP BY bucket, agent_kind\n"
+        "GROUP BY bucket, agent_kind, agent_slug\n"
         "ORDER BY bucket\n"
     )
     params["handoff_re"] = pl.HANDOFF_TOOL_RE
@@ -226,6 +246,7 @@ def failures_sql(env: Optional[str], scope_kinds: Sequence[str] = ()) -> Tuple[s
         "  toString(s.trace_id) AS trace_id,\n"
         "  toString(s.start_time) AS ts,\n"
         "  sagg.session_id AS session_id,\n"
+        f"  {_agent_slug_sql()} AS agent_slug,\n"
         "  sagg.agent_kind AS agent_kind\n"
         "FROM spans AS s\n"
         "INNER JOIN (" + _per_trace_subquery("hours") + ") AS sagg ON sagg.trace_id = s.trace_id\n"
@@ -450,7 +471,13 @@ def group_failures(rows: List[Dict[str, Any]], *, tool_names: Dict[str, str],
                 }
             g["count"] += 1
             g["_convs"].add(conv)
-            agent = pl.agent_label(s.get("agent_kind"), agent_names)
+            # A generic agent is named by its slug: its kind names no one agent.
+            if _agent_key(s) != (s.get("agent_kind") or ""):
+                from admin.screens.conversations import _agent_slug_name
+
+                agent = _agent_slug_name(s.get("agent_kind"), s.get("agent_slug") or "")
+            else:
+                agent = pl.agent_label(s.get("agent_kind"), agent_names)
             if agent not in g["agents"]:
                 g["agents"].append(agent)
             ts = s.get("ts")
@@ -606,20 +633,28 @@ def build_overview(*, env: str, period_key: Optional[str], client) -> Dict[str, 
                 buckets = sorted(observed)
             idx = {b: i for i, b in enumerate(buckets)}
             for r in srows:
-                k = r.get("agent_kind") or ""
+                k = _agent_key(r)
                 series.setdefault(k, [0] * len(buckets))[idx[r["bucket"]]] = _as_int(r.get("conversations"))
         except Exception as exc:  # noqa: BLE001 - sparklines are decoration
             logger.debug("overview: sparkline series unavailable (%s)", exc)
 
-    prev_by_kind = {r.get("agent_kind") or "": _sum_rows([r]) for r in prev_rows}
+    from admin.screens.conversations import _agent_slug_name
+
+    prev_by_agent = {_agent_key(r): _sum_rows([r]) for r in prev_rows}
     agents = []
     for r in sorted(cur_rows, key=lambda r: _as_int(r.get("conversations")), reverse=True):
         kind = r.get("agent_kind") or ""
+        slug = r.get("agent_slug") or ""
+        # Generic agents share one kind: each is its own row, named and linked
+        # by its slug (`custom:<slug>`, the Conversations filter's value).
+        key = _agent_key(r)
         s = _sum_rows([r])
-        p = prev_by_kind.get(kind) or {}
+        p = prev_by_agent.get(key) or {}
         agents.append({
             "kind": kind,
-            "name": pl.agent_label(kind or None, agent_names),
+            "key": key,
+            "name": (_agent_slug_name(kind, slug) if key != kind
+                     else pl.agent_label(kind or None, agent_names)),
             "conversations": s["conversations"],
             "delta": _delta(s["conversations"], p.get("conversations")),
             "attention": s["attention"],
@@ -628,9 +663,9 @@ def build_overview(*, env: str, period_key: Optional[str], client) -> Dict[str, 
             "actions": s["actions"],
             "failed_actions": s["failed_actions"],
             "avg_response": _fmt_seconds(s["avg_response_sec"]),
-            "series": series.get(kind) or [],
+            "series": series.get(key) or [],
             "href": "/admin/observability?hours=%d" % hours
-                    + ("&agent_kind=%s" % kind if kind else ""),
+                    + ("&agent_kind=%s" % key if key else ""),
         })
 
     # --- conversation insights (outcome / topic / language) --------------------
@@ -641,7 +676,9 @@ def build_overview(*, env: str, period_key: Optional[str], client) -> Dict[str, 
     insights = build_insights(env=env, hours=hours, client=client, agent_names=agent_names)
     by_kind = insights.get("by_kind") or {}
     for a in agents:
-        ins = by_kind.get(a["kind"])
+        # A generic agent's insights are filed under `custom:<slug>`, the key
+        # of its row here; a kind's under the kind.
+        ins = by_kind.get(a["key"])
         a["resolved_text"] = (ins["resolved_text"] + "%") if ins and ins.get("total") else None
         a["insight_total"] = ins.get("total") if ins else 0
 
@@ -708,4 +745,17 @@ def build_overview(*, env: str, period_key: Optional[str], client) -> Dict[str, 
         "insights": insights,
         "has_traffic": bool(cur and cur["conversations"]),
         "fallback_conversations": fallback,
+        "demo_note": _demo_note(),
     }
+
+
+def _demo_note() -> Optional[str]:
+    """On the public demo, what the numbers on this page are made of: mostly
+    the demo's own sample conversations (demo_mode/sample_traffic.py). None
+    everywhere else."""
+    try:
+        from demo_mode import sample_traffic
+
+        return sample_traffic.OVERVIEW_NOTE if sample_traffic.enabled() else None
+    except Exception:  # noqa: BLE001 - a note never breaks the page
+        return None

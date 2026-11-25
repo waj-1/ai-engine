@@ -146,6 +146,12 @@ def stack(monkeypatch):
 
     monkeypatch.setattr(inspect.getmodule(delegate_mod.run_turn).ChatSession,
                         "for_identity", _for_identity)
+    # The call's transcript is written by a worker thread as the call ends
+    # (voice/live/call_log.py); kept in `state` instead of dialling a database.
+    import voice.live.call_log as call_log_mod
+
+    monkeypatch.setattr(call_log_mod, "_write",
+                        lambda identity, rows: state.setdefault("call_logs", []).append(rows))
     return TestClient(main.app), state
 
 

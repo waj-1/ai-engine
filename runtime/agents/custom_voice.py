@@ -64,10 +64,16 @@ def build_custom_voice_agent(params: Dict[str, Any]) -> Any:
     if not slug:
         raise LookupError(
             "a custom agent is called by its address: WS /v1/agents/{slug}/voice")
+    build_brain = params.get("build_brain")
+    if callable(build_brain):
+        # The route builds its own agent (endpoints.voice_live.VoiceRoute).
+        return build_brain(params)
     brain = str(params.get("profile_slug") or "").strip() or slug
     pin = params.get("profile_pin") if brain == slug else None
     token = _PROFILE_ID.set(pin or None)
     try:
-        return create_custom_agent(brain, locale=params.get("locale"))
+        # `brief`: the conversation's own context, set only by a route that
+        # was handed one (demo_mode/showcase.py); None otherwise.
+        return create_custom_agent(brain, locale=params.get("locale"), brief=params.get("brief"))
     finally:
         _PROFILE_ID.reset(token)

@@ -168,10 +168,18 @@ async def open_turn(
 
 def turn_trace_attributes(request: Request, slug: str, session_id: Optional[str]) -> Dict[str, Any]:
     """The root-span attributes of one custom-agent turn."""
+    from demo_mode import settings as demo_settings
     from runtime.agents.custom import CUSTOM_AGENT_KIND
 
-    return root_span_attrs(request, agent_kind=CUSTOM_AGENT_KIND,
-                           session_id=session_id, agent_slug=slug)
+    attrs = root_span_attrs(request, agent_kind=CUSTOM_AGENT_KIND,
+                            session_id=session_id, agent_slug=slug)
+    if demo_settings.enabled():
+        # The public demo's own sample traffic marks its turns from inside
+        # this process (demo_mode/retention.py); no other request can.
+        from demo_mode import retention
+
+        attrs.update(retention.trace_mark(request.headers))
+    return attrs
 
 
 @router.post("/agents/{slug}/chat")

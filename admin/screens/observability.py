@@ -366,6 +366,10 @@ SELECT toString(span_id) AS span_id,
        name,
        toInt16(span_type) AS span_type,
        toString(start_time) AS start_time,
+       toString(end_time) AS end_time,
+       toInt64(input_tokens) AS input_tokens,
+       toInt64(output_tokens) AS output_tokens,
+       toUInt8(position(attributes, 'traceloop.association.properties.ls_model_type') > 0) AS wrapper,
        input,
        output,
        simpleJSONExtractUInt(attributes, 'gen_ai.usage.cache_read_input_tokens') AS cache_read_tokens,
@@ -438,9 +442,9 @@ _TRACE_ONE_SQL = """
 SELECT toString(id) AS id,
        toString(start_time) AS startTime,
        toString(end_time) AS endTime,
-       toInt64(input_tokens) AS inputTokens,
-       toInt64(output_tokens) AS outputTokens,
-       toFloat64(total_cost) AS totalCost,
+       toInt64(err.input_tokens_once) AS inputTokens,
+       toInt64(err.output_tokens_once) AS outputTokens,
+       toFloat64(err.cost_once) AS totalCost,
        toUInt8(err.has_error) AS has_error,
        top_span_name AS topSpanName,
        metadata AS metadata,
@@ -448,6 +452,8 @@ SELECT toString(id) AS id,
 FROM traces_replacing FINAL
 LEFT JOIN (
     SELECT trace_id,
+           -- Each model call once (core/llm_calls.py), not Laminar's totals.
+           __ONCE__,
            max(arrayExists(x -> x.2 IN ('exception', 'error'), events)) AS has_error
     FROM spans
     WHERE trace_id = {trace_id:String}
@@ -456,6 +462,9 @@ LEFT JOIN (
 WHERE id = {trace_id:String}
 LIMIT 1
 """
+from core.llm_calls import once_columns as _once_columns  # noqa: E402
+
+_TRACE_ONE_SQL = _TRACE_ONE_SQL.replace("__ONCE__", _once_columns().replace("\n", "\n           "))
 
 # Laminar's SpanType enum → the uppercase labels `_is_tool_span` / `_is_llm_span`
 # and the templates match on. Only 0 (DEFAULT) and 1 (LLM) are confirmed present
@@ -687,6 +696,16 @@ def _clickhouse_spans(trace_id: str) -> List[Dict[str, Any]]:
                 if not row.get("output"):
                     row["output"] = found.get("output") or ""
     return rows
+
+
+def _cache_tokens_once(spans: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Cache-read and cache-creation tokens of one trace's `_SPAN_IO_SQL`
+    rows, each model call counted once (core/llm_calls.py: a call is exported
+    as two LLM spans on some providers, and both carry the cache counts)."""
+    from core.llm_calls import count_once
+
+    once = count_once(s for s in spans if int(s.get("span_type") or 0) == 1)
+    return {"read": once["cache_read_tokens"], "creation": once["cache_creation_tokens"]}
 
 
 def _map_ch_span_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -1163,6 +1182,21 @@ _BACKGROUND_TOP_SPANS = (
     "gemini.generate_content_stream",
     "openai.embeddings",
     "ResponseStreamWriter",
+    # The same bare calls on an OpenAI, Azure OpenAI or Anthropic model (the
+    # LangChain wrapper's span and the provider SDK's own), which is what a
+    # build with no Gemini key runs its judges and helpers on...
+    "ChatOpenAI.chat",
+    "AzureChatOpenAI.chat",
+    "openai.chat",
+    "ChatAnthropic.chat",
+    "anthropic.chat",
+    # ...and the public demo's Builder assistant (admin/demo_handlers.py): a
+    # helper in the portal, not a conversation with one of the agents. One
+    # trace a turn, its model calls inside (they used to run outside the
+    # root span, as traces of their own: the bare-call names above).
+    "demo.builder_assistant",
+    # The conversation-insights sweep's classifier call (core/conversation_insights.py).
+    "conversation.insights",
 )
 
 # Test traffic: the eval runner's own suite trace (`eval_suite::<suite>`, which
@@ -1171,6 +1205,59 @@ _BACKGROUND_TOP_SPANS = (
 # shown with ?background=1, and each case links straight to its trace from the
 # test run page.
 _EVAL_TOP_SPAN_PREFIX = "eval_suite::"
+
+# What a trace that is not a customer conversation IS, named from what the
+# engine itself stamped on it: the eval runner's headers (`waj.eval.run_id`)
+# and the names the engine gives its own root spans. Used by the technical
+# rollups (Overview > Technical details, the cost share), which count every
+# trace: without it these all fell into one "Unlabelled agent / unknown" row.
+# Order matters: the first match wins. Each entry is (key, label, exact top-span
+# names, top-span prefixes). Keys carry the `activity:` prefix so they can never
+# be mistaken for an agent kind or a `custom:<slug>` agent.
+ACTIVITY_PREFIX = "activity:"
+ACTIVITY_TEST_RUNS = ACTIVITY_PREFIX + "test_runs"
+ACTIVITY_CLASSES: Tuple[Tuple[str, str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    # The eval runner's own trace: the suite span, its per-case spans and the
+    # judge's model calls inside them (admin/evals.py).
+    (ACTIVITY_PREFIX + "test_judge", "Test judge", (), (_EVAL_TOP_SPAN_PREFIX,)),
+    (ACTIVITY_PREFIX + "builder_assistant", "Builder assistant", ("demo.builder_assistant",), ()),
+    (ACTIVITY_PREFIX + "conversation_insights", "Conversation insights", ("conversation.insights",), ()),
+    (ACTIVITY_PREFIX + "voice_measurements", "Voice call measurements", (), ("voice.live.",)),
+    (ACTIVITY_PREFIX + "admin_tools", "Admin tools (MCP)", ("ResponseStreamWriter",), ()),
+    (ACTIVITY_PREFIX + "embeddings", "Embeddings", ("openai.embeddings",), ()),
+    # A bare model call no root span was opened for: a helper, or a judge
+    # called outside a test run's trace. Nothing on it says which.
+    (ACTIVITY_PREFIX + "model_calls", "Other model calls",
+     ("ChatGoogleGenerativeAI.chat", "gemini.generate_content", "gemini.generate_content_stream",
+      "ChatOpenAI.chat", "AzureChatOpenAI.chat", "openai.chat", "ChatAnthropic.chat",
+      "anthropic.chat"), ()),
+)
+ACTIVITY_LABELS: Dict[str, str] = {ACTIVITY_TEST_RUNS: "Test runs",
+                                   **{key: label for key, label, _n, _p in ACTIVITY_CLASSES}}
+
+
+def activity_class(top_span_name: Optional[str], *, agent_kind: Optional[str] = None,
+                   eval_run_id: Optional[str] = None) -> Optional[str]:
+    """The ``activity:*`` key of a trace that is test traffic or the engine's
+    own background work, or None for an agent's ordinary turn (and for an
+    untagged trace nothing identifies).
+
+    An agent's turn made by the eval runner (it carries ``waj.eval.run_id``)
+    is a test run whatever agent answered. Everything else is classified only
+    when it has NO agent kind, by its top span's name: a tagged trace is that
+    agent's, whatever its top span is called."""
+    if eval_run_id:
+        return ACTIVITY_TEST_RUNS
+    if agent_kind:
+        return None
+    name = top_span_name or ""
+    if not name:
+        return None
+    for key, _label, names, prefixes in ACTIVITY_CLASSES:
+        if name in names or any(name.startswith(p) for p in prefixes):
+            return key
+    return None
+
 
 # A turn that ran this long is a problem in any channel (the eval runner and
 # most callers give up at 120s), so it marks its conversation "Needs attention"
@@ -1338,8 +1425,10 @@ def _trace_list_sql(
         "SELECT toString(t.id) AS id, "
         "toString(t.start_time) AS startTime, "
         "toString(t.end_time) AS endTime, "
-        "toInt64(t.input_tokens) AS inputTokens, "
-        "toInt64(t.output_tokens) AS outputTokens, "
+        # Each model call counted once (core/llm_calls.py): Laminar's own
+        # per-trace totals add both spans of a call.
+        "toInt64(err.input_tokens_once) AS inputTokens, "
+        "toInt64(err.output_tokens_once) AS outputTokens, "
         "toFloat64(t.duration) AS durationSec, "
         "toUInt8(err.has_error) AS has_error, "
         "toUInt32(err.tool_calls) AS tool_calls, "
@@ -1352,6 +1441,7 @@ def _trace_list_sql(
         "WHERE " + " AND ".join(where) + ") AS t "
         "LEFT JOIN ("
         "SELECT trace_id, "
+        + _once_columns().replace("\n", " ") + ", "
         "max(arrayExists(x -> x.2 IN ('exception', 'error'), events)) AS has_error, "
         # Action (tool) counts for the Conversations outcome column: failed
         # actions and hand-off/escalation actions (plain_language.HANDOFF_TOOL_RE).
@@ -1707,9 +1797,12 @@ def load_span_detail_json(trace_id: str, span_id: str) -> Dict[str, Any]:
     # far the largest thing on an LLM span and `llm_io` above already renders the
     # same content in readable form, so shipping it too would only bloat the
     # response and the attributes table.
+    from demo_mode.policy import span_attribute_hidden
+
     safe_attrs: Dict[str, Any] = {}
     for k, v in (enriched.get("attributes") or {}).items():
-        if _is_bulk_message_attr(k):
+        # ...and, in the public demo, where the model is served (demo_mode/policy.py).
+        if _is_bulk_message_attr(k) or span_attribute_hidden(k):
             continue
         if isinstance(v, (str, int, float, bool)) or v is None:
             safe_attrs[k] = v
@@ -1978,7 +2071,7 @@ def load_transcript_json(trace_id: str, env: Optional[str] = None) -> Dict[str, 
     tools: List[Dict[str, Any]] = []
     span_user: Optional[str] = None
     span_assistant: Optional[str] = None
-    turn_cache_read = 0
+    turn_cache_read = _cache_tokens_once(spans)["read"]
     for s in spans:
         name = s.get("name") or ""
         try:
@@ -2003,7 +2096,6 @@ def load_transcript_json(trace_id: str, env: Optional[str] = None) -> Dict[str, 
             out_text = "\n".join(m["text"] for m in _parse_messages(ch_out) if m["text"])
             if out_text:
                 span_assistant = out_text  # last LLM completion wins
-            turn_cache_read += int(s.get("cache_read_tokens") or 0)
 
     # The conversation lives in the env the TRACE was recorded in (waj.env on
     # the root span / trace metadata), which is not necessarily the portal's
@@ -2254,6 +2346,25 @@ def _session_row(session_id: Optional[str], env: Optional[str]) -> Optional[Dict
     return rows[0] if rows else None
 
 
+def _summary_agent_name(agent_kind: Optional[str], trace: Optional[Dict[str, Any]],
+                        row: Optional[Dict[str, Any]], agent_names: Dict[str, str]) -> Optional[str]:
+    """The agent's name for one conversation. Generic agents share a kind, so
+    theirs comes from the slug on the trace (``waj.agent_slug``) or on the
+    saved session, the same way the Conversations list names the row."""
+    if not agent_kind:
+        return None
+    meta = (row or {}).get("metadata")
+    slug = (_trace_meta_attrs(trace).get("waj.agent_slug") if trace else None) or (
+        meta.get("agent_slug") if isinstance(meta, dict) else None)
+    if slug:
+        from admin.screens.conversations import _agent_slug_name
+
+        return _agent_slug_name(agent_kind, str(slug))
+    from admin.screens import plain_language as pl
+
+    return pl.agent_label(agent_kind, agent_names)
+
+
 def _conversation_summary(trace: Optional[Dict[str, Any]], spans: List[Dict[str, Any]],
                           session_id: Optional[str], turns: List[Dict[str, Any]],
                           env: Optional[str]) -> Dict[str, Any]:
@@ -2317,7 +2428,7 @@ def _conversation_summary(trace: Optional[Dict[str, Any]], spans: List[Dict[str,
     ended = next((t.get("ts") for t in reversed(turns) if t.get("ts")), None) or (trace or {}).get("endTime")
     return {
         "agent_kind": agent_kind,
-        "agent_name": pl.agent_label(agent_kind, agent_names) if agent_kind else None,
+        "agent_name": _summary_agent_name(agent_kind, trace, row, agent_names),
         "channel": channel,
         "business_id": (row or {}).get("business_id"),
         "business_name": business_name,
@@ -2359,9 +2470,8 @@ def load_trace_overview_json(trace_id: str, env: Optional[str] = None) -> Dict[s
 
     # --- per-tool rollup from spans -------------------------------------------
     spans = _clickhouse_spans(trace_id)
-    cache_read = sum(int(s.get("cache_read_tokens") or 0)
-                     for s in spans if int(s.get("span_type") or 0) == 1)
-    cache_creation = sum(int(s.get("cache_creation_tokens") or 0) for s in spans)
+    cache = _cache_tokens_once(spans)
+    cache_read, cache_creation = cache["read"], cache["creation"]
 
     trace_block = {
         "id": (trace or {}).get("id") or trace_id,

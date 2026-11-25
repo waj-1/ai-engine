@@ -35,10 +35,19 @@
           });
           primed = true;
         } else {
-          var settled = runs.some(function (run) {
+          var settled = runs.filter(function (run) {
             return watching[run.run_id] && TERMINAL[run.status];
           });
-          if (settled) { window.location.reload(); return; }
+          if (settled.length) {
+            // The demo's guided tour listens for this; a no-op elsewhere.
+            settled.forEach(function (run) {
+              try {
+                window.dispatchEvent(new CustomEvent("tour:run-finished", { detail: { run_id: run.run_id, status: run.status } }));
+              } catch (e) { /* optional */ }
+            });
+            window.location.reload();
+            return;
+          }
         }
         if (data.any_inflight) schedule();
       })

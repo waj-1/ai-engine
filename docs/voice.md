@@ -46,6 +46,10 @@ Audio frames are raw 16-bit PCM at the rates in the server's `ready` frame.
   seconds.
 - Calls are recorded for the Conversations screen unless
   `VOICE_RECORDING_ENABLED=0`.
+- Every call is saved as a conversation when it ends, with what each side said:
+  the greeting and the turns the voice model answered by itself, next to the
+  turns the agent looked up. The agent's own history is only the turns it
+  looked up.
 - Voice checks (**Testing › Voice checks**) speak the caller's lines with
   Azure Speech and need `AZURE_SPEECH_KEY`.
 

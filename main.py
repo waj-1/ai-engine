@@ -347,6 +347,10 @@ app.include_router(voice_live_router, prefix=_mount_prefix())
 
 app.include_router(agents_portal_router)
 app.include_router(agents_v1_router)
+# The demo's product-page showcase (demo_mode/showcase.py): 404 unless
+# DEMO_MODE and DEMO_SHOWCASE are on.
+from demo_mode.showcase_routes import router as _showcase_router  # noqa: E402
+app.include_router(_showcase_router)
 app.include_router(openai_compat_router)
 app.include_router(ai_sessions_router)
 app.include_router(admin_router)

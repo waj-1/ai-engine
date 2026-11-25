@@ -1,0 +1,10 @@
+{# The public demo's usage analytics (demo_mode/analytics.py). Renders nothing
+   unless demo mode is on and DEMO_POSTHOG_KEY is set. Put it in <head>, before
+   any deferred page script, so demo-analytics.js runs first. #}
+{% macro demo_analytics(page, section='') -%}
+{%- set _da = demo_chrome().analytics if demo_chrome().enabled else none -%}
+{%- if _da -%}
+<script type="application/json" id="demo-analytics-config">{{ dict(_da, page=page, section=section or '') | tojson }}</script>
+<script src="/admin/static/demo-analytics.js?v={{ asset_version }}" defer></script>
+{%- endif -%}
+{%- endmacro %}

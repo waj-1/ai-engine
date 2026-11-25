@@ -5,7 +5,10 @@
 #   1. wait for this install's settings (the setup step writes engine.env)
 #   2. run the init step (deploy/compose/init.py): it waits up to INIT_WAIT_SEC
 #      for the auth service and the REST layer, then applies the schema
-#   3. exec uvicorn
+#   3. with tracing on (the setup step ran with STACK_TRACING=1), wait for the
+#      tracing store and store the ingest key (deploy/compose/tracing_init.py).
+#      It never fails the start.
+#   4. exec uvicorn
 #
 # The engine seeds what it needs as it starts (and, with DEMO_MODE on, the
 # demo account and the Northwind demo: demo_mode/reset.py on_boot), so there is
@@ -28,5 +31,6 @@ done
 
 export INIT_WAIT_SEC="$WAIT"
 sh "$HERE/with_env.sh" python "$HERE/init.py"
+sh "$HERE/with_env.sh" python "$HERE/tracing_init.py" || echo "[engine] tracing_init failed; starting without it" >&2
 exec sh "$HERE/with_env.sh" sh -c \
   'exec uvicorn main:app --host 0.0.0.0 --port "${PORT:-8000}" --workers 1 --proxy-headers --forwarded-allow-ips="${FORWARDED_ALLOW_IPS:-127.0.0.1}"'

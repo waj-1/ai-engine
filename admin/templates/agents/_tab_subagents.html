@@ -8,7 +8,7 @@
 <div data-tab-root>
 <form method="post" action="/admin/profiles/{{ agent.id }}" id="form-subagents" data-tab-form data-form-label="Sub-agents">
 <input type="hidden" name="downstream_profile_ids" value="">
-<section class="section">
+<section class="section" data-tour="agent-subagents">
   <div class="row between section-head">
     <div>
       <h2>Hands work to</h2>
@@ -16,7 +16,7 @@
     </div>
     {% if not readonly %}
     <div class="combobox" data-combobox="subagent" data-catalog="catalog-subagents">
-      <button type="button" class="btn" data-combobox-open aria-haspopup="listbox">+ Add sub-agent</button>
+      <button type="button" class="btn" data-combobox-open aria-haspopup="listbox" data-tour="subagents-add">+ Add sub-agent</button>
       <div class="combobox-panel" hidden>
         <input type="search" placeholder="Search agents" aria-label="Search agents" data-combobox-input>
         <div class="combobox-list" role="listbox" data-combobox-list></div>

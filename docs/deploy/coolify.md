@@ -27,7 +27,7 @@ secrets made on the first start and kept in a volume.
 
 - A server managed by Coolify v4, `linux/amd64`. 2 vCPU and 4 GB of memory is
   a comfortable start.
-- A published engine image. The file pulls release `0.1.1` unless you set
+- A published engine image. The file pulls release `0.1.2` unless you set
   `AI_ENGINE_VERSION`.
 - A domain for the engine, or a wildcard domain set on the Coolify server.
 
@@ -68,7 +68,7 @@ All are optional. Set them under **Environment variables**, then redeploy.
 
 | Setting | Effect |
 |---|---|
-| `AI_ENGINE_VERSION` | The engine release to run. Default `0.1.1` |
+| `AI_ENGINE_VERSION` | The engine release to run. Default `0.1.2` |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Create the admin account at the first deploy (set both) |
 | `GOOGLE_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` | A model provider key from the environment. A key saved in the portal under **Settings › Model keys** wins |
 | `EMBED_MODEL`, `EMBED_BASE_URL`, `EMBED_API_KEY`, `EMBED_PROVIDER` | An embedding model for knowledge bases |
@@ -126,7 +126,7 @@ When both are cleared, the steps are:
    `coollabsio/coolify`. This repository has no SVG logo yet.
 2. Copy `deploy/coolify/waj-ai-engine.yaml` to
    `templates/compose/waj-ai-engine.yaml` in that fork. Replace
-   `${AI_ENGINE_VERSION:-0.1.1}` with the fixed release number if reviewers
+   `${AI_ENGINE_VERSION:-0.1.2}` with the fixed release number if reviewers
    ask for a plain tag.
 3. Test it on a Coolify server through **Docker Compose Empty**, from a fresh
    resource.

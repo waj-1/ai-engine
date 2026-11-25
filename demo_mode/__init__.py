@@ -14,6 +14,9 @@ unchanged. ``docs/deploy/demo.md`` describes what it does and every setting.
     content      the demo's agents, documents, tests and conversations
     seed         builds the Northwind demo (idempotent)
     reset        wipes what visitors made and seeds again (nightly)
+    sample_traffic  the demo's own conversations around the clock, capped
+    insights     "What happened in conversations", sample conversations only, capped
+    prices       list prices for the demo's model rows
 """
 from __future__ import annotations
 

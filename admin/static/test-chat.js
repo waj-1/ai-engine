@@ -79,13 +79,16 @@
     '    <span class="waj-tc-title-eyebrow">TEST</span>',
     '    <span class="waj-tc-title-name"></span>',
     '  </div>',
-    '  <button type="button" class="waj-tc-close" aria-label="Close">×</button>',
+    '  <span class="waj-tc-head-actions">',
+    '    <a class="waj-tc-call" hidden>Call</a>',
+    '    <button type="button" class="waj-tc-close" aria-label="Close">×</button>',
+    '  </span>',
     '</header>',
     ctxbarHtml,
     cfg.pin_profile ? '<div class="waj-tc-ctxbar"><span class="waj-tc-ctxbar-label waj-tc-answering"></span></div>' : '',
     '<div class="waj-tc-messages" aria-live="polite"></div>',
     '<form class="waj-tc-composer">',
-    '  <textarea class="waj-tc-input" rows="2" placeholder="Send a message…"></textarea>',
+    '  <textarea class="waj-tc-input" rows="2" placeholder="Send a message…" data-tour="test-input"></textarea>',
     '  <button type="submit" class="waj-tc-send" aria-label="Send">Send</button>',
     '</form>',
     '<div class="waj-tc-status" role="status"></div>',
@@ -94,6 +97,14 @@
 
   var titleEl = panel.querySelector(".waj-tc-title-name");
   var closeBtn = panel.querySelector(".waj-tc-close");
+  // A voice-enabled agent (the public demo gives every agent a voice): the
+  // Voice tab's Call, one click away. Only a same-portal path is used.
+  var callLink = panel.querySelector(".waj-tc-call");
+  if (typeof cfg.call_href === "string" && cfg.call_href.indexOf("/admin/") === 0) {
+    callLink.href = cfg.call_href;
+    callLink.title = "Talk to this agent with your microphone";
+    callLink.hidden = false;
+  }
   var bizInput = panel.querySelector(".waj-tc-business");
   var messagesEl = panel.querySelector(".waj-tc-messages");
   var composer = panel.querySelector(".waj-tc-composer");
@@ -175,6 +186,21 @@
   });
 
   // --- Behavior -----------------------------------------------------------
+  // The demo's guided tour listens for this (demo-tour.js); elsewhere nothing
+  // does, so it is a no-op. Never lets a tour problem reach the chat.
+  function tourReplied(text) {
+    try {
+      // The demo's cap answers as a normal reply: say so, so a step can stay open.
+      var limited = /reached today's limit|going a little fast for the public demo/.test(String(text || ""));
+      var tab = document.querySelector("[data-agent-slug]");
+      var slug = (tab && tab.getAttribute("data-agent-slug")) || cfg.profile_id;
+      window.dispatchEvent(new CustomEvent("tour:test-chat-sent", {
+        detail: { profile: slug, profile_id: cfg.profile_id, limited: limited,
+                  limit: limited ? (/going a little fast/.test(String(text || "")) ? "rate" : "daily") : null }
+      }));
+    } catch (e) { /* the tour is optional */ }
+  }
+
   function setOpen(open) {
     state.open = !!open;
     saveState();
@@ -264,6 +290,7 @@
           renderAssistantMarkdown(assistantBubble, extracted || txt || "(empty response)");
           assistantBubble.classList.remove("waj-tc-bubble-pending");
           setStatus("Done", "ok");
+          tourReplied(extracted || txt);
         });
       }
       return streamSSE(resp.body.getReader(), assistantBubble);
@@ -291,6 +318,7 @@
             bubble.textContent = bubble.textContent || "(no answer events)";
           }
           setStatus("Done", "ok");
+          if (acc) tourReplied(acc);
           return;
         }
         buffer += decoder.decode(chunk.value, { stream: true });
@@ -398,6 +426,10 @@
       ".waj-tc-title{display:flex;align-items:center;gap:8px;min-width:0;}",
       ".waj-tc-title-eyebrow{font-size:9.5px;font-weight:700;letter-spacing:1.4px;color:var(--accent,#006A6A);background:var(--surface,#fff);border:1px solid var(--border-strong,#B7DCD7);border-radius:999px;padding:1px 6px;}",
       ".waj-tc-title-name{font-size:12px;font-weight:600;color:var(--fg-1,#1B1C17);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}",
+      ".waj-tc-head-actions{display:flex;align-items:center;gap:6px;}",
+      ".waj-tc-call{font-size:12px;font-weight:600;color:var(--accent,#006A6A);border:1px solid var(--border-strong,#B7DCD7);border-radius:999px;padding:2px 10px;text-decoration:none;background:var(--surface,#fff);}",
+      ".waj-tc-call[hidden]{display:none;}",
+      ".waj-tc-call:hover{background:var(--surface-sunken,#F3F4F6);}",
       ".waj-tc-close{background:transparent;border:0;color:var(--fg-2,#787771);font-size:20px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px;}",
       ".waj-tc-close:hover{background:var(--surface-sunken,#F3F4F6);color:var(--fg-1,#1B1C17);}",
       ".waj-tc-ctxbar{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border,#E5E7EB);background:var(--surface,#fff);}",

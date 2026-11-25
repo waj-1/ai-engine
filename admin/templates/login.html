@@ -10,6 +10,7 @@
   <title>Sign in · {{ _brand.title }}</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="apple-touch-icon" href="/static/favicon.png">
+  {% from "_components/demo_analytics.html" import demo_analytics %}{{ demo_analytics('entry') }}
   {# Pre-paint: apply saved theme before first paint to avoid flash #}
   <script>
     (function () {
@@ -25,7 +26,7 @@
   <link rel="stylesheet" href="/admin/static/portal.css?v={{ asset_version }}">
   {% if _brand.css %}<style>{{ _brand.css|safe }}</style>{% endif %}
 </head>
-<body style="display:grid;place-items:center;min-height:100vh;background:var(--surface-sunken);">
+<body class="standalone-page" style="display:grid;place-items:center;min-height:100vh;background:var(--surface-sunken);">
   <div class="card" style="width:100%;max-width:380px;padding:var(--space-l);">
 
     {# Brand mark #}

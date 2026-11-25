@@ -44,7 +44,15 @@
     if (scoreCell && run.score !== null && run.score !== undefined) scoreCell.textContent = fmtPct(run.score);
     // Settled: the cases column / change vs previous need the full row —
     // mark it so a refresh is offered rather than showing stale numbers.
-    if (run.status !== "queued" && run.status !== "running") row.setAttribute("data-inflight", "0");
+    if (run.status !== "queued" && run.status !== "running") {
+      if (row.getAttribute("data-inflight") === "1") {
+        // The demo's guided tour listens for this; a no-op elsewhere.
+        try {
+          window.dispatchEvent(new CustomEvent("tour:run-finished", { detail: { run_id: run.run_id, status: run.status } }));
+        } catch (e) { /* optional */ }
+      }
+      row.setAttribute("data-inflight", "0");
+    }
   }
 
   function poll() {

@@ -10,6 +10,11 @@
 <link rel="stylesheet" href="/admin/static/uplot.min.css?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
+{% set _tour_dc = demo_chrome() %}
+{% if _tour_dc.enabled and _tour_dc.get('tour') %}
+{# The demo tour's resume card (admin/static/demo-tour.js fills it). #}
+<div id="demo-tour-resume" class="dt-resume-mount" hidden></div>
+{% endif %}
 {% set p = ov.period %}
 {% set env_label = 'production' if current_env == 'prod' else current_env %}
 
@@ -44,7 +49,12 @@
   {% endif %}
 </div>
 
-<section class="stat-grid" aria-label="Headline numbers">
+{% if ov.demo_note %}
+{# The public demo: say what the activity below is (demo_mode/sample_traffic.py). #}
+<p class="caption mt-s" data-testid="demo-sample-note">{{ ov.demo_note }} <a href="/admin/observability?channel_slug=sample-traffic">See the sample conversations</a></p>
+{% endif %}
+
+<section class="stat-grid" aria-label="Headline numbers" data-tour="overview-kpis">
   {% for t in ov.tiles %}{{ stat_tile(t) }}{% endfor %}
 </section>
 
@@ -108,7 +118,7 @@
   {% endif %}
 </section>
 
-<section class="section" id="needs-attention">
+<section class="section" id="needs-attention" data-tour="needs-attention">
   <h2>Needs attention</h2>
   <span class="caption">Problems in the {{ p.label|lower }}, grouped by cause</span>
   {% if not ov.sources.attention %}

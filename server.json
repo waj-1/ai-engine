@@ -3,7 +3,7 @@
   "name": "io.github.waj-1/ai-engine",
   "title": "WAJ AI Engine",
   "description": "Admin MCP server of a self-hosted AI agent platform: build, test and publish agents on your install.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "websiteUrl": "https://github.com/waj-1/ai-engine#connect-your-ai-assistant",
   "repository": {
     "url": "https://github.com/waj-1/ai-engine",

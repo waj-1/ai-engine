@@ -185,6 +185,14 @@ Off by default. With it on, the install is a public, one-click demo:
   an output-length cap on every model.
 - **Reset.** Every night at `DEMO_RESET_HOUR_UTC` (or `python -m scripts.demo_reset`)
   everything visitors made is deleted and the Northwind demo is seeded again.
+- **Test round.** After a seed or a reset the engine runs every demo agent's test
+  suite and a two-model comparison in the background (`demo_mode/warmup.py`,
+  `DEMO_WARMUP=off` to skip), so Testing, its run history, Schedules and Model
+  comparison have real results.
+- **Builder assistant across turns.** A follow-up changes the agent the assistant
+  just made: each turn's changes are remembered for the conversation's next turn,
+  a second message waits while the first is still running, and the panel reads a
+  turn back from the server when its stream drops.
 
 ---
 

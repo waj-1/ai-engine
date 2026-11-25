@@ -762,6 +762,21 @@ re-mapping of the semantic variables**, not a second stylesheet.
   `expanded` when a user re-opens it on a narrow screen — below 900px the rail
   starts collapsed) and is also applied by the same pre-paint script. Every item
   has its own icon; the collapse handle uses tokens only.
+- **Phones** (`max-width: 720px`; the "Small screens" block at the end of
+  `portal.css` plus `admin/static/mobile.js`) — the page is never wider than the
+  screen. The sidebar becomes an off-canvas drawer opened by the top bar's menu
+  button (backdrop, Escape or a link closes it); the top bar puts the page title
+  on a second row; grids go to one column; tab strips and segmented controls
+  scroll sideways; a table or code block too wide for its column scrolls inside
+  its own `.table-wrap` / `.scroll-x` box (`mobile.js` wraps one that does not
+  fit, also after htmx swaps); dialogs and drawers open as full-screen sheets.
+  On touch (`pointer: coarse`) and at phone widths, controls are at least 40px
+  tall and form fields 16px (iOS zooms the page on a smaller field). The Build
+  with AI panel (demo), the Test chat and the search palette are full-screen
+  sheets under 640px, sized to the visible viewport (`--vvh` / `--vv-top`,
+  set by `mobile.js` from `visualViewport`) so their composer stays above the
+  on-screen keyboard; following a link inside the Build with AI sheet closes it.
+  The desktop layout is unchanged.
 - **Portal name** — a build with no plugin shows "WAJ AI Engine"; `PORTAL_NAME`
   overrides it. A deployment scope brings its own name and accent (see
   [Deployment scopes](#deployment-scopes)).
@@ -1322,6 +1337,11 @@ caller check, an optional profile pin) on the socket and calls the same `voice_l
 handler, which reads it at four points: whose profile, who may call, which budget
 bucket, and whose session. A `VoiceRoute` is never built from a query parameter, and
 `WS /voice/live?agentKind=custom` is refused (`slug_addressed` on the registration).
+A route that owns its agent's voice can also set the call's voice settings
+(`voice_config`, used instead of the row's), build the brain itself (`build_brain`)
+and mark the call as the portal's own page (`own_page`: no channel applies). The
+public demo's builder assistant microphone (`WS /admin/demo/assistant/voice`,
+`docs/deploy/demo.md`) is the one route that does.
 
 | | Plain socket | Generic agent's address |
 |---|---|---|

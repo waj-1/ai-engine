@@ -24,7 +24,7 @@
   <input type="search" class="agents-search" placeholder="Search agents" aria-label="Search agents" data-filter-search>
   <div class="row">
     <button type="button" data-open-dialog="dlg-compare-agents">Compare agents</button>
-    <a class="btn primary" href="/admin/templates?env={{ current_env }}&new=1">New agent</a>
+    <a class="btn primary" href="/admin/templates?env={{ current_env }}&new=1" data-tour="agents-new">New agent</a>
   </div>
 </div>
 <div class="row agents-filters mb-m">
@@ -74,7 +74,7 @@
       {% elif child %}<span class="tree-indent" aria-hidden="true">↳</span>
       {% else %}<span class="caret-spacer"></span>{% endif %}
       <div class="min-w-0">
-        <a class="agent-name" href="/admin/agents?env={{ current_env }}&profile_id={{ r.profile_id }}">{{ r.name }}</a>{% if r.kind == 'custom' and r.slug == 'demo' %} <span class="chip chip-neutral" title="Seeded on first start so there is something to talk to and copy. Safe to archive.">Demo</span>{% endif %}
+        <a class="agent-name" href="/admin/agents?env={{ current_env }}&profile_id={{ r.profile_id }}" data-tour="agent-link" data-tour-slug="{{ r.slug or '' }}">{{ r.name }}</a>{% if r.kind == 'custom' and r.slug == 'demo' %} <span class="chip chip-neutral" title="Seeded on first start so there is something to talk to and copy. Safe to archive.">Demo</span>{% endif %}{% if r.kind == 'custom' and (r.slug or '').startswith('falak-') and demo_chrome().showcase_url %} <a class="chip chip-neutral" href="{{ demo_chrome().showcase_url }}" target="_blank" rel="noopener" title="A product page runs this agent live, with its use cases." data-showcase-link>See it in a product page</a>{% endif %}
         {% if r.category %}<span class="chip chip-cat chip-cat-{{ r.category.color }}" title="Category{% if r.category.description %}: {{ r.category.description }}{% endif %}" data-category-chip><span class="chip-dot"></span>{{ r.category.display_name }}</span>{% endif %}
         <div class="agent-desc-clamp caption">{{ r.description or 'No description yet.' }}</div>
       </div>

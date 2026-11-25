@@ -337,6 +337,34 @@ def _copy_profile_attachments(client, src_profile_id: str,
     return out
 
 
+def _demo_voice_default(client, new_row: Dict[str, Any]) -> None:
+    """In the public demo with its voice on, a new agent that has no voice
+    of its own starts with the demo's (demo_mode.voice.new_agent_config),
+    so a visitor can call it at once. Nothing changes anywhere else."""
+    if (new_row.get("voice_config") or {}).get("enabled"):
+        return
+    try:
+        from demo_mode import voice as demo_voice
+
+        cfg = demo_voice.new_agent_config(client, new_row.get("environment") or "staging")
+    except Exception as exc:  # noqa: BLE001 — a copy must never fail over this
+        logger.warning("fork: demo voice settings not added (%s)", type(exc).__name__)
+        return
+    if cfg:
+        new_row["voice_config"] = cfg
+
+
+def _demo_allow_on_website(client, slug: Optional[str]) -> None:
+    """In the public demo, the portal's Test and Call reach the new agent
+    (demo_mode.seed.allow_on_website). Nothing changes anywhere else."""
+    try:
+        from demo_mode import seed as demo_seed
+
+        demo_seed.allow_on_website(client, slug)
+    except Exception as exc:  # noqa: BLE001 — a copy must never fail over this
+        logger.warning("fork: demo channel not updated (%s)", type(exc).__name__)
+
+
 def fork_profile_row(*, profile_id: str, actor_user_id: str,
                      display_name: str | None = None, slug: str | None = None,
                      status: str = "draft", exact_slug: bool = False) -> Dict[str, Any]:
@@ -406,6 +434,7 @@ def fork_profile_row(*, profile_id: str, actor_user_id: str,
             new_row["slug"] = f"{base_slug}-fork-{new_profile_id[:8]}"
     new_row["created_by"] = actor_user_id
     new_row["updated_by"] = actor_user_id
+    _demo_voice_default(client, new_row)
 
     # Warn loud (but don't fail) if a NOT NULL column on the source row
     # wasn't in our copy list — better to surface the gap than to silently
@@ -427,6 +456,7 @@ def fork_profile_row(*, profile_id: str, actor_user_id: str,
     inserted = client.table("agent_profiles").insert(new_row).execute()
     inserted_row = _safe_list(inserted)
     result = inserted_row[0] if inserted_row else new_row
+    _demo_allow_on_website(client, result.get("slug"))
 
     # Toolsets and skills are NOT columns on the row (knowledge and sub-agents
     # are — `data_source_ids` / `downstream_profile_ids`, copied above). They

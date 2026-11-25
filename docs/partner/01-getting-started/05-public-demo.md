@@ -18,9 +18,34 @@ The demo's agents work for **Northwind Internet**, a made-up home internet provi
 | IT helpdesk | Answers Northwind staff's everyday IT questions. |
 | Builder assistant | The assistant in the **Build with AI** panel (below). It is read-only and not in the Agents list, so every visitor gets the same one. |
 
+## The guided tour
+
+The first time you open the demo, a **Welcome** window asks what you want to see first. Pick a goal and click **Start**, or click **Explore on my own** to look around without it.
+
+The tour has 17 steps in four tracks:
+
+| Track | What you do |
+|---|---|
+| Build an agent | Read an agent's instructions, talk to it in Test chat, make your own agent from a template, give it tools and a knowledge base, and add a sub-agent. |
+| Prove it works | Open a test suite, run it, find out why a case failed and compare two runs. |
+| Wire it into my stack | Promote your agent to production, and see the code to call it over the chat API, as an OpenAI model and from your own assistant over MCP. |
+| Operate it | Read the Overview, open a conversation, see your changes in Activity and jump anywhere with Ctrl K. |
+
+The goal you pick only sets which track comes first. Every step stays open to you.
+
+- **Getting started**, at the foot of the menu, opens the checklist. It shows how many steps you have done. On a phone it is the small **n/17** button at the top.
+- **Show me** points at the part of the screen the step is about and waits for you to do it. Close the card with **×** or Esc at any time.
+- **Let AI do it** asks the Builder assistant to do the step for you, in the **Build with AI** panel.
+- A step ticks however you do it: with the card, with the assistant or on your own. The checklist says which.
+- Each card has a **Same step, in code** box with the call behind the click: an MCP tool call, curl or Python. You pick which one on the Welcome window.
+- The steps that change an agent (tools, sub-agents, promote) work on an agent you made yourself, so the shared sample agents stay the same for everyone. Make one first with **Create an agent from a template**.
+- Your progress is kept in this browser only. It clears with the nightly reset, along with everything else.
+
+On **Overview**, a **Pick up the tour** card takes you to your next step. Press Ctrl K and type **>** for **Resume tour** and **Restart tour**.
+
 ## Build with AI
 
-The **Build with AI** panel opens on the right the first time you visit. Close it with **×** and bring it back with the **Build with AI** button at the bottom right.
+The **Build with AI** panel opens from the **Build with AI** button at the bottom right. Close it with **×**. When the demo has no guided tour, the panel opens by itself the first time you visit.
 
 Tell it what you want in plain words and it does the work for you with the engine's own tools, the same ones the portal uses. Each step it takes shows as a small line in its answer, with a link to what it made or changed. For example:
 
