@@ -17,6 +17,12 @@ your own install the same conversation happens in Claude Code, Cursor or any MCP
 client ([Connect your AI assistant](#connect-your-ai-assistant)). The demo resets
 every night.
 
+### ▶ [Call or chat with a live voice agent](https://waj.ai/waj-ai-engine#demo)
+
+Want to hear a finished agent first? Four voice and chat agents of a made-up
+telecom (collections, upgrade offers, support, plans and pricing) take calls in
+English and Arabic, in your browser. Pick a scenario and play the customer.
+
 <!-- overview-video -->
 [![WAJ AI Engine in action](docs/media/overview/engine-overview.webp)](docs/media/overview/engine-overview.mp4)
 
