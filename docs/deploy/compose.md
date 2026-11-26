@@ -205,6 +205,9 @@ new install with a new setup code.
 
 Serving the engine to other machines with this file. Both ports are bound to
 `127.0.0.1` on purpose: the engine speaks plain HTTP and expects a
-TLS-terminating proxy in front of it before it is exposed. The
-[Coolify](coolify.md), [Railway](railway.md) and [Render](render.md) templates
-put the engine behind the platform's own HTTPS proxy.
+TLS-terminating proxy in front of it before it is exposed.
+
+For a tested nginx proxy configuration with HTTPS, WebSocket support for the
+voice endpoint, X-Forwarded headers, ALLOWED_ORIGINS, and auth service URLs,
+see [nginx-proxy.md](nginx-proxy.md). The [Coolify](coolify.md), [Railway](railway.md)
+and [Render](render.md) templates put the engine behind the platform's own HTTPS proxy.
