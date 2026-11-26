@@ -54,6 +54,7 @@ An agent here is a row of configuration: instructions, a model, tools from the
 MCP servers you connect, and optionally other agents it can hand off to.
 Changing an agent is an edit, with nothing to rebuild.
 
+- **Build by chat, by voice, or over MCP.** Describe the agent and an assistant builds it: typed or spoken in the public demo's Build with AI panel, or from Claude Code, Cursor or any MCP client on your own install. [Build an agent](#build-an-agent)
 - **Admin portal.** Create, edit and publish agents at `/admin`. [Guide](docs/partner/README.md)
 - **Admin MCP server.** Your AI assistant builds and tests agents at `/mcp`, with the same steps as the portal. [Connect your AI assistant](#connect-your-ai-assistant)
 - **Chat API.** Each published agent answers at `POST /v1/agents/{slug}/chat`, streamed. [Talk to an agent](#talk-to-an-agent)
@@ -88,7 +89,15 @@ Detailed comparisons: [docs/compare/](docs/compare/README.md).
 
 ## Build an agent
 
-In the portal:
+Three ways to build an agent without writing agent code:
+
+- **By chat.** In the [public demo](https://engine-demo.waj.ai), open **Build with AI** and type what you want.
+- **By voice.** In the same panel, press the microphone and say it.
+- **From your own AI assistant, over MCP.** On your own install, Claude Code,
+  Cursor or any MCP client builds, tests and changes agents through the admin
+  MCP server at `/mcp`. [Connect your AI assistant](#connect-your-ai-assistant)
+
+Or by hand, in the portal:
 
 1. **Agents › Models › New model**: add a model.
 2. **Connections › Connect server**: the address of an MCP server that exposes
