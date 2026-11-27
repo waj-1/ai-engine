@@ -45,7 +45,7 @@ to start: add one later, or use a local model. The full walkthrough is in
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/waj-1/ai-engine)
 
-More ways to run it: [Docker Compose](docs/deploy/compose.md) · [Coolify](docs/deploy/coolify.md) · [Railway](docs/deploy/railway.md) · [Render](docs/deploy/render.md).
+More ways to run it: [Docker Compose](docs/deploy/compose.md) · [Kubernetes](docs/deploy/kubernetes.md) · [Coolify](docs/deploy/coolify.md) · [Railway](docs/deploy/railway.md) · [Render](docs/deploy/render.md).
 The image is published for amd64 and arm64 at `ghcr.io/waj-1/ai-engine`.
 
 ## Features
